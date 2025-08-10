@@ -6,12 +6,12 @@ import { Link } from "react-router-dom";
 const toYMD = (d) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD in LOCAL time
 const parseYMD = (s) => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
 
-
 export default function Schedule() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("today");
   const [search, setSearch] = useState("");
+  const [savingRebookId, setSavingRebookId] = useState(null);
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -63,23 +63,67 @@ export default function Schedule() {
     }
   };
 
-  
+  // ✅ Add this async handler (fixes the orphaned await build error)
+  const handleQuickRebook = async (appt, weeks = 4) => {
+    try {
+      setSavingRebookId(appt.id);
 
-    const { error } = await supabase.from("appointments").insert({
-      pet_id,
-      date: newDateStr,
-      time,
-      duration_min,
-      services,
-      notes,
-      amount,
-    });
+      // Compute new date string in local time
+      const base = parseYMD(appt.date);
+      base.setDate(base.getDate() + weeks * 7);
+      const newDateStr = toYMD(base);
 
-    if (error) {
-      console.error("Error rebooking:", error.message);
-      alert("Error rebooking: " + error.message);
-    } else {
+      const petId = appt.pet_id ?? appt.pets?.id;
+
+      const { error } = await supabase.from("appointments").insert({
+        pet_id: petId,
+        date: newDateStr,
+        time: appt.time,
+        duration_min: Number.isFinite(appt.duration_min) ? appt.duration_min : 60,
+        services: appt.services ?? [],
+        notes: appt.notes ?? "",
+        amount: typeof appt.amount === "number" ? appt.amount : null,
+        confirmed: false,
+        no_show: false,
+        paid: false,
+      });
+
+      if (error) {
+        console.error("Error rebooking:", error.message);
+        alert("Error rebooking: " + error.message);
+        return;
+      }
+
+      // Refresh list so the new appt shows
+      const { data, error: fetchErr } = await supabase
+        .from("appointments")
+        .select(`
+          id,
+          pet_id,
+          date,
+          time,
+          duration_min,
+          services,
+          notes,
+          confirmed,
+          no_show,
+          paid,
+          amount,
+          pets (
+            id,
+            name,
+            tags,
+            client_id,
+            clients ( id, full_name, phone )
+          )
+        `)
+        .order("date", { ascending: true })
+        .order("time", { ascending: true });
+
+      if (!fetchErr) setAppointments(data || []);
       alert("Rebooked for 4 weeks later.");
+    } finally {
+      setSavingRebookId(null);
     }
   };
 
@@ -92,7 +136,6 @@ export default function Schedule() {
     const today = new Date();
     const todayYmd = toYMD(today);
 
-
     return appointments.filter((appt) => {
       const apptDate = parseYMD(appt.date);
 
@@ -101,9 +144,8 @@ export default function Schedule() {
       if (filter === "thisWeek") {
         const endOfWeek = new Date(today);
         endOfWeek.setDate(today.getDate() + 7);
-        // Compare by time value to avoid time-of-day issues
         return apptDate.getTime() >= parseYMD(todayYmd).getTime() &&
-              apptDate.getTime() <= parseYMD(toYMD(endOfWeek)).getTime();
+               apptDate.getTime() <= parseYMD(toYMD(endOfWeek)).getTime();
       }
 
       if (filter === "thisMonth") {
@@ -117,9 +159,8 @@ export default function Schedule() {
         const past30 = new Date(today);
         past30.setDate(today.getDate() - 30);
         return apptDate.getTime() >= parseYMD(toYMD(past30)).getTime() &&
-              apptDate.getTime() <  parseYMD(todayYmd).getTime();
+               apptDate.getTime() <  parseYMD(todayYmd).getTime();
       }
-
 
       return true;
     });
@@ -153,7 +194,6 @@ export default function Schedule() {
       end <= now // Only include if appointment has ended
     );
   });
-
 
   const totalUnpaidToday = unpaidToday.length;
   const totalUnpaidAmount = unpaidToday.reduce((sum, appt) => sum + (appt.amount || 0), 0);
@@ -202,12 +242,12 @@ export default function Schedule() {
       ) : (
         <div className="grid gap-4">
           {filteredAppointments.map((appt) => {
-            const start = appt.time?.slice(0, 5);
+            const start = (appt.time || "00:00").slice(0, 5); // guard against undefined
             const end = getEndTime(start, appt.duration_min || 15);
             const tags = appt.pets?.tags || [];
             const services = appt.services || [];
             const now = new Date();
-            const apptDateTime = new Date(`${appt.date}T${appt.time}`);
+            const apptDateTime = new Date(`${appt.date}T${appt.time || "00:00"}`);
             const isPast = apptDateTime < now;
 
             return (
@@ -276,12 +316,13 @@ export default function Schedule() {
                   )}
 
                   <div className="flex flex-wrap items-center gap-3 mt-2">
-                    <Link
-                      to={`/appointments/${appt.pet_id}?clone=${appt.id}&autoShift=true`}
+                    <button
+                      onClick={() => handleQuickRebook(appt, 4)}
                       className="btn-secondary"
+                      disabled={savingRebookId === appt.id}
                     >
-                      🔁 Rebook 4 weeks
-                    </Link>
+                      {savingRebookId === appt.id ? "Rebooking…" : "🔁 Rebook 4 weeks"}
+                    </button>
 
                     {appt.pets ? (
                       <Link
@@ -366,6 +407,7 @@ export default function Schedule() {
 }
 
 function getEndTime(start, durationMin) {
+  if (!start) return "—";
   const [h, m] = start.split(":").map(Number);
   const startMinutes = h * 60 + m;
   const endMinutes = startMinutes + durationMin;
