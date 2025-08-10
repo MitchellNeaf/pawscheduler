@@ -2,6 +2,11 @@ import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { Link } from "react-router-dom";
 
+// Local date helpers
+const toYMD = (d) => d.toLocaleDateString("en-CA"); // YYYY-MM-DD in LOCAL time
+const parseYMD = (s) => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+
+
 export default function Schedule() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -99,21 +104,24 @@ export default function Schedule() {
   if (loading) return <main className="px-4 py-6">Loading schedule...</main>;
 
   const DANGER_TAGS = ["Bites", "Anxious", "Aggressive", "Matting"];
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = toYMD(new Date());
 
   const filterAppointments = () => {
     const today = new Date();
-    const todayIso = today.toISOString().split("T")[0];
+    const todayYmd = toYMD(today);
+
 
     return appointments.filter((appt) => {
-      const apptDate = new Date(appt.date);
+      const apptDate = parseYMD(appt.date);
 
-      if (filter === "today") return appt.date === todayIso;
+      if (filter === "today") return appt.date === todayYmd;
 
       if (filter === "thisWeek") {
         const endOfWeek = new Date(today);
         endOfWeek.setDate(today.getDate() + 7);
-        return apptDate >= today && apptDate <= endOfWeek;
+        // Compare by time value to avoid time-of-day issues
+        return apptDate.getTime() >= parseYMD(todayYmd).getTime() &&
+              apptDate.getTime() <= parseYMD(toYMD(endOfWeek)).getTime();
       }
 
       if (filter === "thisMonth") {
@@ -126,8 +134,10 @@ export default function Schedule() {
       if (filter === "past30") {
         const past30 = new Date(today);
         past30.setDate(today.getDate() - 30);
-        return apptDate >= past30 && apptDate < today;
+        return apptDate.getTime() >= parseYMD(toYMD(past30)).getTime() &&
+              apptDate.getTime() <  parseYMD(todayYmd).getTime();
       }
+
 
       return true;
     });
