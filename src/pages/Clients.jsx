@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabase';
 import ClientForm from '../components/ClientForm';
-import { useCallback } from "react"; // make sure this is present
 
 export default function Clients() {
   const [clients, setClients] = useState([]);
