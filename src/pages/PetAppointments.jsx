@@ -286,7 +286,7 @@ export default function PetAppointments() {
     const original = new Date(`${date}T${time}`);
     const newDate = new Date(original);
     newDate.setDate(original.getDate() + 28); // 4 weeks later
-    const iso = newDate.toISOString().split("T")[0];
+    return date.toISOString().slice(0, 10);
 
     setForm((prev) => ({ ...prev, date: toYMD(newDate) }));
     window.scrollTo({ top: 0, behavior: "smooth" });

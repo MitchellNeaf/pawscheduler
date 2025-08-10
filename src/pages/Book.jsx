@@ -22,7 +22,7 @@ const SERVICE_OPTIONS = [
 ];
 
 export default function BookPage() {
-  const { slug: _slug } = useParams(); // reserved for later (branding/routing)
+  const { slug } = useParams();
   const [clientForm, setClientForm] = useState({ name: "", last4: "" });
   const [client, setClient] = useState(null);
   const [pets, setPets] = useState([]);

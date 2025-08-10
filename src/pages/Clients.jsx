@@ -2,25 +2,41 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabase';
 import ClientForm from '../components/ClientForm';
+import { useCallback } from "react"; // make sure this is present
 
 export default function Clients() {
   const [clients, setClients] = useState([]);
   const [pets, setPets] = useState([]);
   const [search, setSearch] = useState("");
 
+
   const fetchData = useCallback(async () => {
-    const { data: clientData, error: clientError } = await supabase
-      .from('clients')
-      .select('*')
-      .order('created_at', { ascending: false });
+    try {
+      const { data: clientData, error: clientError } = await supabase
+        .from("clients")
+        .select("*")
+        .order("created_at", { ascending: false });
 
-    const { data: petData, error: petError } = await supabase
-      .from('pets')
-      .select('*');
+      if (clientError) {
+        console.error("Error loading clients:", clientError.message);
+      } else {
+        setClients(clientData || []);
+      }
 
-    if (!clientError) setClients(clientData || []);
-    if (!petError) setPets(petData || []);
-  }, []);
+      const { data: petData, error: petError } = await supabase
+        .from("pets")
+        .select("*");
+
+      if (petError) {
+        console.error("Error loading pets:", petError.message);
+      } else {
+        setPets(petData || []);
+      }
+    } catch (e) {
+      console.error("Unexpected fetchData error:", e);
+    }
+  }, [setClients, setPets]); // include deps to satisfy react-hooks/exhaustive-deps
+
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
