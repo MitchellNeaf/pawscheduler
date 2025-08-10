@@ -38,7 +38,8 @@ export default function Revenue() {
   }, []);
 
   // Helpers
-  const todayStr = new Date().toISOString().split("T")[0];
+  const toYMD = (d) => d.toLocaleDateString("en-CA"); // local YYYY-MM-DD
+  const todayStr = toYMD(new Date());
   const startOfWeek = getStartOfWeek(new Date());
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 

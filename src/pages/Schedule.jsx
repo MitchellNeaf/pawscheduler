@@ -63,25 +63,7 @@ export default function Schedule() {
     }
   };
 
-  const handleRebook = async (appt) => {
-    const { date, time, pet_id, duration_min, services, notes, amount } = appt;
-    const original = new Date(`${date}T${time}`);
-    const newDate = new Date(original);
-    newDate.setDate(original.getDate() + 28);
-    const newDateStr = newDate.toISOString().split("T")[0];
-
-    const { data: existing } = await supabase
-      .from("appointments")
-      .select("id")
-      .eq("pet_id", pet_id)
-      .eq("date", newDateStr)
-      .eq("time", time)
-      .maybeSingle();
-
-    if (existing) {
-      alert("This pet already has an appointment at that time.");
-      return;
-    }
+  
 
     const { error } = await supabase.from("appointments").insert({
       pet_id,

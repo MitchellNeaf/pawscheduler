@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabase";
 
+const toYMD = (d) => d.toLocaleDateString("en-CA"); // local YYYY-MM-DD
 const START_HOUR = 6;
 const END_HOUR = 21;
 
@@ -100,7 +101,7 @@ export default function PetAppointments() {
           if (autoShift) {
             const d = new Date(toClone.date);
             d.setDate(d.getDate() + 28);
-            newDate = d.toISOString().split("T")[0];
+            newDate = toYMD(d);
           }
 
           setForm({
@@ -128,7 +129,7 @@ export default function PetAppointments() {
     };
 
     loadData();
-  }, [petId]);
+  }, [petId, cloneIdFromURL, editIdFromURL, autoShift]);
 
 
 
@@ -287,7 +288,7 @@ export default function PetAppointments() {
     newDate.setDate(original.getDate() + 28); // 4 weeks later
     const iso = newDate.toISOString().split("T")[0];
 
-    setForm((prev) => ({ ...prev, date: iso }));
+    setForm((prev) => ({ ...prev, date: toYMD(newDate) }));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 

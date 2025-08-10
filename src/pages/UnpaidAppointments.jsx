@@ -94,7 +94,7 @@ export default function UnpaidAppointments() {
 
   return (
     <main>
-      <Link to="">&larr; Back to Home</Link>
+      <Link to="/">&larr; Back to Home</Link>
 
       <h1 className="mt-2">Unpaid Appointments</h1>
 
@@ -110,7 +110,7 @@ export default function UnpaidAppointments() {
       ) : (
         <div className="grid gap-4">
           {appointments.map((appt) => {
-            const start = appt.time ? appt.time.slice(0, 5) : "";
+            const start = (appt.time || "").slice(0, 5);
             const services = appt.services || [];
 
             return (

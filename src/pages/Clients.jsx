@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../supabase';
 import ClientForm from '../components/ClientForm';
@@ -8,7 +8,7 @@ export default function Clients() {
   const [pets, setPets] = useState([]);
   const [search, setSearch] = useState("");
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     const { data: clientData, error: clientError } = await supabase
       .from('clients')
       .select('*')
@@ -20,9 +20,9 @@ export default function Clients() {
 
     if (!clientError) setClients(clientData || []);
     if (!petError) setPets(petData || []);
-  };
+  }, []);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const filteredClients = clients.filter(client => {
     const lowerSearch = search.toLowerCase();
