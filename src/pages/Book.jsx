@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../supabase";
@@ -22,6 +21,11 @@ const SERVICE_OPTIONS = [
 ];
 
 export default function BookPage() {
+  const { slug } = useParams(); // ✅ use the slug from /book/:slug
+
+  const [groomer, setGroomer] = useState(null);
+  const [groomerId, setGroomerId] = useState(null);
+
   const [clientForm, setClientForm] = useState({ name: "", last4: "" });
   const [client, setClient] = useState(null);
   const [pets, setPets] = useState([]);
@@ -39,22 +43,48 @@ export default function BookPage() {
   const [takenTimes, setTakenTimes] = useState([]);
   const [upcomingAppts, setUpcomingAppts] = useState([]);
 
+  // Load groomer by slug
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      const { data, error: gErr } = await supabase
+        .from("groomers")
+        .select("id, business_name, slug")
+        .eq("slug", slug)
+        .single();
+
+      if (gErr || !data) {
+        console.error("Groomer not found for slug:", slug, gErr?.message);
+        setError("Booking page not found.");
+        return;
+      }
+      if (isMounted) {
+        setGroomer(data);
+        setGroomerId(data.id);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, [slug]);
+
   // --- helpers ---
   const compareDateTimeDesc = (a, b) => {
-    const da = new Date(`${a.date}T${(a.time || "00:00").slice(0,5)}`);
-    const db = new Date(`${b.date}T${(b.time || "00:00").slice(0,5)}`);
+    const da = new Date(`${a.date}T${(a.time || "00:00").slice(0, 5)}`);
+    const db = new Date(`${b.date}T${(b.time || "00:00").slice(0, 5)}`);
     return db - da; // newest first
   };
 
   const fetchTakenTimes = async (date) => {
-    if (!date) return;
-    const { data, error } = await supabase
+    if (!date || !groomerId) return;
+    const { data, error: tErr } = await supabase
       .from("appointments")
       .select("time, duration_min")
-      .eq("date", date);
+      .eq("date", date)
+      .eq("groomer_id", groomerId);
 
-    if (error) {
-      console.error("Error fetching appointments:", error);
+    if (tErr) {
+      console.error("Error fetching appointments:", tErr.message);
       return;
     }
 
@@ -68,11 +98,10 @@ export default function BookPage() {
     setTakenTimes(Array.from(blocked));
   };
 
-  // refresh taken times when date changes
+  // refresh taken times when date or groomer changes
   useEffect(() => {
     fetchTakenTimes(form.date);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.date]);
+  }, [form.date, groomerId]); // eslint: correct deps
 
   // auto duration based on services
   useEffect(() => {
@@ -94,16 +123,22 @@ export default function BookPage() {
     setClient(null);
     setPets([]);
 
+    if (!groomerId) {
+      setError("Booking page not ready. Please try again.");
+      return;
+    }
+
     const firstName = clientForm.name.trim().toLowerCase();
     const last4 = clientForm.last4.trim();
 
-    const { data: matches, error } = await supabase
+    const { data: matches, error: cErr } = await supabase
       .from("clients")
       .select("*")
+      .eq("groomer_id", groomerId)
       .ilike("full_name", `${firstName}%`)
       .like("phone", `%${last4}`);
 
-    if (error || !matches || matches.length === 0) {
+    if (cErr || !matches || matches.length === 0) {
       setError("Client not found. Please check your info or contact your groomer.");
       return;
     }
@@ -114,7 +149,8 @@ export default function BookPage() {
     const { data: petList } = await supabase
       .from("pets")
       .select("id, name")
-      .eq("client_id", matchedClient.id);
+      .eq("client_id", matchedClient.id)
+      .eq("groomer_id", groomerId);
 
     const list = petList || [];
     setPets(list);
@@ -124,7 +160,8 @@ export default function BookPage() {
       .from("appointments")
       .select("pet_id, date, time, services")
       .in("pet_id", list.map((p) => p.id))
-      .gte("date", new Date().toISOString().split("T")[0]);
+      .gte("date", new Date().toISOString().split("T")[0])
+      .eq("groomer_id", groomerId);
 
     setUpcomingAppts((petAppointments || []).sort(compareDateTimeDesc));
   };
@@ -148,17 +185,23 @@ export default function BookPage() {
     setSubmitting(true);
     setSuccess(false);
 
+    if (!groomerId) {
+      alert("Booking page not ready. Please try again.");
+      setSubmitting(false);
+      return;
+    }
+
     if (!selectedPetId) {
       alert("Please select a pet.");
       setSubmitting(false);
       return;
     }
 
-    // Insert and return the created row so we can push it into the list immediately
-    const { data: inserted, error } = await supabase
+    const { data: inserted, error: iErr } = await supabase
       .from("appointments")
       .insert([
         {
+          groomer_id: groomerId, // ✅ scope to groomer
           pet_id: selectedPetId,
           date: form.date,
           time: form.time,
@@ -174,8 +217,8 @@ export default function BookPage() {
       .select("pet_id, date, time, services")
       .single();
 
-    if (error) {
-      alert("Error saving appointment: " + error.message);
+    if (iErr) {
+      alert("Error saving appointment: " + iErr.message);
     } else {
       setSuccess(true);
 
@@ -183,7 +226,6 @@ export default function BookPage() {
       if (inserted) {
         setUpcomingAppts((prev) => [inserted, ...(prev || [])].sort(compareDateTimeDesc));
       } else {
-        // Fallback: optimistic object if backend didn’t return row
         const optimistic = {
           pet_id: selectedPetId,
           date: form.date,
@@ -194,18 +236,35 @@ export default function BookPage() {
       }
 
       // 2) Clear the form so they can book again (e.g., for another pet)
+      const sameDate = form.date;
       setForm({ services: [], date: "", time: "", duration_min: "", notes: "" });
 
       // 3) Refresh the blocked times for the same date (if they pick that date again)
-      await fetchTakenTimes(form.date);
+      await fetchTakenTimes(sameDate);
     }
 
     setSubmitting(false);
   };
 
+  if (!groomerId && !error) {
+    return <main className="max-w-xl">Loading booking page…</main>;
+  }
+
   return (
     <main className="max-w-xl">
-      {!client ? (
+      {groomer && (
+        <div className="mb-2 text-sm text-gray-600">
+          Booking for <strong>{groomer.business_name}</strong>
+        </div>
+      )}
+
+      {error && !client ? (
+        <div className="card">
+          <div className="card-body">
+            <p className="text-red-600">{error}</p>
+          </div>
+        </div>
+      ) : !client ? (
         <form onSubmit={handleClientLogin} className="card">
           <div className="card-header">
             <h2 className="m-0">Book an Appointment</h2>
@@ -311,7 +370,9 @@ export default function BookPage() {
                   const blocksNeeded = Math.ceil(Number(form.duration_min || 0) / 15);
                   if (blocksNeeded === 0) return false;
                   const slotBlock = TIME_SLOTS.slice(idx, idx + blocksNeeded);
-                  return slotBlock.length === blocksNeeded && slotBlock.every((s) => !takenTimes.includes(s));
+                  return (
+                    slotBlock.length === blocksNeeded && slotBlock.every((s) => !takenTimes.includes(s))
+                  );
                 }).map((slot) => (
                   <option key={slot} value={slot}>
                     {slot}
