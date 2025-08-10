@@ -36,10 +36,11 @@ export default function BookPage() {
     notes: "",
   });
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess] = useState(false);
+  const [, setSuccess] = useState(false);
   const [error, setError] = useState("");
   const [takenTimes, setTakenTimes] = useState([]);
-  const [upcomingAppts, setUpcomingAppts] = useState([]);
+  const [, setUpcomingAppts] = useState([]);
+
 
   // Load groomer
   useEffect(() => {
