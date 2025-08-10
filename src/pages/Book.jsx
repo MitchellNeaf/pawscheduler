@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../supabase";
 
@@ -21,11 +21,9 @@ const SERVICE_OPTIONS = [
 ];
 
 export default function BookPage() {
-  const { slug } = useParams(); // ✅ use the slug from /book/:slug
-
+  const { slug } = useParams();
   const [groomer, setGroomer] = useState(null);
   const [groomerId, setGroomerId] = useState(null);
-
   const [clientForm, setClientForm] = useState({ name: "", last4: "" });
   const [client, setClient] = useState(null);
   const [pets, setPets] = useState([]);
@@ -43,67 +41,56 @@ export default function BookPage() {
   const [takenTimes, setTakenTimes] = useState([]);
   const [upcomingAppts, setUpcomingAppts] = useState([]);
 
-  // Load groomer by slug
+  // Load groomer
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
     (async () => {
       const { data, error: gErr } = await supabase
         .from("groomers")
-        .select("id, business_name, slug")
+        .select("id,business_name,slug")
         .eq("slug", slug)
         .single();
-
-      if (gErr || !data) {
-        console.error("Groomer not found for slug:", slug, gErr?.message);
-        setError("Booking page not found.");
-        return;
-      }
-      if (isMounted) {
+      if (!gErr && data && mounted) {
         setGroomer(data);
         setGroomerId(data.id);
+      } else if (gErr) {
+        setError("Booking page not found.");
       }
     })();
     return () => {
-      isMounted = false;
+      mounted = false;
     };
   }, [slug]);
 
-  // --- helpers ---
   const compareDateTimeDesc = (a, b) => {
     const da = new Date(`${a.date}T${(a.time || "00:00").slice(0, 5)}`);
     const db = new Date(`${b.date}T${(b.time || "00:00").slice(0, 5)}`);
-    return db - da; // newest first
+    return db - da;
   };
 
-  const fetchTakenTimes = async (date) => {
-    if (!date || !groomerId) return;
+  // ✅ useCallback so ESLint is happy
+  const fetchTakenTimes = useCallback(async () => {
+    if (!form.date || !groomerId) return;
     const { data, error: tErr } = await supabase
       .from("appointments")
-      .select("time, duration_min")
-      .eq("date", date)
+      .select("time,duration_min")
+      .eq("date", form.date)
       .eq("groomer_id", groomerId);
-
-    if (tErr) {
-      console.error("Error fetching appointments:", tErr.message);
-      return;
-    }
+    if (tErr) return;
 
     const blocked = new Set();
     (data || []).forEach(({ time, duration_min }) => {
-      const timeStr = time.slice(0, 5);
-      const index = TIME_SLOTS.indexOf(timeStr);
+      const idx = TIME_SLOTS.indexOf(time.slice(0, 5));
       const blocks = Math.ceil((duration_min || 30) / 15);
-      for (let i = 0; i < blocks; i++) blocked.add(TIME_SLOTS[index + i]);
+      for (let i = 0; i < blocks; i++) blocked.add(TIME_SLOTS[idx + i]);
     });
     setTakenTimes(Array.from(blocked));
-  };
+  }, [form.date, groomerId]);
 
-  // refresh taken times when date or groomer changes
   useEffect(() => {
-    fetchTakenTimes(form.date);
-  }, [form.date, groomerId]); // eslint: correct deps
+    fetchTakenTimes();
+  }, [fetchTakenTimes]);
 
-  // auto duration based on services
   useEffect(() => {
     const s = form.services;
     if (s.length === 1 && s.includes("Nails")) {
@@ -122,47 +109,34 @@ export default function BookPage() {
     setError("");
     setClient(null);
     setPets([]);
-
-    if (!groomerId) {
-      setError("Booking page not ready. Please try again.");
-      return;
-    }
+    if (!groomerId) return setError("Booking page not ready.");
 
     const firstName = clientForm.name.trim().toLowerCase();
     const last4 = clientForm.last4.trim();
-
     const { data: matches, error: cErr } = await supabase
       .from("clients")
       .select("*")
       .eq("groomer_id", groomerId)
       .ilike("full_name", `${firstName}%`)
       .like("phone", `%${last4}`);
-
-    if (cErr || !matches || matches.length === 0) {
-      setError("Client not found. Please check your info or contact your groomer.");
-      return;
-    }
+    if (cErr || !matches?.length) return setError("Client not found.");
 
     const matchedClient = matches[0];
     setClient(matchedClient);
-
     const { data: petList } = await supabase
       .from("pets")
-      .select("id, name")
+      .select("id,name")
       .eq("client_id", matchedClient.id)
       .eq("groomer_id", groomerId);
-
-    const list = petList || [];
-    setPets(list);
-    if (list.length === 1) setSelectedPetId(list[0].id);
+    setPets(petList || []);
+    if (petList?.length === 1) setSelectedPetId(petList[0].id);
 
     const { data: petAppointments } = await supabase
       .from("appointments")
-      .select("pet_id, date, time, services")
-      .in("pet_id", list.map((p) => p.id))
+      .select("pet_id,date,time,services")
+      .in("pet_id", (petList || []).map((p) => p.id))
       .gte("date", new Date().toISOString().split("T")[0])
       .eq("groomer_id", groomerId);
-
     setUpcomingAppts((petAppointments || []).sort(compareDateTimeDesc));
   };
 
@@ -173,7 +147,9 @@ export default function BookPage() {
     } else if (name === "services") {
       setForm((prev) => ({
         ...prev,
-        services: checked ? [...prev.services, value] : prev.services.filter((s) => s !== value),
+        services: checked
+          ? [...prev.services, value]
+          : prev.services.filter((s) => s !== value),
       }));
     } else {
       setForm((prev) => ({ ...prev, [name]: value }));
@@ -183,216 +159,79 @@ export default function BookPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
-    setSuccess(false);
-
-    if (!groomerId) {
-      alert("Booking page not ready. Please try again.");
-      setSubmitting(false);
-      return;
-    }
-
-    if (!selectedPetId) {
-      alert("Please select a pet.");
-      setSubmitting(false);
-      return;
-    }
+    if (!selectedPetId) return alert("Please select a pet.");
 
     const { data: inserted, error: iErr } = await supabase
       .from("appointments")
-      .insert([
-        {
-          groomer_id: groomerId, // ✅ scope to groomer
-          pet_id: selectedPetId,
-          date: form.date,
-          time: form.time,
-          duration_min: Number(form.duration_min),
-          services: form.services,
-          confirmed: false,
-          no_show: false,
-          amount: null,
-          paid: false,
-          notes: form.notes || `Self-booked by ${client.full_name}`,
-        },
-      ])
-      .select("pet_id, date, time, services")
+      .insert([{
+        groomer_id: groomerId,
+        pet_id: selectedPetId,
+        date: form.date,
+        time: form.time,
+        duration_min: Number(form.duration_min),
+        services: form.services,
+        confirmed: false,
+        no_show: false,
+        amount: null,
+        paid: false,
+        notes: form.notes || `Self-booked by ${client.full_name}`,
+      }])
+      .select("pet_id,date,time,services")
       .single();
-
-    if (iErr) {
-      alert("Error saving appointment: " + iErr.message);
-    } else {
+    if (iErr) alert("Error: " + iErr.message);
+    else {
       setSuccess(true);
-
-      // 1) Show the new appointment at the top
-      if (inserted) {
-        setUpcomingAppts((prev) => [inserted, ...(prev || [])].sort(compareDateTimeDesc));
-      } else {
-        const optimistic = {
-          pet_id: selectedPetId,
-          date: form.date,
-          time: form.time,
-          services: form.services,
-        };
-        setUpcomingAppts((prev) => [optimistic, ...(prev || [])].sort(compareDateTimeDesc));
-      }
-
-      // 2) Clear the form so they can book again (e.g., for another pet)
+      setUpcomingAppts((prev) => [inserted, ...(prev || [])].sort(compareDateTimeDesc));
       const sameDate = form.date;
       setForm({ services: [], date: "", time: "", duration_min: "", notes: "" });
-
-      // 3) Refresh the blocked times for the same date (if they pick that date again)
       await fetchTakenTimes(sameDate);
     }
-
     setSubmitting(false);
   };
 
-  if (!groomerId && !error) {
-    return <main className="max-w-xl">Loading booking page…</main>;
-  }
+  if (!groomerId && !error) return <main>Loading booking page…</main>;
 
   return (
     <main className="max-w-xl">
-      {groomer && (
-        <div className="mb-2 text-sm text-gray-600">
-          Booking for <strong>{groomer.business_name}</strong>
-        </div>
-      )}
-
+      {groomer && <div className="mb-2">Booking for <strong>{groomer.business_name}</strong></div>}
       {error && !client ? (
-        <div className="card">
-          <div className="card-body">
-            <p className="text-red-600">{error}</p>
-          </div>
-        </div>
+        <div>{error}</div>
       ) : !client ? (
-        <form onSubmit={handleClientLogin} className="card">
-          <div className="card-header">
-            <h2 className="m-0">Book an Appointment</h2>
-          </div>
-          <div className="card-body space-y-3">
-            <input
-              placeholder="First name"
-              name="name"
-              value={clientForm.name}
-              onChange={handleChange}
-              required
-            />
-            <input
-              placeholder="Last 4 digits of phone"
-              name="last4"
-              value={clientForm.last4}
-              onChange={handleChange}
-              required
-            />
-            <button type="submit" className="btn-primary w-full">
-              Continue
-            </button>
-            {error && <p className="text-red-600">{error}</p>}
-          </div>
+        <form onSubmit={handleClientLogin}>
+          <input name="name" placeholder="First name" value={clientForm.name} onChange={handleChange} />
+          <input name="last4" placeholder="Last 4 of phone" value={clientForm.last4} onChange={handleChange} />
+          <button type="submit">Continue</button>
         </form>
       ) : (
-        <div className="space-y-4">
-          <div className="card">
-            <div className="card-body">
-              <h2 className="m-0">Welcome, {client.full_name}</h2>
-              {success && <p className="text-green-600 mt-2">Appointment requested!</p>}
-            </div>
-          </div>
-
-          {upcomingAppts.length > 0 && (
-            <div className="card">
-              <div className="card-body text-sm">
-                <strong>Upcoming Appointments:</strong>
-                <ul className="mt-2 !space-y-1">
-                  {upcomingAppts.map((appt, i) => {
-                    const petName = pets.find((p) => p.id === appt.pet_id)?.name || "(Unknown Pet)";
-                    const time = appt.time ? appt.time.slice(0, 5) : "";
-                    return (
-                      <li key={i} className="!p-0 !border-0 !shadow-none !bg-transparent">
-                        {petName} — {appt.date} at {time} (
-                        {Array.isArray(appt.services) ? appt.services.join(", ") : appt.services})
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            </div>
+        <form onSubmit={handleSubmit}>
+          {pets.length > 1 && (
+            <select value={selectedPetId} onChange={(e) => setSelectedPetId(e.target.value)}>
+              <option value="">Select a pet</option>
+              {pets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
           )}
-
-          <form onSubmit={handleSubmit} className="card">
-            <div className="card-body space-y-3">
-              {pets.length > 1 && (
-                <select value={selectedPetId} onChange={(e) => setSelectedPetId(e.target.value)}>
-                  <option value="">Select a pet</option>
-                  {pets.map((pet) => (
-                    <option key={pet.id} value={pet.id}>
-                      {pet.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {pets.length === 1 && (
-                <div className="chip">
-                  Pet: <strong className="ml-1">{pets[0].name}</strong>
-                </div>
-              )}
-
-              <div>
-                <label className="block font-medium mb-1">Services</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {SERVICE_OPTIONS.map((service) => (
-                    <label key={service} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        name="services"
-                        value={service}
-                        checked={form.services.includes(service)}
-                        onChange={handleChange}
-                      />
-                      <span>{service}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {form.duration_min && (
-                <div className="text-sm text-gray-600 italic">
-                  Estimated time: {form.duration_min} minutes
-                </div>
-              )}
-
-              <input type="date" name="date" value={form.date} onChange={handleChange} required />
-
-              <select name="time" value={form.time} onChange={handleChange} required>
-                <option value="">Select time</option>
-                {TIME_SLOTS.filter((slot, idx) => {
-                  const blocksNeeded = Math.ceil(Number(form.duration_min || 0) / 15);
-                  if (blocksNeeded === 0) return false;
-                  const slotBlock = TIME_SLOTS.slice(idx, idx + blocksNeeded);
-                  return (
-                    slotBlock.length === blocksNeeded && slotBlock.every((s) => !takenTimes.includes(s))
-                  );
-                }).map((slot) => (
-                  <option key={slot} value={slot}>
-                    {slot}
-                  </option>
-                ))}
-              </select>
-
-              <textarea
-                placeholder="Notes (optional)"
-                name="notes"
-                value={form.notes}
-                onChange={handleChange}
-              />
-
-              <button type="submit" className="btn-primary w-full" disabled={submitting}>
-                {submitting ? "Submitting..." : "Confirm Appointment"}
-              </button>
-            </div>
-          </form>
-        </div>
+          <div>
+            {SERVICE_OPTIONS.map((s) => (
+              <label key={s}>
+                <input type="checkbox" name="services" value={s} checked={form.services.includes(s)} onChange={handleChange} /> {s}
+              </label>
+            ))}
+          </div>
+          {form.duration_min && <div>Estimated time: {form.duration_min} minutes</div>}
+          <input type="date" name="date" value={form.date} onChange={handleChange} />
+          <select name="time" value={form.time} onChange={handleChange}>
+            <option value="">Select time</option>
+            {TIME_SLOTS.filter((slot, idx) => {
+              const blocks = Math.ceil(Number(form.duration_min || 0) / 15);
+              return (
+                TIME_SLOTS.slice(idx, idx + blocks).length === blocks &&
+                TIME_SLOTS.slice(idx, idx + blocks).every((s) => !takenTimes.includes(s))
+              );
+            }).map((slot) => <option key={slot} value={slot}>{slot}</option>)}
+          </select>
+          <textarea name="notes" value={form.notes} onChange={handleChange} />
+          <button type="submit" disabled={submitting}>{submitting ? "Submitting..." : "Confirm"}</button>
+        </form>
       )}
     </main>
   );
