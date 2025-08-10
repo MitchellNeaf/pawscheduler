@@ -8,9 +8,7 @@ export default function ClientForm({ onClientAdded }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const { data, error } = await supabase
-      .from('clients')
-      .insert([{ full_name: name, phone }])
+    const { error } = await supabase.from("clients").insert(payload);
 
 
     if (error) {
