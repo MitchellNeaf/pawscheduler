@@ -1,22 +1,27 @@
-import { useState } from 'react';
-import { supabase } from '../supabase';
+import { useState } from "react";
+import { supabase } from "../supabase";
 
 export default function ClientForm({ onClientAdded }) {
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // ✅ Define payload here from state
+    const payload = {
+      full_name: name.trim(),
+      phone: phone.trim(),
+    };
+
     const { error } = await supabase.from("clients").insert(payload);
 
-
     if (error) {
-      alert('Error adding client: ' + error.message);
+      alert("Error adding client: " + error.message);
     } else {
-      setName('');
-      setPhone('');
-      onClientAdded(); // refresh the list
+      setName("");
+      setPhone("");
+      onClientAdded?.(); // refresh the list if provided
     }
   };
 
