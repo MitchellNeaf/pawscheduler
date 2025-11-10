@@ -12,30 +12,43 @@ const TAG_OPTIONS = [
   "Blind",
   "Deaf",
   "Allergies",
-  "Other"
+  "Other",
 ];
 
 export default function ClientPets() {
   const { clientId } = useParams();
   const [client, setClient] = useState(null);
   const [pets, setPets] = useState([]);
+  const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: "", breed: "", notes: "", tags: [] });
   const [otherTag, setOtherTag] = useState("");
   const [editingId, setEditingId] = useState(null);
 
+  // ✅ Get logged-in user once
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
+  }, []);
+
   useEffect(() => {
     const loadData = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { data: clientData } = await supabase
         .from("clients")
         .select("*")
         .eq("id", clientId)
+        .eq("groomer_id", user.id)
         .single();
 
       const { data: petData } = await supabase
         .from("pets")
         .select("*")
         .eq("client_id", clientId)
+        .eq("groomer_id", user.id)
         .order("created_at", { ascending: false });
 
       setClient(clientData);
@@ -46,12 +59,15 @@ export default function ClientPets() {
     loadData();
   }, [clientId]);
 
-  const handleFormChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
+  const handleFormChange = (e) =>
+    setForm({ ...form, [e.target.name]: e.target.value });
 
   const toggleTag = (tag) => {
     setForm((prev) => ({
       ...prev,
-      tags: prev.tags.includes(tag) ? prev.tags.filter((t) => t !== tag) : [...prev.tags, tag],
+      tags: prev.tags.includes(tag)
+        ? prev.tags.filter((t) => t !== tag)
+        : [...prev.tags, tag],
     }));
   };
 
@@ -63,15 +79,26 @@ export default function ClientPets() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const finalTags = otherTag ? [...form.tags.filter((t) => t !== "Other"), otherTag] : form.tags;
+    if (!user) return;
+
+    const finalTags = otherTag
+      ? [...form.tags.filter((t) => t !== "Other"), otherTag]
+      : form.tags;
 
     if (editingId) {
       const { data, error } = await supabase
         .from("pets")
-        .update({ name: form.name, breed: form.breed, notes: form.notes, tags: finalTags })
+        .update({
+          name: form.name,
+          breed: form.breed,
+          notes: form.notes,
+          tags: finalTags,
+        })
         .eq("id", editingId)
+        .eq("groomer_id", user.id)
         .select()
         .single();
+
       if (!error) {
         setPets((prev) => prev.map((p) => (p.id === editingId ? data : p)));
         resetForm();
@@ -79,9 +106,19 @@ export default function ClientPets() {
     } else {
       const { data, error } = await supabase
         .from("pets")
-        .insert([{ client_id: clientId, name: form.name, breed: form.breed, notes: form.notes, tags: finalTags }])
+        .insert([
+          {
+            client_id: clientId,
+            groomer_id: user.id, // ✅ attach logged-in groomer
+            name: form.name,
+            breed: form.breed,
+            notes: form.notes,
+            tags: finalTags,
+          },
+        ])
         .select()
         .single();
+
       if (!error && data) {
         setPets((prev) => [data, ...prev]);
         resetForm();
@@ -94,7 +131,9 @@ export default function ClientPets() {
       name: pet.name || "",
       breed: pet.breed || "",
       notes: pet.notes || "",
-      tags: pet.tags?.includes("Other") ? [...pet.tags, "Other"] : pet.tags || [],
+      tags: pet.tags?.includes("Other")
+        ? [...pet.tags, "Other"]
+        : pet.tags || [],
     });
     if (pet.tags?.some((t) => !TAG_OPTIONS.includes(t))) {
       setOtherTag(pet.tags.find((t) => !TAG_OPTIONS.includes(t)) || "");
@@ -106,9 +145,16 @@ export default function ClientPets() {
   };
 
   const handleDelete = async (id) => {
+    if (!user) return;
     const confirmDelete = window.confirm("Delete this pet?");
     if (!confirmDelete) return;
-    const { error } = await supabase.from("pets").delete().eq("id", id);
+
+    const { error } = await supabase
+      .from("pets")
+      .delete()
+      .eq("id", id)
+      .eq("groomer_id", user.id);
+
     if (!error) {
       setPets((prev) => prev.filter((p) => p.id !== id));
       if (editingId === id) resetForm();
@@ -127,15 +173,32 @@ export default function ClientPets() {
 
       <form onSubmit={handleSubmit} className="card mb-6">
         <div className="card-body space-y-3">
-          <input name="name" value={form.name} onChange={handleFormChange} placeholder="Pet name" required />
-          <input name="breed" value={form.breed} onChange={handleFormChange} placeholder="Breed" />
+          <input
+            name="name"
+            value={form.name}
+            onChange={handleFormChange}
+            placeholder="Pet name"
+            required
+          />
+          <input
+            name="breed"
+            value={form.breed}
+            onChange={handleFormChange}
+            placeholder="Breed"
+          />
 
           <div>
-            <label className="font-medium block mb-1">Tags (behavior, medical, etc.)</label>
+            <label className="font-medium block mb-1">
+              Tags (behavior, medical, etc.)
+            </label>
             <div className="grid grid-cols-2 gap-2">
               {TAG_OPTIONS.map((tag) => (
                 <label key={tag} className="flex items-center gap-2">
-                  <input type="checkbox" checked={form.tags.includes(tag)} onChange={() => toggleTag(tag)} />
+                  <input
+                    type="checkbox"
+                    checked={form.tags.includes(tag)}
+                    onChange={() => toggleTag(tag)}
+                  />
                   {tag}
                 </label>
               ))}
@@ -151,14 +214,23 @@ export default function ClientPets() {
             )}
           </div>
 
-          <textarea name="notes" value={form.notes} onChange={handleFormChange} placeholder="Notes" />
+          <textarea
+            name="notes"
+            value={form.notes}
+            onChange={handleFormChange}
+            placeholder="Notes"
+          />
 
           <div className="flex flex-wrap gap-3">
             <button type="submit" className="btn-primary">
               {editingId ? "Update Pet" : "Add Pet"}
             </button>
             {editingId && (
-              <button type="button" onClick={resetForm} className="btn-secondary">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="btn-secondary"
+              >
                 Cancel Edit
               </button>
             )}
@@ -179,19 +251,47 @@ export default function ClientPets() {
                 {pet.tags?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {pet.tags.map((tag, i) => (
-                      <span key={`${pet.id}-${tag}-${i}`} className={`chip ${["Bites","Anxious","Aggressive","Matting"].includes(tag) ? "chip-danger" : ""}`}>
+                      <span
+                        key={`${pet.id}-${tag}-${i}`}
+                        className={`chip ${
+                          ["Bites", "Anxious", "Aggressive", "Matting"].includes(
+                            tag
+                          )
+                            ? "chip-danger"
+                            : ""
+                        }`}
+                      >
                         {tag}
                       </span>
                     ))}
                   </div>
                 )}
 
-                {pet.notes && <div className="text-sm text-gray-700 mt-2">{pet.notes}</div>}
+                {pet.notes && (
+                  <div className="text-sm text-gray-700 mt-2">
+                    {pet.notes}
+                  </div>
+                )}
 
                 <div className="mt-3 flex flex-wrap gap-3 text-sm">
-                  <Link to={`/pets/${pet.id}/appointments`} className="btn-secondary">View Appointments</Link>
-                  <button className="btn-primary" onClick={() => handleEdit(pet)}>✏️ Edit</button>
-                  <button className="btn-danger" onClick={() => handleDelete(pet.id)}>🗑 Delete</button>
+                  <Link
+                    to={`/pets/${pet.id}/appointments`}
+                    className="btn-secondary"
+                  >
+                    View Appointments
+                  </Link>
+                  <button
+                    className="btn-primary"
+                    onClick={() => handleEdit(pet)}
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    className="btn-danger"
+                    onClick={() => handleDelete(pet.id)}
+                  >
+                    🗑 Delete
+                  </button>
                 </div>
               </div>
             </li>

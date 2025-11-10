@@ -1,19 +1,31 @@
-import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
-import { supabase } from '../supabase';
-import ClientForm from '../components/ClientForm';
+import { useEffect, useState, useCallback } from "react";
+import { Link } from "react-router-dom";
+import { supabase } from "../supabase";
+import ClientForm from "../components/ClientForm";
 
 export default function Clients() {
   const [clients, setClients] = useState([]);
   const [pets, setPets] = useState([]);
   const [search, setSearch] = useState("");
+  const [user, setUser] = useState(null);
 
+  // ✅ Get logged-in groomer
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
+  }, []);
 
+  // ✅ Fetch only this groomer’s data
   const fetchData = useCallback(async () => {
     try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
       const { data: clientData, error: clientError } = await supabase
         .from("clients")
         .select("*")
+        .eq("groomer_id", user.id)
         .order("created_at", { ascending: false });
 
       if (clientError) {
@@ -24,7 +36,8 @@ export default function Clients() {
 
       const { data: petData, error: petError } = await supabase
         .from("pets")
-        .select("*");
+        .select("*")
+        .eq("groomer_id", user.id);
 
       if (petError) {
         console.error("Error loading pets:", petError.message);
@@ -34,20 +47,22 @@ export default function Clients() {
     } catch (e) {
       console.error("Unexpected fetchData error:", e);
     }
-  }, [setClients, setPets]); // include deps to satisfy react-hooks/exhaustive-deps
+  }, [setClients, setPets]);
 
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-
-  const filteredClients = clients.filter(client => {
+  const filteredClients = clients.filter((client) => {
     const lowerSearch = search.toLowerCase();
     const clientNameMatch = client.full_name?.toLowerCase().includes(lowerSearch);
     const petMatches = pets
-      .filter(pet => pet.client_id === client.id)
-      .some(pet =>
-        pet.name?.toLowerCase().includes(lowerSearch) ||
-        pet.breed?.toLowerCase().includes(lowerSearch) ||
-        (pet.tags || []).some(tag => tag.toLowerCase().includes(lowerSearch))
+      .filter((pet) => pet.client_id === client.id)
+      .some(
+        (pet) =>
+          pet.name?.toLowerCase().includes(lowerSearch) ||
+          pet.breed?.toLowerCase().includes(lowerSearch) ||
+          (pet.tags || []).some((tag) => tag.toLowerCase().includes(lowerSearch))
       );
     return clientNameMatch || petMatches;
   });
@@ -59,7 +74,9 @@ export default function Clients() {
       {/* Search */}
       <div className="card mb-4">
         <div className="card-body">
-          <label className="block font-semibold mb-1 text-gray-700">Search Clients or Pets</label>
+          <label className="block font-semibold mb-1 text-gray-700">
+            Search Clients or Pets
+          </label>
           <input
             type="text"
             placeholder="Type a client name, pet name, breed, or tag..."
@@ -76,8 +93,8 @@ export default function Clients() {
           <h2 className="m-0">Add Client</h2>
         </div>
         <div className="card-body">
-          {/* Your ClientForm already renders a <form>; base CSS will make it look like a card */}
-          <ClientForm onClientAdded={fetchData} />
+          {/* ✅ Pass current user to form so groomer_id gets attached */}
+          <ClientForm onClientAdded={fetchData} user={user} />
         </div>
       </div>
 
@@ -93,9 +110,12 @@ export default function Clients() {
 
               <ul className="mt-2 ml-4 text-sm text-gray-700 !space-y-1">
                 {pets
-                  .filter(pet => pet.client_id === client.id)
-                  .map(pet => (
-                    <li key={pet.id} className="!p-0 !border-0 !shadow-none !bg-transparent">
+                  .filter((pet) => pet.client_id === client.id)
+                  .map((pet) => (
+                    <li
+                      key={pet.id}
+                      className="!p-0 !border-0 !shadow-none !bg-transparent"
+                    >
                       {pet.name} {pet.breed && `– ${pet.breed}`}
                       {pet.tags?.length > 0 && (
                         <span className="ml-2 text-xs text-gray-500">

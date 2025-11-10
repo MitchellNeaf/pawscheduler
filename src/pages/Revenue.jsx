@@ -5,8 +5,15 @@ import { Link } from "react-router-dom";
 export default function Revenue() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(null);
+
+  // ✅ Get logged-in groomer once
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
+  }, []);
 
   useEffect(() => {
+    if (!user) return; // wait for user
     const fetchData = async () => {
       const { data, error } = await supabase
         .from("appointments")
@@ -23,6 +30,7 @@ export default function Revenue() {
             clients ( id, full_name )
           )
         `)
+        .eq("groomer_id", user.id) // ✅ filter to logged-in groomer
         .order("date", { ascending: false })
         .order("time", { ascending: false });
 
@@ -35,7 +43,7 @@ export default function Revenue() {
     };
 
     fetchData();
-  }, []);
+  }, [user]);
 
   // Helpers
   const toYMD = (d) => d.toLocaleDateString("en-CA"); // local YYYY-MM-DD
@@ -133,9 +141,7 @@ function Section({ title, data, emptyText, unpaid }) {
                     <td>{a.pets?.name || "—"}</td>
                     <td>{a.pets?.clients?.full_name || "—"}</td>
                     <td>{Array.isArray(a.services) ? a.services.join(", ") : a.services || ""}</td>
-                    <td className="text-right">
-                      ${Number(a.amount || 0).toFixed(2)}
-                    </td>
+                    <td className="text-right">${Number(a.amount || 0).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>

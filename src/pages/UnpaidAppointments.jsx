@@ -6,8 +6,16 @@ export default function UnpaidAppointments() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [totalUnpaidAmount, setTotalUnpaidAmount] = useState(0);
+  const [user, setUser] = useState(null);
+
+  // ✅ Get logged-in groomer
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
+  }, []);
 
   useEffect(() => {
+    if (!user) return; // wait for auth
+
     const fetchUnpaid = async () => {
       const { data, error } = await supabase
         .from("appointments")
@@ -22,6 +30,7 @@ export default function UnpaidAppointments() {
           no_show,
           paid,
           amount,
+          groomer_id,
           pets (
             id,
             name,
@@ -30,6 +39,7 @@ export default function UnpaidAppointments() {
             clients ( id, full_name, phone )
           )
         `)
+        .eq("groomer_id", user.id) // ✅ isolate groomer
         .eq("paid", false)
         .or("no_show.eq.false,no_show.is.null")
         .order("date", { ascending: true })
@@ -44,12 +54,8 @@ export default function UnpaidAppointments() {
       }
 
       const now = new Date();
-
-      // Build local end-time from date+time+duration (avoid UTC parsing)
       const endAsLocal = (appt) => {
-        const [yy, mm, dd] = String(appt.date || "")
-          .split("-")
-          .map((n) => parseInt(n, 10));
+        const [yy, mm, dd] = String(appt.date || "").split("-").map((n) => parseInt(n, 10));
         const [HH = 0, MM = 0, SS = 0] = String(appt.time || "")
           .split(":")
           .map((n) => parseInt(n, 10));
@@ -62,9 +68,9 @@ export default function UnpaidAppointments() {
       setAppointments(filtered);
 
       const total = filtered.reduce((sum, appt) => {
-        const raw = typeof appt.amount === "string" ? parseFloat(appt.amount) : appt.amount;
-        const amt = Number.isFinite(raw) ? raw : 0;
-        return sum + amt;
+        const raw =
+          typeof appt.amount === "string" ? parseFloat(appt.amount) : appt.amount;
+        return sum + (Number.isFinite(raw) ? raw : 0);
       }, 0);
 
       setTotalUnpaidAmount(total);
@@ -72,10 +78,15 @@ export default function UnpaidAppointments() {
     };
 
     fetchUnpaid();
-  }, []);
+  }, [user]);
 
   const handleMarkAsPaid = async (id, amount) => {
-    const { error } = await supabase.from("appointments").update({ paid: true }).eq("id", id);
+    if (!user) return;
+    const { error } = await supabase
+      .from("appointments")
+      .update({ paid: true })
+      .eq("id", id)
+      .eq("groomer_id", user.id); // ✅ confirm ownership
     if (error) {
       alert("Error marking as paid: " + error.message);
       return;
@@ -95,24 +106,26 @@ export default function UnpaidAppointments() {
   return (
     <main>
       <Link to="/">&larr; Back to Home</Link>
-
       <h1 className="mt-2">Unpaid Appointments</h1>
 
       {totalUnpaidAmount > 0 && (
         <div className="stat mb-4">
           <div className="stat-label">Total Unpaid</div>
-          <div className="stat-value text-red-700">${totalUnpaidAmount.toFixed(2)}</div>
+          <div className="stat-value text-red-700">
+            ${totalUnpaidAmount.toFixed(2)}
+          </div>
         </div>
       )}
 
       {appointments.length === 0 ? (
-        <p className="text-gray-600">🎉 You're all caught up! No unpaid appointments.</p>
+        <p className="text-gray-600">
+          🎉 You're all caught up! No unpaid appointments.
+        </p>
       ) : (
         <div className="grid gap-4">
           {appointments.map((appt) => {
             const start = (appt.time || "").slice(0, 5);
             const services = appt.services || [];
-
             return (
               <div key={appt.id} className="card">
                 <div className="card-body">
@@ -125,7 +138,6 @@ export default function UnpaidAppointments() {
                         {appt.date} at {start} • {appt.duration_min} min
                       </div>
                     </div>
-
                     <div className="chip chip-warning">Unpaid</div>
                   </div>
 
@@ -146,29 +158,42 @@ export default function UnpaidAppointments() {
                   <div className="flex flex-wrap items-center gap-3 text-sm">
                     {typeof appt.amount !== "undefined" && appt.amount !== null && (
                       <span className="font-medium">
-                        ${(
-                          typeof appt.amount === "string" ? parseFloat(appt.amount) : appt.amount
+                        $
+                        {(
+                          typeof appt.amount === "string"
+                            ? parseFloat(appt.amount)
+                            : appt.amount
                         ).toFixed(2)}
                       </span>
                     )}
 
                     {appt.pets?.clients?.phone && (
                       <>
-                        <a href={`tel:${appt.pets.clients.phone}`} className="text-xs">
+                        <a
+                          href={`tel:${appt.pets.clients.phone}`}
+                          className="text-xs"
+                        >
                           📞 Call
                         </a>
-                        <a href={`sms:${appt.pets.clients.phone}`} className="text-xs">
+                        <a
+                          href={`sms:${appt.pets.clients.phone}`}
+                          className="text-xs"
+                        >
                           ✉️ Text
                         </a>
                       </>
                     )}
 
-                    <button className="btn-secondary text-xs">📤 Send Reminder</button>
+                    <button className="btn-secondary text-xs">
+                      📤 Send Reminder
+                    </button>
                   </div>
 
                   <div className="pt-2">
                     <button
-                      onClick={() => handleMarkAsPaid(appt.id, appt.amount)}
+                      onClick={() =>
+                        handleMarkAsPaid(appt.id, appt.amount)
+                      }
                       className="btn-primary"
                     >
                       ✅ Mark as Paid
