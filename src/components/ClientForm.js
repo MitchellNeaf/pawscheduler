@@ -2,27 +2,39 @@ import { useState } from "react";
 import { supabase } from "../supabase";
 
 export default function ClientForm({ onClientAdded }) {
-  const [name, setName] = useState("");
+  const [full_name, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
 
-    // ✅ Define payload here from state
+    // ✅ get current logged-in groomer
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      alert("You must be logged in to add clients.");
+      setLoading(false);
+      return;
+    }
+
     const payload = {
-      full_name: name.trim(),
+      full_name: full_name.trim(),
       phone: phone.trim(),
+      groomer_id: user.id, // ✅ attach groomer
     };
 
-    const { error } = await supabase.from("clients").insert(payload);
+    const { error } = await supabase.from("clients").insert([payload]);
 
     if (error) {
       alert("Error adding client: " + error.message);
     } else {
-      setName("");
+      setFullName("");
       setPhone("");
-      onClientAdded?.(); // refresh the list if provided
+      onClientAdded?.(); // refresh the list
     }
+
+    setLoading(false);
   };
 
   return (
@@ -30,8 +42,8 @@ export default function ClientForm({ onClientAdded }) {
       <input
         className="w-full p-2 border"
         placeholder="Client name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
+        value={full_name}
+        onChange={(e) => setFullName(e.target.value)}
         required
       />
       <input
@@ -41,8 +53,12 @@ export default function ClientForm({ onClientAdded }) {
         onChange={(e) => setPhone(e.target.value)}
         required
       />
-      <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded">
-        Add Client
+      <button
+        type="submit"
+        disabled={loading}
+        className="bg-blue-500 text-white px-4 py-2 rounded"
+      >
+        {loading ? "Saving..." : "Add Client"}
       </button>
     </form>
   );
