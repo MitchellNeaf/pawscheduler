@@ -1,8 +1,17 @@
 // App.js
-import { BrowserRouter as Router, Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  Link,
+  useLocation,
+  Navigate,
+} from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 
+import Signup from "./pages/Signup";
+import AuthPage from "./pages/AuthPage";
 import Clients from "./pages/Clients";
 import ClientPets from "./pages/ClientPets";
 import PetAppointments from "./pages/PetAppointments";
@@ -10,7 +19,6 @@ import Schedule from "./pages/Schedule";
 import UnpaidAppointments from "./pages/UnpaidAppointments";
 import Book from "./pages/Book";
 import Revenue from "./pages/Revenue";
-import AuthPage from "./pages/AuthPage";
 
 // ✅ Protect private routes
 function ProtectedRoute({ children }) {
@@ -38,7 +46,10 @@ function ProtectedRoute({ children }) {
 
 function AppShell() {
   const location = useLocation();
-  const hideNav = location.pathname.startsWith("/book/") || location.pathname === "/auth";
+  const hideNav =
+    location.pathname.startsWith("/book/") ||
+    location.pathname === "/auth" ||
+    location.pathname === "/signup";
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -47,23 +58,37 @@ function AppShell() {
 
   return (
     <>
-      {/* ✅ NAVBAR (hidden on /book/:slug and /auth) */}
+      {/* ✅ NAVBAR (hidden on /book/:slug, /auth, /signup) */}
       {!hideNav && (
         <nav className="bg-white shadow-md px-4 py-2 mb-4 flex justify-between items-center">
           <div className="flex gap-4 text-sm font-medium text-gray-700">
-            <Link to="/" className="hover:text-blue-600">Clients</Link>
-            <Link to="/schedule" className="hover:text-blue-600">Schedule</Link>
-            <Link to="/unpaid" className="hover:text-blue-600">Unpaid</Link>
-            <Link to="/revenue" className="hover:text-blue-600">Revenue</Link>
+            <Link to="/" className="hover:text-blue-600">
+              Clients
+            </Link>
+            <Link to="/schedule" className="hover:text-blue-600">
+              Schedule
+            </Link>
+            <Link to="/unpaid" className="hover:text-blue-600">
+              Unpaid
+            </Link>
+            <Link to="/revenue" className="hover:text-blue-600">
+              Revenue
+            </Link>
           </div>
-          <button onClick={handleLogout} className="text-xs text-gray-500 hover:text-red-600">
+          <button
+            onClick={handleLogout}
+            className="text-xs text-gray-500 hover:text-red-600"
+          >
             Logout
           </button>
         </nav>
       )}
 
       <Routes>
+        {/* Public routes */}
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/signup" element={<Signup />} />
+        <Route path="/book/:slug" element={<Book />} />
 
         {/* 🔒 Protected routes */}
         <Route
@@ -114,9 +139,6 @@ function AppShell() {
             </ProtectedRoute>
           }
         />
-
-        {/* Public booking page (no login required) */}
-        <Route path="/book/:slug" element={<Book />} />
       </Routes>
     </>
   );
