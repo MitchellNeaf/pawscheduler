@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "../supabase";
 
@@ -19,13 +19,44 @@ export default function Signup() {
     return `${prefix}${number}`;
   };
 
+  // ✅ After login, ensure groomer record exists
+  useEffect(() => {
+    (async () => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const user = sessionData?.session?.user;
+      if (!user) return;
+
+      const { data: existing } = await supabase
+        .from("groomers")
+        .select("id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!existing) {
+        const bookingCode = generateBookingCode();
+        const cleanSlug =
+          slug?.toLowerCase().replace(/\s+/g, "") ||
+          user.email.split("@")[0].replace(/\W+/g, "");
+        const { error: insertErr } = await supabase.from("groomers").insert([
+          {
+            id: user.id,
+            full_name: businessName || "New Groomer",
+            slug: cleanSlug,
+            booking_code: bookingCode,
+          },
+        ]);
+        if (insertErr) console.error("Groomer creation failed:", insertErr.message);
+        else console.log("✅ Groomer profile created automatically");
+      }
+    })();
+  }, [businessName, slug]);
+
   const handleSignup = async (e) => {
     e.preventDefault();
     setError("");
     setLoading(true);
 
-    // ✅ Create Supabase Auth user
-    const { data, error: signErr } = await supabase.auth.signUp({
+    const { error: signErr } = await supabase.auth.signUp({
       email,
       password,
     });
@@ -36,64 +67,14 @@ export default function Signup() {
       return;
     }
 
-    const user = data?.user || data?.session?.user;
-    if (!user) {
-      setError("Signup failed — please check your email to confirm your account.");
-      setLoading(false);
-      return;
-    }
-
-    // ✅ Generate unique booking code
-    let bookingCode = "";
-    let unique = false;
-    while (!unique) {
-      bookingCode = generateBookingCode();
-      const { data: existing } = await supabase
-        .from("groomers")
-        .select("id")
-        .eq("booking_code", bookingCode)
-        .maybeSingle();
-      unique = !existing;
-    }
-
-    // ✅ Ensure slug is unique
-    const cleanSlug = slug.toLowerCase().replace(/\s+/g, "");
-    const { data: slugExists } = await supabase
-      .from("groomers")
-      .select("id")
-      .eq("slug", cleanSlug)
-      .maybeSingle();
-    if (slugExists) {
-      setError("That slug is already taken — please choose another.");
-      setLoading(false);
-      return;
-    }
-
-    // ✅ Create groomer profile
-    const { error: gErr } = await supabase.from("groomers").insert([
-      {
-        id: user.id,
-        full_name: businessName,
-        slug: cleanSlug,
-        booking_code: bookingCode,
-      },
-    ]);
-
-    if (gErr) {
-      console.error("Groomer insert failed:", gErr.message);
-      setError("Signup succeeded, but profile setup failed. Please contact support.");
-    } else {
-      alert(`🎉 Account created! Your booking code is ${bookingCode}`);
-      navigate("/"); // Redirect into app
-    }
-
+    alert("✅ Check your email to confirm your account before logging in.");
+    navigate("/auth");
     setLoading(false);
   };
 
   return (
     <main className="max-w-md mx-auto p-6">
       <h1 className="text-2xl font-bold mb-4">Create Your Groomer Account</h1>
-
       {error && <div className="text-red-600 mb-3">{error}</div>}
 
       <form onSubmit={handleSignup} className="space-y-3">
