@@ -10,7 +10,7 @@ export default function AuthPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // If already logged in, go home
+    // If already logged in, skip to home
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate("/");
     });
@@ -21,15 +21,43 @@ export default function AuthPage() {
     setLoading(true);
     setError("");
 
-    const { error: loginError } = await supabase.auth.signInWithPassword({
+    const { data, error: loginError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (loginError) {
       setError(loginError.message);
+      setLoading(false);
+      return;
+    }
+
+    const user = data?.user;
+    if (!user) {
+      setError("Login failed — no user returned.");
+      setLoading(false);
+      return;
+    }
+
+    // 🔍 Check if groomer profile exists
+    const { data: existing, error: queryError } = await supabase
+      .from("groomers")
+      .select("id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (queryError) {
+      console.error("Error checking groomer record:", queryError.message);
+      setError("Error checking groomer record.");
+      setLoading(false);
+      return;
+    }
+
+    // 🧭 Redirect logic
+    if (!existing) {
+      navigate("/onboarding");
     } else {
-      navigate("/"); // redirect to main app
+      navigate("/");
     }
 
     setLoading(false);
