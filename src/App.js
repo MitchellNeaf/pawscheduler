@@ -20,19 +20,64 @@ import UnpaidAppointments from "./pages/UnpaidAppointments";
 import Book from "./pages/Book";
 import Revenue from "./pages/Revenue";
 
+// 🧩 Ensure groomer profile exists after login
+async function ensureGroomerProfile(user) {
+  if (!user) return;
+
+  // Check if groomer record already exists
+  const { data: existing } = await supabase
+    .from("groomers")
+    .select("id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (!existing) {
+    const prefixes = ["PAWS", "GROOM", "TAILS", "FURRY", "DOGGO", "KITTY"];
+    const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const number = Math.floor(1000 + Math.random() * 9000);
+    const bookingCode = `${prefix}${number}`;
+
+    const cleanSlug =
+      user.email.split("@")[0].replace(/\W+/g, "").toLowerCase();
+
+    const { error } = await supabase.from("groomers").insert([
+      {
+        id: user.id,
+        full_name: user.email.split("@")[0],
+        slug: cleanSlug,
+        booking_code: bookingCode,
+      },
+    ]);
+
+    if (error) {
+      console.error("❌ Groomer insert failed:", error.message);
+    } else {
+      console.log("✅ Groomer profile created automatically for", user.email);
+    }
+  }
+}
+
 // ✅ Protect private routes
 function ProtectedRoute({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Check current session
     supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user || null);
+      const currentUser = data.session?.user || null;
+      setUser(currentUser);
+      if (currentUser) ensureGroomerProfile(currentUser);
       setLoading(false);
     });
 
+    // Listen for login/logout events
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_, session) => setUser(session?.user || null)
+      (_, session) => {
+        const u = session?.user || null;
+        setUser(u);
+        if (u) ensureGroomerProfile(u);
+      }
     );
 
     return () => listener.subscription.unsubscribe();
