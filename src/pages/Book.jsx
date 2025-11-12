@@ -41,23 +41,24 @@ export default function BookPage() {
   const [takenTimes, setTakenTimes] = useState([]);
   const [, setUpcomingAppts] = useState([]);
 
-
-  // Load groomer
+  // ✅ Load groomer
   useEffect(() => {
     let mounted = true;
     (async () => {
       const { data, error: gErr } = await supabase
         .from("groomers")
-        .select("id,business_name,slug")
+        .select("id,full_name,slug")
         .eq("slug", slug)
         .single();
+
       if (!gErr && data && mounted) {
         setGroomer(data);
         setGroomerId(data.id);
-      } else if (gErr) {
+      } else if (gErr || !data) {
         setError("Booking page not found.");
       }
     })();
+
     return () => {
       mounted = false;
     };
@@ -69,7 +70,7 @@ export default function BookPage() {
     return db - da;
   };
 
-  // ✅ useCallback so ESLint is happy
+  // ✅ Fetch taken times for selected date
   const fetchTakenTimes = useCallback(async () => {
     if (!form.date || !groomerId) return;
     const { data, error: tErr } = await supabase
@@ -92,6 +93,7 @@ export default function BookPage() {
     fetchTakenTimes();
   }, [fetchTakenTimes]);
 
+  // ✅ Auto-set duration based on services
   useEffect(() => {
     const s = form.services;
     if (s.length === 1 && s.includes("Nails")) {
@@ -105,6 +107,7 @@ export default function BookPage() {
     }
   }, [form.services]);
 
+  // ✅ Client login form (find existing client)
   const handleClientLogin = async (e) => {
     e.preventDefault();
     setError("");
@@ -157,6 +160,7 @@ export default function BookPage() {
     }
   };
 
+  // ✅ Submit booking
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
@@ -164,21 +168,24 @@ export default function BookPage() {
 
     const { data: inserted, error: iErr } = await supabase
       .from("appointments")
-      .insert([{
-        groomer_id: groomerId,
-        pet_id: selectedPetId,
-        date: form.date,
-        time: form.time,
-        duration_min: Number(form.duration_min),
-        services: form.services,
-        confirmed: false,
-        no_show: false,
-        amount: null,
-        paid: false,
-        notes: form.notes || `Self-booked by ${client.full_name}`,
-      }])
+      .insert([
+        {
+          groomer_id: groomerId,
+          pet_id: selectedPetId,
+          date: form.date,
+          time: form.time,
+          duration_min: Number(form.duration_min),
+          services: form.services,
+          confirmed: false,
+          no_show: false,
+          amount: null,
+          paid: false,
+          notes: form.notes || `Self-booked by ${client.full_name}`,
+        },
+      ])
       .select("pet_id,date,time,services")
       .single();
+
     if (iErr) alert("Error: " + iErr.message);
     else {
       setSuccess(true);
@@ -190,35 +197,69 @@ export default function BookPage() {
     setSubmitting(false);
   };
 
-  if (!groomerId && !error) return <main>Loading booking page…</main>;
+  // ✅ Render
+  if (error) return <main className="p-4 text-center text-red-600">{error}</main>;
+  if (!groomerId) return <main className="p-4 text-center">Loading booking page…</main>;
 
   return (
-    <main className="max-w-xl">
-      {groomer && <div className="mb-2">Booking for <strong>{groomer.business_name}</strong></div>}
-      {error && !client ? (
-        <div>{error}</div>
-      ) : !client ? (
-        <form onSubmit={handleClientLogin}>
-          <input name="name" placeholder="First name" value={clientForm.name} onChange={handleChange} />
-          <input name="last4" placeholder="Last 4 of phone" value={clientForm.last4} onChange={handleChange} />
+    <main className="max-w-xl p-4">
+      {groomer && (
+        <div className="mb-2 text-center">
+          Booking for <strong>{groomer.full_name}</strong>
+        </div>
+      )}
+
+      {!client ? (
+        <form onSubmit={handleClientLogin} className="space-y-2 text-center">
+          <input
+            name="name"
+            placeholder="First name"
+            value={clientForm.name}
+            onChange={handleChange}
+          />
+          <input
+            name="last4"
+            placeholder="Last 4 of phone"
+            value={clientForm.last4}
+            onChange={handleChange}
+          />
           <button type="submit">Continue</button>
         </form>
       ) : (
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} className="space-y-3">
           {pets.length > 1 && (
-            <select value={selectedPetId} onChange={(e) => setSelectedPetId(e.target.value)}>
+            <select
+              value={selectedPetId}
+              onChange={(e) => setSelectedPetId(e.target.value)}
+            >
               <option value="">Select a pet</option>
-              {pets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {pets.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
             </select>
           )}
+
           <div>
             {SERVICE_OPTIONS.map((s) => (
-              <label key={s}>
-                <input type="checkbox" name="services" value={s} checked={form.services.includes(s)} onChange={handleChange} /> {s}
+              <label key={s} className="block">
+                <input
+                  type="checkbox"
+                  name="services"
+                  value={s}
+                  checked={form.services.includes(s)}
+                  onChange={handleChange}
+                />{" "}
+                {s}
               </label>
             ))}
           </div>
-          {form.duration_min && <div>Estimated time: {form.duration_min} minutes</div>}
+
+          {form.duration_min && (
+            <div>Estimated time: {form.duration_min} minutes</div>
+          )}
+
           <input type="date" name="date" value={form.date} onChange={handleChange} />
           <select name="time" value={form.time} onChange={handleChange}>
             <option value="">Select time</option>
@@ -228,10 +269,21 @@ export default function BookPage() {
                 TIME_SLOTS.slice(idx, idx + blocks).length === blocks &&
                 TIME_SLOTS.slice(idx, idx + blocks).every((s) => !takenTimes.includes(s))
               );
-            }).map((slot) => <option key={slot} value={slot}>{slot}</option>)}
+            }).map((slot) => (
+              <option key={slot} value={slot}>
+                {slot}
+              </option>
+            ))}
           </select>
-          <textarea name="notes" value={form.notes} onChange={handleChange} />
-          <button type="submit" disabled={submitting}>{submitting ? "Submitting..." : "Confirm"}</button>
+          <textarea
+            name="notes"
+            value={form.notes}
+            onChange={handleChange}
+            placeholder="Notes"
+          />
+          <button type="submit" disabled={submitting}>
+            {submitting ? "Submitting..." : "Confirm"}
+          </button>
         </form>
       )}
     </main>
