@@ -1,19 +1,21 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { Link } from "react-router-dom";
+import Loader from "../components/Loader";
 
 export default function Revenue() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
 
-  // ✅ Get logged-in groomer once
+  // Load logged-in groomer
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
   useEffect(() => {
-    if (!user) return; // wait for user
+    if (!user) return;
+
     const fetchData = async () => {
       const { data, error } = await supabase
         .from("appointments")
@@ -30,7 +32,7 @@ export default function Revenue() {
             clients ( id, full_name )
           )
         `)
-        .eq("groomer_id", user.id) // ✅ filter to logged-in groomer
+        .eq("groomer_id", user.id)
         .order("date", { ascending: false })
         .order("time", { ascending: false });
 
@@ -39,6 +41,7 @@ export default function Revenue() {
       } else {
         setAppointments(data || []);
       }
+
       setLoading(false);
     };
 
@@ -46,7 +49,7 @@ export default function Revenue() {
   }, [user]);
 
   // Helpers
-  const toYMD = (d) => d.toLocaleDateString("en-CA"); // local YYYY-MM-DD
+  const toYMD = (d) => d.toLocaleDateString("en-CA");
   const todayStr = toYMD(new Date());
   const startOfWeek = getStartOfWeek(new Date());
   const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -55,7 +58,11 @@ export default function Revenue() {
     appointments
       .filter((a) => {
         const apptDate = new Date(a.date);
-        return apptDate >= startDate && apptDate <= endDate && (!paidOnly || a.paid);
+        return (
+          apptDate >= startDate &&
+          apptDate <= endDate &&
+          (!paidOnly || a.paid)
+        );
       })
       .reduce((sum, a) => sum + (a.amount || 0), 0);
 
@@ -66,18 +73,47 @@ export default function Revenue() {
   const paidAppointments = appointments.filter((a) => a.paid);
   const unpaidAppointments = appointments.filter((a) => !a.paid);
 
-  if (loading) return <main className="px-4 py-6">Loading revenue data...</main>;
+  // ⭐ Graceful loading screen
+  if (loading) {
+    return (
+      <main className="px-4 py-6 space-y-6">
+        <div className="h-6 w-48 bg-gray-200 rounded animate-pulse"></div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Loader />
+          <Loader />
+          <Loader />
+          <Loader />
+        </div>
+
+        <Loader />
+        <Loader />
+      </main>
+    );
+  }
 
   return (
-    <main>
-      <Link to="/">&larr; Back to Home</Link>
-      <h1 className="mt-2">Revenue Overview</h1>
+    <main className="px-4 py-6 space-y-6 max-w-5xl mx-auto">
+      <Link to="/" className="text-sm text-blue-600 hover:underline">
+        ← Back to Home
+      </Link>
+
+      <h1 className="text-2xl font-bold text-gray-900">Revenue Overview</h1>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <SummaryCard title="Today" amount={totalForRange(new Date(todayStr), new Date(todayStr))} />
-        <SummaryCard title="This Week" amount={totalForRange(startOfWeek, new Date())} />
-        <SummaryCard title="This Month" amount={totalForRange(startOfMonth, new Date())} />
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <SummaryCard
+          title="Today"
+          amount={totalForRange(new Date(todayStr), new Date(todayStr))}
+        />
+        <SummaryCard
+          title="This Week"
+          amount={totalForRange(startOfWeek, new Date())}
+        />
+        <SummaryCard
+          title="This Month"
+          amount={totalForRange(startOfMonth, new Date())}
+        />
         <SummaryCard title="Unpaid Total" amount={totalUnpaid} highlight />
       </div>
 
@@ -99,32 +135,47 @@ export default function Revenue() {
   );
 }
 
+/* ----------------------------- SUMMARY CARD ----------------------------- */
+
 function SummaryCard({ title, amount, highlight }) {
   const safe = Number(amount || 0);
   return (
-    <div className="stat">
+    <div className="stat shadow-md border rounded-lg">
       <div className="stat-label">{title}</div>
-      <div className={`stat-value ${highlight ? "text-red-700" : "text-gray-900"}`}>
+      <div
+        className={`stat-value ${
+          highlight ? "text-red-700" : "text-gray-900"
+        }`}
+      >
         ${safe.toFixed(2)}
       </div>
     </div>
   );
 }
 
+/* ----------------------------- SECTIONS ----------------------------- */
+
 function Section({ title, data, emptyText, unpaid }) {
   return (
-    <div className="mb-8 card">
+    <div className="card shadow-md border">
       <div className="card-header">
-        <h2 className={`${unpaid ? "text-red-700" : "text-gray-800"} m-0`}>{title}</h2>
+        <h2
+          className={`text-lg font-semibold ${
+            unpaid ? "text-red-700" : "text-gray-800"
+          }`}
+        >
+          {title}
+        </h2>
       </div>
+
       <div className="card-body">
         {data.length === 0 ? (
-          <p className="text-gray-500">{emptyText}</p>
+          <p className="text-gray-500 text-sm">{emptyText}</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
+            <table className="min-w-full text-sm border-separate border-spacing-y-1">
               <thead>
-                <tr>
+                <tr className="text-left text-gray-600">
                   <th>Date</th>
                   <th>Time</th>
                   <th>Pet</th>
@@ -133,15 +184,27 @@ function Section({ title, data, emptyText, unpaid }) {
                   <th className="text-right">Amount</th>
                 </tr>
               </thead>
+
               <tbody>
                 {data.map((a) => (
-                  <tr key={a.id} className={unpaid ? "bg-red-50" : ""}>
+                  <tr
+                    key={a.id}
+                    className={`bg-white ${
+                      unpaid ? "bg-red-50" : "hover:bg-gray-50"
+                    }`}
+                  >
                     <td>{a.date}</td>
                     <td>{a.time?.slice(0, 5)}</td>
                     <td>{a.pets?.name || "—"}</td>
                     <td>{a.pets?.clients?.full_name || "—"}</td>
-                    <td>{Array.isArray(a.services) ? a.services.join(", ") : a.services || ""}</td>
-                    <td className="text-right">${Number(a.amount || 0).toFixed(2)}</td>
+                    <td>
+                      {Array.isArray(a.services)
+                        ? a.services.join(", ")
+                        : a.services || ""}
+                    </td>
+                    <td className="text-right font-medium">
+                      ${Number(a.amount || 0).toFixed(2)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -153,9 +216,11 @@ function Section({ title, data, emptyText, unpaid }) {
   );
 }
 
+/* ----------------------------- UTIL ----------------------------- */
+
 function getStartOfWeek(date) {
   const d = new Date(date);
-  const day = d.getDay(); // 0 = Sun
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Start on Monday
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
   return new Date(d.setDate(diff));
 }

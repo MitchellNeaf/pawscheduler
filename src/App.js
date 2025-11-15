@@ -13,7 +13,7 @@ import { supabase } from "./supabase";
 
 import Signup from "./pages/Signup";
 import AuthPage from "./pages/AuthPage";
-import Onboarding from "./pages/Onboarding"; // ✅ new page
+import Onboarding from "./pages/Onboarding";
 import Clients from "./pages/Clients";
 import ClientPets from "./pages/ClientPets";
 import PetAppointments from "./pages/PetAppointments";
@@ -21,8 +21,11 @@ import Schedule from "./pages/Schedule";
 import UnpaidAppointments from "./pages/UnpaidAppointments";
 import Book from "./pages/Book";
 import Revenue from "./pages/Revenue";
+import Profile from "./pages/Profile"; // ⭐ NEW
 
-// ✅ Protected route wrapper
+// =====================
+// 🔒 Protected route wrapper
+// =====================
 function ProtectedRoute({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -34,7 +37,7 @@ function ProtectedRoute({ children }) {
       const currentUser = data.session?.user || null;
       setUser(currentUser);
 
-      // 🔍 If logged in but no groomer profile, send to onboarding
+      // If logged in but no groomer profile exists → go to onboarding
       if (currentUser) {
         const { data: existing } = await supabase
           .from("groomers")
@@ -68,7 +71,9 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-// ✅ Navbar Shell
+// =====================
+// 🧭 App Shell + Navbar
+// =====================
 function AppShell() {
   const location = useLocation();
   const hideNav =
@@ -99,7 +104,11 @@ function AppShell() {
             <Link to="/revenue" className="hover:text-blue-600">
               Revenue
             </Link>
+            <Link to="/profile" className="hover:text-blue-600">
+              Profile
+            </Link>
           </div>
+
           <button
             onClick={handleLogout}
             className="text-xs text-gray-500 hover:text-red-600"
@@ -110,12 +119,12 @@ function AppShell() {
       )}
 
       <Routes>
-        {/* Public routes */}
+        {/* PUBLIC ROUTES */}
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/book/:slug" element={<Book />} />
 
-        {/* 🔒 Protected routes */}
+        {/* PROTECTED ROUTES */}
         <Route
           path="/"
           element={
@@ -124,6 +133,7 @@ function AppShell() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/clients/:clientId"
           element={
@@ -132,6 +142,7 @@ function AppShell() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/pets/:petId/appointments"
           element={
@@ -140,6 +151,7 @@ function AppShell() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/schedule"
           element={
@@ -148,6 +160,7 @@ function AppShell() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/unpaid"
           element={
@@ -156,6 +169,7 @@ function AppShell() {
             </ProtectedRoute>
           }
         />
+
         <Route
           path="/revenue"
           element={
@@ -164,6 +178,16 @@ function AppShell() {
             </ProtectedRoute>
           }
         />
+
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/onboarding"
           element={
@@ -177,6 +201,9 @@ function AppShell() {
   );
 }
 
+// =====================
+// MAIN APP WRAPPER
+// =====================
 export default function App() {
   return (
     <Router>

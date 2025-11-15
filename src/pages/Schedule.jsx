@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { Link } from "react-router-dom";
+import Loader from "../components/Loader";
 
 const toYMD = (d) => d.toLocaleDateString("en-CA");
 const parseYMD = (s) => {
@@ -13,97 +14,18 @@ export default function Schedule() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("today");
   const [search, setSearch] = useState("");
-  const [savingRebookId, setSavingRebookId] = useState(null);
   const [user, setUser] = useState(null);
 
-  // ✅ Load logged-in groomer
+  // Load logged-in groomer
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
   useEffect(() => {
-    if (!user) return; // Wait for auth
+    if (!user) return;
 
     const fetchAppointments = async () => {
       const { data, error } = await supabase
-        .from("appointments")
-        .select(`
-          id,
-          pet_id,
-          groomer_id,
-          date,
-          time,
-          duration_min,
-          services,
-          notes,
-          confirmed,
-          no_show,
-          paid,
-          amount,
-          pets (
-            id,
-            name,
-            tags,
-            client_id,
-            clients ( id, full_name, phone )
-          )
-        `)
-        .eq("groomer_id", user.id) // ✅ Only this groomer’s data
-        .order("date", { ascending: true })
-        .order("time", { ascending: true });
-
-      if (error) console.error("Error fetching schedule:", error.message);
-      setAppointments(data || []);
-      setLoading(false);
-    };
-
-    fetchAppointments();
-  }, [user]);
-
-  const handleDelete = async (id) => {
-    if (!user) return;
-    if (!window.confirm("Are you sure you want to delete this appointment?")) return;
-
-    const { error } = await supabase
-      .from("appointments")
-      .delete()
-      .eq("id", id)
-      .eq("groomer_id", user.id);
-
-    if (!error) setAppointments((prev) => prev.filter((a) => a.id !== id));
-    else alert("Error deleting appointment: " + error.message);
-  };
-
-  const handleQuickRebook = async (appt, weeks = 4) => {
-    if (!user) return;
-    try {
-      setSavingRebookId(appt.id);
-      const base = parseYMD(appt.date);
-      base.setDate(base.getDate() + weeks * 7);
-      const newDateStr = toYMD(base);
-      const petId = appt.pet_id ?? appt.pets?.id;
-
-      const { error } = await supabase.from("appointments").insert({
-        groomer_id: user.id, // ✅ assign groomer
-        pet_id: petId,
-        date: newDateStr,
-        time: appt.time,
-        duration_min: Number.isFinite(appt.duration_min) ? appt.duration_min : 60,
-        services: appt.services ?? [],
-        notes: appt.notes ?? "",
-        amount: typeof appt.amount === "number" ? appt.amount : null,
-        confirmed: false,
-        no_show: false,
-        paid: false,
-      });
-
-      if (error) {
-        console.error("Error rebooking:", error.message);
-        alert("Error rebooking: " + error.message);
-        return;
-      }
-
-      const { data, error: fetchErr } = await supabase
         .from("appointments")
         .select(`
           id,
@@ -130,37 +52,102 @@ export default function Schedule() {
         .order("date", { ascending: true })
         .order("time", { ascending: true });
 
-      if (!fetchErr) setAppointments(data || []);
-      alert("Rebooked for 4 weeks later.");
-    } finally {
-      setSavingRebookId(null);
+      if (error) console.error("Error fetching schedule:", error.message);
+
+      setAppointments(data || []);
+      setLoading(false);
+    };
+
+    fetchAppointments();
+  }, [user]);
+
+  // DELETE HANDLER
+  const handleDelete = async (id) => {
+    if (!user) return;
+
+    const confirmDelete = window.confirm("Delete this appointment?");
+    if (!confirmDelete) return;
+
+    const { error } = await supabase
+      .from("appointments")
+      .delete()
+      .eq("id", id)
+      .eq("groomer_id", user.id);
+
+    if (error) {
+      alert("Error deleting appointment: " + error.message);
+      return;
     }
+
+    setAppointments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  if (loading) return <main className="px-4 py-6">Loading schedule...</main>;
+  // REBOOK 4 WEEKS
+  const handleRebook = async (appt) => {
+    if (!user) return;
 
-  const DANGER_TAGS = ["Bites", "Anxious", "Aggressive", "Matting"];
-  const todayStr = toYMD(new Date());
+    const base = parseYMD(appt.date);
+    base.setDate(base.getDate() + 28);
+    const newDate = toYMD(base);
+
+    const { error } = await supabase.from("appointments").insert({
+      groomer_id: user.id,
+      pet_id: appt.pet_id,
+      date: newDate,
+      time: appt.time,
+      duration_min: appt.duration_min,
+      services: appt.services,
+      notes: appt.notes || "",
+      confirmed: false,
+      no_show: false,
+      paid: false,
+      amount: appt.amount || null,
+    });
+
+    if (error) return alert("Error rebooking: " + error.message);
+    alert("Rebooked 4 weeks later.");
+  };
+
+  if (loading) {
+    return (
+      <main className="px-4 py-6 space-y-4">
+        <div className="h-6 w-48 bg-gray-200 animate-pulse rounded"></div>
+        <Loader />
+        <Loader />
+        <Loader />
+      </main>
+    );
+  }
+
+  // FILTERING
+  const today = new Date();
+  const todayStr = toYMD(today);
 
   const filterAppointments = () => {
-    const today = new Date();
-    const todayYmd = toYMD(today);
-
     return appointments.filter((appt) => {
       const apptDate = parseYMD(appt.date);
-      if (filter === "today") return appt.date === todayYmd;
+
+      if (filter === "today") return appt.date === todayStr;
+
       if (filter === "thisWeek") {
         const endOfWeek = new Date(today);
         endOfWeek.setDate(today.getDate() + 7);
         return apptDate >= today && apptDate <= endOfWeek;
       }
-      if (filter === "thisMonth")
-        return apptDate.getFullYear() === today.getFullYear() && apptDate.getMonth() === today.getMonth();
+
+      if (filter === "thisMonth") {
+        return (
+          apptDate.getFullYear() === today.getFullYear() &&
+          apptDate.getMonth() === today.getMonth()
+        );
+      }
+
       if (filter === "past30") {
         const past30 = new Date(today);
         past30.setDate(today.getDate() - 30);
         return apptDate >= past30 && apptDate < today;
       }
+
       return true;
     });
   };
@@ -174,114 +161,157 @@ export default function Schedule() {
     );
   });
 
+  // UNPAID TODAY
   const unpaidToday = filteredAppointments.filter((appt) => {
+    // ⭐ FIX — LOCAL DATE CONSTRUCTION
     const [y, m, d] = appt.date.split("-").map(Number);
     const [H, M] = (appt.time || "00:00").split(":").map(Number);
-    const start = new Date(y, m - 1, d, H, M);
-    const dur = Number.isFinite(appt.duration_min) ? appt.duration_min : 15;
-    const end = new Date(start.getTime() + dur * 60000);
-    const now = new Date();
-    return appt.date === todayStr && !appt.paid && !appt.no_show && end <= now;
+    const start = new Date(y, m - 1, d, H, M); // ⭐ FIX
+
+    const end = new Date(start.getTime() + (appt.duration_min || 15) * 60000);
+    return (
+      appt.date === todayStr &&
+      !appt.paid &&
+      !appt.no_show &&
+      end <= new Date()
+    );
   });
 
   const totalUnpaidToday = unpaidToday.length;
-  const totalUnpaidAmount = unpaidToday.reduce((sum, a) => sum + (a.amount || 0), 0);
+  const totalUnpaidAmount = unpaidToday.reduce(
+    (sum, a) => sum + (a.amount || 0),
+    0
+  );
 
   return (
-    <main>
-      <Link to="/">&larr; Back to Home</Link>
-      <h1 className="mt-2">Upcoming Appointments (Next 7 Days)</h1>
+    <main className="px-4 py-6 space-y-4">
+      <Link to="/" className="text-sm text-blue-600 hover:underline">
+        ← Back to Home
+      </Link>
+
+      <h1 className="text-2xl font-bold text-gray-900">Schedule</h1>
 
       {totalUnpaidToday > 0 && (
         <div className="stat mb-4">
           <div className="stat-label">Unpaid Today</div>
           <div className="stat-value text-red-700">
-            {totalUnpaidToday} appt{totalUnpaidToday > 1 ? "s" : ""} • ${totalUnpaidAmount.toFixed(2)}
+            {totalUnpaidToday} appt
+            {totalUnpaidToday > 1 ? "s" : ""} • $
+            {totalUnpaidAmount.toFixed(2)}
           </div>
         </div>
       )}
 
-      {/* Filters */}
+      {/* FILTER BAR */}
       <div className="card mb-4">
-        <div className="card-body">
-          <div className="flex flex-wrap items-center gap-3">
-            <input
-              type="text"
-              placeholder="Search pet, client, or tag"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full md:w-64"
-            />
-            <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-              <option value="today">Today Only</option>
-              <option value="thisWeek">This Week</option>
-              <option value="thisMonth">This Month</option>
-              <option value="past30">Past 30 Days</option>
-            </select>
-          </div>
+        <div className="card-body flex flex-col md:flex-row md:items-center gap-3">
+          <input
+            type="text"
+            placeholder="Search pet, client, or tag"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full md:w-64"
+          />
+
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="border rounded px-3 py-2 text-sm"
+          >
+            <option value="today">Today</option>
+            <option value="thisWeek">This Week</option>
+            <option value="thisMonth">This Month</option>
+            <option value="past30">Past 30 Days</option>
+          </select>
         </div>
       </div>
 
       {filteredAppointments.length === 0 ? (
-        <p className="text-gray-600">No appointments match filter.</p>
+        <p className="text-gray-600 italic">No appointments match this filter.</p>
       ) : (
         <div className="grid gap-4">
           {filteredAppointments.map((appt) => {
             const start = (appt.time || "00:00").slice(0, 5);
             const end = getEndTime(start, appt.duration_min || 15);
-            const tags = appt.pets?.tags || [];
-            const services = appt.services || [];
-            const now = new Date();
-            const apptDateTime = new Date(`${appt.date}T${appt.time || "00:00"}`);
-            const isPast = apptDateTime < now;
+
+            // ⭐ FIX — replace UTC-based date parsing
+            const [y, m, d] = appt.date.split("-").map(Number);
+            const [H, M] = start.split(":").map(Number);
+            const localStart = new Date(y, m - 1, d, H, M); // ⭐ FIX
+
+            const isPast = localStart < new Date(); // ⭐ FIX
 
             return (
-              <div key={appt.id} className={`card ${isPast ? "opacity-60" : ""}`}>
-                <div className="card-body">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-2">
+              <div
+                key={appt.id}
+                className={`card transition-all ${
+                  isPast ? "opacity-60" : "opacity-100"
+                }`}
+              >
+                <div className="card-body space-y-2">
+                  {/* DATE + TIME */}
+                  <div className="flex justify-between items-center">
                     <div>
-                      <div className={`text-sm ${isPast ? "text-gray-400" : "text-gray-500"}`}>{appt.date}</div>
-                      <div className="text-lg font-semibold text-gray-800">
+                      <div className="text-sm text-gray-500">{appt.date}</div>
+                      <div className="text-lg font-semibold text-gray-900">
                         {start} – {end}
-                        {isPast && <span className="ml-2 text-xs text-red-500 font-medium">Missed?</span>}
                       </div>
                     </div>
-                    <div className="mt-2 md:mt-0 text-sm text-gray-600">{appt.duration_min} min</div>
+
+                    <div className="text-sm text-gray-500">
+                      {appt.duration_min} min
+                    </div>
                   </div>
 
-                  <div className="text-gray-800 font-bold text-xl mb-1">{appt.pets?.name}</div>
-
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    {tags.map((tag) =>
-                      DANGER_TAGS.includes(tag) ? (
-                        <span key={tag} className="chip chip-danger">
-                          ⚠ {tag}
-                        </span>
-                      ) : (
-                        <span key={tag} className="chip">
-                          {tag}
-                        </span>
-                      )
-                    )}
+                  {/* PET */}
+                  <div className="text-xl font-bold text-gray-800">
+                    {appt.pets?.name}
                   </div>
 
-                  <div className="text-sm text-gray-500 mb-2 flex flex-wrap items-center gap-2">
-                    Client: {appt.pets?.clients?.full_name}
+                  {/* TAGS */}
+                  {appt.pets?.tags?.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {appt.pets.tags.map((tag) =>
+                        ["Bites", "Anxious", "Aggressive", "Matting"].includes(
+                          tag
+                        ) ? (
+                          <span key={tag} className="chip chip-danger">
+                            ⚠ {tag}
+                          </span>
+                        ) : (
+                          <span key={tag} className="chip">
+                            {tag}
+                          </span>
+                        )
+                      )}
+                    </div>
+                  )}
+
+                  {/* CLIENT */}
+                  <div className="text-sm text-gray-600 flex flex-wrap gap-3 items-center">
+                    <span>{appt.pets?.clients?.full_name}</span>
                     {appt.pets?.clients?.phone && (
                       <>
-                        <a href={`tel:${appt.pets.clients.phone}`} className="text-xs">
+                        <a
+                          href={`tel:${appt.pets.clients.phone}`}
+                          className="text-blue-600 text-xs"
+                        >
                           📞 Call
                         </a>
-                        <a href={`sms:${appt.pets.clients.phone}`} className="text-xs">
+                        <a
+                          href={`sms:${appt.pets.clients.phone}`}
+                          className="text-blue-600 text-xs"
+                        >
                           ✉️ Text
                         </a>
                       </>
                     )}
                   </div>
 
-                  {services.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {services.map((svc) => (
+                  {/* SERVICES */}
+                  {appt.services?.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {appt.services.map((svc) => (
                         <span key={svc} className="chip chip-brand">
                           {svc}
                         </span>
@@ -289,38 +319,70 @@ export default function Schedule() {
                     </div>
                   )}
 
+                  {/* PRICE */}
                   {typeof appt.amount === "number" && (
-                    <div className={`text-sm font-medium ${appt.paid ? "text-gray-700" : "text-red-600"}`}>
-                      💲Price: ${appt.amount.toFixed(2)} {appt.paid ? "(Paid)" : "(Unpaid)"}
+                    <div
+                      className={`text-sm font-medium ${
+                        appt.paid ? "text-gray-600" : "text-red-600"
+                      }`}
+                    >
+                      💲 {appt.amount.toFixed(2)}{" "}
+                      {appt.paid ? "(Paid)" : "(Unpaid)"}
                     </div>
                   )}
 
-                  {appt.notes && <div className="text-sm text-gray-600 italic mb-2">{appt.notes}</div>}
+                  {/* NOTES */}
+                  {appt.notes && (
+                    <div className="text-sm italic text-gray-500">
+                      {appt.notes}
+                    </div>
+                  )}
 
-                  <div className="flex flex-wrap items-center gap-3 mt-2">
+                  {/* ACTION BUTTONS */}
+                  <div className="flex flex-wrap gap-3 pt-2">
                     <button
-                      onClick={() => handleQuickRebook(appt, 4)}
                       className="btn-secondary"
-                      disabled={savingRebookId === appt.id}
+                      onClick={() => handleRebook(appt)}
                     >
-                      {savingRebookId === appt.id ? "Rebooking…" : "🔁 Rebook 4 weeks"}
+                      🔁 Rebook 4 Weeks
                     </button>
 
-                    {appt.pets ? (
-                      <Link to={`/pets/${appt.pets.id}/appointments?edit=${appt.id}`} className="btn-secondary">
-                        ✏️ Edit
-                      </Link>
-                    ) : (
-                      <span className="text-gray-400 italic">No pet linked</span>
-                    )}
+                    <Link
+                      to={`/pets/${appt.pets.id}/appointments?edit=${appt.id}`}
+                      className="btn-secondary"
+                    >
+                      ✏️ Edit
+                    </Link>
 
-                    <button onClick={() => handleDelete(appt.id)} className="btn-danger">
+                    <button
+                      className="btn-danger"
+                      onClick={() => handleDelete(appt.id)}
+                    >
                       🗑 Delete
                     </button>
 
-                    <ToggleCheckbox label="Confirmed" field="confirmed" appt={appt} user={user} setAppointments={setAppointments} />
-                    <ToggleCheckbox label="No-Show" field="no_show" appt={appt} user={user} setAppointments={setAppointments} />
-                    <ToggleCheckbox label="Paid" field="paid" appt={appt} user={user} setAppointments={setAppointments} />
+                    {/* Toggles */}
+                    <ToggleCheckbox
+                      label="Confirmed"
+                      field="confirmed"
+                      appt={appt}
+                      user={user}
+                      setAppointments={setAppointments}
+                    />
+                    <ToggleCheckbox
+                      label="No-Show"
+                      field="no_show"
+                      appt={appt}
+                      user={user}
+                      setAppointments={setAppointments}
+                    />
+                    <ToggleCheckbox
+                      label="Paid"
+                      field="paid"
+                      appt={appt}
+                      user={user}
+                      setAppointments={setAppointments}
+                    />
                   </div>
                 </div>
               </div>
@@ -346,8 +408,11 @@ function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
             .eq("groomer_id", user.id)
             .select(`*, pets (*, clients (*))`)
             .single();
+
           if (!error) {
-            setAppointments((prev) => prev.map((a) => (a.id === appt.id ? data : a)));
+            setAppointments((prev) =>
+              prev.map((a) => (a.id === appt.id ? data : a))
+            );
           }
         }}
       />
@@ -360,5 +425,7 @@ function getEndTime(start, durationMin) {
   if (!start) return "—";
   const [h, m] = start.split(":").map(Number);
   const endMin = h * 60 + m + durationMin;
-  return `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(endMin % 60).padStart(2, "0")}`;
+  return `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(
+    endMin % 60
+  ).padStart(2, "0")}`;
 }
