@@ -24,37 +24,36 @@ import Revenue from "./pages/Revenue";
 import Profile from "./pages/Profile";
 import Upgrade from "./pages/Upgrade";
 
-// =====================
-// FIXED PROTECTED ROUTE
-// No auto-insert. Redirect only.
-// =====================
+// =============================
+// 🔐 FIXED PROTECTED ROUTE
+// (This does NOT wrap /auth, /signup, /upgrade, /onboarding)
+// =============================
 function ProtectedRoute({ children }) {
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showTrialBanner, setShowTrialBanner] = useState(false);
+  const [showBanner, setShowBanner] = useState(false);
 
   useEffect(() => {
-    const load = async () => {
+    const check = async () => {
       const { data } = await supabase.auth.getSession();
       const currentUser = data.session?.user || null;
 
       setUser(currentUser);
-
       if (!currentUser) {
         setLoading(false);
         return;
       }
 
-      // Fetch groomer row
+      // Load groomer row
       const { data: groomer } = await supabase
         .from("groomers")
         .select("*")
         .eq("id", currentUser.id)
         .maybeSingle();
 
-      // Missing groomer → onboarding (user must choose slug)
+      // No groomer row → onboarding
       if (!groomer) {
         if (window.location.pathname !== "/onboarding") {
           navigate("/onboarding");
@@ -69,24 +68,21 @@ function ProtectedRoute({ children }) {
         ? new Date(groomer.trial_end_date)
         : null;
 
-      // Trial active
+      // Active trial
       if (
         groomer.subscription_status === "trial" &&
         trialEnd &&
         now <= trialEnd
       ) {
-        const daysLeft = Math.ceil(
-          (trialEnd - now) / (1000 * 60 * 60 * 24)
-        );
+        const daysLeft = Math.ceil((trialEnd - now) / 86400000);
         if (daysLeft <= 5 && daysLeft >= 0) {
-          setShowTrialBanner(true);
+          setShowBanner(true);
         }
-
         setLoading(false);
         return;
       }
 
-      // Trial expired → mark expired
+      // Expired → update & redirect
       if (
         groomer.subscription_status === "trial" &&
         trialEnd &&
@@ -102,20 +98,18 @@ function ProtectedRoute({ children }) {
         return;
       }
 
-      // Already expired → always upgrade
+      // Already expired
       if (groomer.subscription_status === "expired") {
-        if (window.location.pathname !== "/upgrade") {
-          navigate("/upgrade");
-        }
+        navigate("/upgrade");
         setLoading(false);
         return;
       }
 
-      // Paid user
+      // Paid
       setLoading(false);
     };
 
-    load();
+    check();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_, session) => setUser(session?.user || null)
@@ -123,12 +117,12 @@ function ProtectedRoute({ children }) {
     return () => listener.subscription.unsubscribe();
   }, [navigate]);
 
-  if (loading) return <p className="text-center mt-10">Loading...</p>;
+  if (loading) return <p className="text-center mt-10">Loading…</p>;
   if (!user) return <Navigate to="/auth" />;
 
   return (
     <>
-      {showTrialBanner && (
+      {showBanner && (
         <div className="bg-yellow-100 text-yellow-800 text-center py-2 font-semibold">
           ⏳ Your trial ends soon — upgrade to keep using PawScheduler.
         </div>
@@ -138,9 +132,9 @@ function ProtectedRoute({ children }) {
   );
 }
 
-// =====================
-// NAVBAR + SHELL
-// =====================
+// =============================
+// 🧭 NAVIGATION SHELL
+// =============================
 function AppShell() {
   const location = useLocation();
 
@@ -178,12 +172,14 @@ function AppShell() {
       )}
 
       <Routes>
-        {/* PUBLIC */}
+        {/* PUBLIC ROUTES */}
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/upgrade" element={<Upgrade />} />
+        <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/book/:slug" element={<Book />} />
 
-        {/* PROTECTED */}
+        {/* PROTECTED ROUTES */}
         <Route path="/" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
         <Route path="/clients/:clientId" element={<ProtectedRoute><ClientPets /></ProtectedRoute>} />
         <Route path="/pets/:petId/appointments" element={<ProtectedRoute><PetAppointments /></ProtectedRoute>} />
@@ -191,16 +187,14 @@ function AppShell() {
         <Route path="/unpaid" element={<ProtectedRoute><UnpaidAppointments /></ProtectedRoute>} />
         <Route path="/revenue" element={<ProtectedRoute><Revenue /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-        <Route path="/upgrade" element={<ProtectedRoute><Upgrade /></ProtectedRoute>} />
-        <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
       </Routes>
     </>
   );
 }
 
-// =====================
-// ROOT APP WRAPPER
-// =====================
+// =============================
+// ROOT WRAPPER
+// =============================
 export default function App() {
   return (
     <Router>
