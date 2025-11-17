@@ -350,7 +350,15 @@ export default function PetAppointments() {
     if (earliest) {
       setForm((prev) => ({ ...prev, time: earliest }));
     }
-  }, [form.date, form.duration_min, workingRange, unavailable, override]);
+  }, [
+    form.date,
+    form.duration_min,
+    form.time,        // ✅ add this
+    workingRange,
+    unavailable,
+    override
+  ]);
+
 
   // Form change handler
   const handleChange = (e) => {
