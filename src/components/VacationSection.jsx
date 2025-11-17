@@ -5,68 +5,60 @@ export default function VacationSection({ userId }) {
   const [vacations, setVacations] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // New vacation form
+  // Form
   const [rangeStart, setRangeStart] = useState("");
   const [rangeEnd, setRangeEnd] = useState("");
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
   const [reason, setReason] = useState("");
 
-  // --------------------------
-  // CLEAN loadVacations (useCallback fixes ESLint)
-  // --------------------------
+  // -----------------------------------------------------
+  // LOAD VACATIONS (clean eslint, uses new schema)
+  // -----------------------------------------------------
   const loadVacations = useCallback(async () => {
     if (!userId) return;
-
     setLoading(true);
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("vacation_days")
       .select("*")
       .eq("groomer_id", userId)
       .order("date", { ascending: true });
 
-    setVacations(data || []);
+    if (!error) setVacations(data || []);
     setLoading(false);
   }, [userId]);
 
-  // --------------------------
-  // useEffect with correct dependencies
-  // --------------------------
   useEffect(() => {
     loadVacations();
   }, [loadVacations]);
 
-  // --------------------------
-  // ADD VACATION
-  // --------------------------
+  // -----------------------------------------------------
+  // ADD VACATION — supports range OR single day
+  // -----------------------------------------------------
   const addVacation = async () => {
-    if (!rangeStart) return alert("Please select a start date.");
+    if (!rangeStart) return alert("Please pick a start date");
 
     const start = new Date(rangeStart);
     const end = rangeEnd ? new Date(rangeEnd) : new Date(rangeStart);
 
     if (end < start) return alert("End date cannot be before start date.");
 
-    const days = [];
+    const rows = [];
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      days.push({
+      rows.push({
         groomer_id: userId,
-        date: d.toISOString().split("T")[0],
-        start_time: startTime || null,
-        end_time: endTime || null,
+        date: d.toISOString().split("T")[0], // <-- new schema
+        start_time: startTime || null,       // partial day (optional)
+        end_time: endTime || null,           // partial day (optional)
         reason: reason || null,
       });
     }
 
-    const { error } = await supabase.from("vacation_days").insert(days);
+    const { error } = await supabase.from("vacation_days").insert(rows);
+    if (error) return alert(error.message);
 
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    // Reset form
+    // reset form
     setRangeStart("");
     setRangeEnd("");
     setStartTime("");
@@ -76,23 +68,23 @@ export default function VacationSection({ userId }) {
     loadVacations();
   };
 
-  // --------------------------
-  // DELETE VACATION
-  // --------------------------
+  // -----------------------------------------------------
+  // DELETE
+  // -----------------------------------------------------
   const deleteVacation = async (id) => {
     await supabase.from("vacation_days").delete().eq("id", id);
     loadVacations();
   };
 
-  // --------------------------
+  // -----------------------------------------------------
   // RENDER
-  // --------------------------
+  // -----------------------------------------------------
   return (
     <section className="mt-10 border-t pt-8">
       <h2 className="text-xl font-bold mb-4">Vacation / Days Off</h2>
 
       <div className="bg-gray-50 p-4 rounded mb-6 space-y-4">
-        {/* Date Range */}
+        {/* DATE RANGE */}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium">Start Date</label>
@@ -115,7 +107,7 @@ export default function VacationSection({ userId }) {
           </div>
         </div>
 
-        {/* Partial-day time range */}
+        {/* PARTIAL DAY */}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-medium">Off Start Time (optional)</label>
@@ -138,27 +130,27 @@ export default function VacationSection({ userId }) {
           </div>
         </div>
 
-        {/* Reason */}
+        {/* REASON */}
         <div>
           <label className="text-sm font-medium">Reason (optional)</label>
           <input
             type="text"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
+            placeholder="Vacation, holiday, trip, appointment..."
             className="border rounded w-full p-2"
-            placeholder="Vacation, holiday, trip, etc..."
           />
         </div>
 
         <button
           onClick={addVacation}
-          className="px-4 py-2 bg-blue-600 text-white rounded mt-2"
+          className="px-4 py-2 bg-blue-600 text-white rounded"
         >
           Add Vacation
         </button>
       </div>
 
-      {/* Vacation List */}
+      {/* LIST */}
       <h3 className="text-lg font-semibold mb-2">Scheduled Days Off</h3>
 
       {loading ? (

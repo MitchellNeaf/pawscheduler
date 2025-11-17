@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../supabase";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const TIME_SLOTS = [];
 for (let hour = 6; hour <= 20; hour++) {
@@ -22,6 +24,15 @@ const SERVICE_OPTIONS = [
   "Other",
 ];
 
+// Format date → YYYY-MM-DD
+const formatDate = (d) => {
+  if (!d) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+};
+
 export default function BookPage() {
   const { slug } = useParams();
   const [groomer, setGroomer] = useState(null);
@@ -41,15 +52,20 @@ export default function BookPage() {
     notes: "",
   });
 
-  // unified unavailable slots
   const [unavailable, setUnavailable] = useState([]);
   const [workingRange, setWorkingRange] = useState([]);
+  const [vacationBlocks, setVacationBlocks] = useState([]);
 
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [, setUpcomingAppts] = useState([]);
 
   const [submitted, setSubmitted] = useState(null);
+
+  // NEW: vacation dates for calendar highlighting
+  const [vacationDates, setVacationDates] = useState([]);
+  // NEW: weekdays (0–6) where groomer normally works
+  const [workingWeekdays, setWorkingWeekdays] = useState([]);
 
   // ---------------- LOAD GROOMER ----------------
   useEffect(() => {
@@ -74,29 +90,82 @@ export default function BookPage() {
     };
   }, [slug]);
 
+  // ---------------- LOAD ALL VACATION DAYS (for calendar) ----------------
+  useEffect(() => {
+    if (!groomerId) return;
+
+    (async () => {
+      const { data } = await supabase
+        .from("vacation_days")
+        .select("date")
+        .eq("groomer_id", groomerId);
+
+      if (data) {
+        setVacationDates(data.map((v) => v.date));
+      }
+    })();
+  }, [groomerId]);
+
+  // ---------------- LOAD WORKING WEEKDAYS (for closed day shading) ----------------
+  useEffect(() => {
+    if (!groomerId) return;
+
+    (async () => {
+      const { data } = await supabase
+        .from("working_hours")
+        .select("weekday")
+        .eq("groomer_id", groomerId);
+
+      if (data) {
+        const days = Array.from(new Set(data.map((h) => h.weekday)));
+        setWorkingWeekdays(days);
+      }
+    })();
+  }, [groomerId]);
+
   const compareDateTimeDesc = (a, b) => {
     const da = new Date(`${a.date}T${(a.time || "00:00").slice(0, 5)}`);
     const db = new Date(`${b.date}T${(b.time || "00:00").slice(0, 5)}`);
     return db - da;
   };
 
-  // ---------------------------------------------------------------------
-  // LOAD WORKING HOURS + BREAKS + APPTS
-  // ---------------------------------------------------------------------
+  // ---------------- VACATIONS + SCHEDULE FOR DATE ----------------
   const fetchTakenTimes = useCallback(async () => {
     if (!form.date || !groomerId) return;
 
-    // ⭐ FIX — DO NOT USE new Date("YYYY-MM-DD")
     const [y, m, d] = form.date.split("-").map(Number);
-    const weekday = new Date(y, m - 1, d).getDay(); // ⭐ FIX
+    const weekday = new Date(y, m - 1, d).getDay();
 
-    // --- Fetch working hours for that weekday ---
+    // --- VACATIONS FOR THIS DATE ---
+    const { data: vacs } = await supabase
+      .from("vacation_days")
+      .select("*")
+      .eq("groomer_id", groomerId)
+      .eq("date", form.date);
+
+    let vacationInfo = [];
+    if (vacs?.length) {
+      vacationInfo = vacs.map((v) => {
+        const fullDay = !v.start_time && !v.end_time;
+        if (fullDay) return { type: "full" };
+        return { type: "partial", start: v.start_time, end: v.end_time };
+      });
+    }
+    setVacationBlocks(vacationInfo);
+
+    if (vacationInfo.some((v) => v.type === "full")) {
+      setWorkingRange([]);
+      setUnavailable([...TIME_SLOTS]);
+      return;
+    }
+
+    // --- Working hours ---
     const { data: hours } = await supabase
       .from("working_hours")
       .select("*")
       .eq("groomer_id", groomerId)
       .eq("weekday", weekday)
-      .single();
+      .maybeSingle();
 
     if (!hours) {
       setWorkingRange([]);
@@ -106,22 +175,21 @@ export default function BookPage() {
 
     const startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
     const endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
-
     const activeSlots = TIME_SLOTS.slice(startIdx, endIdx + 1);
     setWorkingRange(activeSlots);
 
-    // --- Fetch breaks ---
+    // --- Breaks ---
     const { data: breaks } = await supabase
       .from("working_breaks")
       .select("*")
       .eq("groomer_id", groomerId)
       .eq("weekday", weekday);
 
-    let breakBlocked = new Set();
-
+    const breakBlocked = new Set();
     (breaks || []).forEach((b) => {
       const bi = TIME_SLOTS.indexOf(b.break_start.slice(0, 5));
       const ei = TIME_SLOTS.indexOf(b.break_end.slice(0, 5));
+      if (bi === -1 || ei === -1) return;
       TIME_SLOTS.slice(bi, ei + 1).forEach((slot) => breakBlocked.add(slot));
     });
 
@@ -132,21 +200,36 @@ export default function BookPage() {
       .eq("date", form.date)
       .eq("groomer_id", groomerId);
 
-    let apptBlocked = new Set();
-
+    const apptBlocked = new Set();
     (appts || []).forEach(({ time, duration_min }) => {
+      if (!time) return;
       const t = time.slice(0, 5);
       const idx = TIME_SLOTS.indexOf(t);
+      if (idx === -1) return;
       const blocks = Math.ceil((duration_min || 30) / 15);
       for (let i = 0; i < blocks; i++) {
         apptBlocked.add(TIME_SLOTS[idx + i]);
       }
     });
 
-    // --- Combine ---
-    const allUnavailable = new Set([...breakBlocked, ...apptBlocked]);
+    // --- Partial vacation ---
+    const vacationPartial = new Set();
+    vacationInfo.forEach((vac) => {
+      if (vac.type === "partial") {
+        const bi = TIME_SLOTS.indexOf(vac.start.slice(0, 5));
+        const ei = TIME_SLOTS.indexOf(vac.end.slice(0, 5));
+        if (bi === -1 || ei === -1) return;
+        TIME_SLOTS.slice(bi, ei + 1).forEach((s) => vacationPartial.add(s));
+      }
+    });
 
-    // Auto remove past times if booking same day
+    const allUnavailable = new Set([
+      ...breakBlocked,
+      ...apptBlocked,
+      ...vacationPartial,
+    ]);
+
+    // block past same-day times
     const today = new Date().toLocaleDateString("en-CA");
     if (form.date === today) {
       const now = new Date();
@@ -172,7 +255,11 @@ export default function BookPage() {
     if (s.length === 1 && s.includes("Nails"))
       return setForm((f) => ({ ...f, duration_min: "15" }));
 
-    if (s.includes("Deshedding") || s.includes("Tick Treatment") || s.length >= 5)
+    if (
+      s.includes("Deshedding") ||
+      s.includes("Tick Treatment") ||
+      s.length >= 5
+    )
       return setForm((f) => ({ ...f, duration_min: "60" }));
 
     if (s.includes("Wash") && s.includes("Cut"))
@@ -181,6 +268,25 @@ export default function BookPage() {
     if (s.includes("Wash") || s.includes("Cut") || s.length >= 2)
       return setForm((f) => ({ ...f, duration_min: "30" }));
   }, [form.services]);
+
+  // ---------------- AUTO-SELECT EARLIEST AVAILABLE TIME ----------------
+  useEffect(() => {
+    if (!form.date || !workingRange.length || !form.duration_min) return;
+    if (form.time) return; // don't override manual choice
+
+    const blocks = Math.ceil(Number(form.duration_min) / 15);
+
+    const earliest = workingRange.find((slot, idx) => {
+      const windowSlots = workingRange.slice(idx, idx + blocks);
+      if (windowSlots.length < blocks) return false;
+      if (windowSlots.some((s) => unavailable.includes(s))) return false;
+      return true;
+    });
+
+    if (earliest) {
+      setForm((prev) => ({ ...prev, time: earliest }));
+    }
+  }, [form.date, form.duration_min, workingRange, unavailable]);
 
   // ---------------- CLIENT MINI-LOGIN ----------------
   const handleClientLogin = async (e) => {
@@ -238,6 +344,11 @@ export default function BookPage() {
       }));
     }
 
+    if (name === "date") {
+      setForm((p) => ({ ...p, date: value, time: "" }));
+      return;
+    }
+
     setForm((p) => ({ ...p, [name]: value }));
   };
 
@@ -246,7 +357,11 @@ export default function BookPage() {
     e.preventDefault();
     setSubmitting(true);
 
-    if (!selectedPetId) return alert("Please select a pet.");
+    if (!selectedPetId) {
+      alert("Please select a pet.");
+      setSubmitting(false);
+      return;
+    }
 
     const { error } = await supabase
       .from("appointments")
@@ -278,7 +393,13 @@ export default function BookPage() {
         duration: form.duration_min,
       });
 
-      setForm({ services: [], date: "", time: "", duration_min: "", notes: "" });
+      setForm({
+        services: [],
+        date: "",
+        time: "",
+        duration_min: "",
+        notes: "",
+      });
     }
 
     setSubmitting(false);
@@ -291,9 +412,11 @@ export default function BookPage() {
   if (!groomerId)
     return <main className="p-4 text-center">Loading booking page…</main>;
 
+  const isFullVacation =
+    vacationBlocks.some((v) => v.type === "full") && form.date;
+
   return (
     <main className="max-w-xl p-4">
-
       {/* GROOMER HEADER */}
       {groomer && (
         <div className="text-center mb-4">
@@ -351,25 +474,32 @@ export default function BookPage() {
             placeholder="First name"
             value={clientForm.name}
             onChange={handleChange}
+            className="border rounded px-2 py-1 w-full"
           />
           <input
             name="last4"
             placeholder="Last 4 of phone"
             value={clientForm.last4}
             onChange={handleChange}
+            className="border rounded px-2 py-1 w-full"
           />
-          <button type="submit">Continue</button>
+          <button
+            type="submit"
+            className="mt-2 px-4 py-2 bg-blue-600 text-white rounded"
+          >
+            Continue
+          </button>
         </form>
       ) : null}
 
       {/* BOOKING FORM */}
       {!submitted && client && (
-        <form onSubmit={handleSubmit} className="space-y-3">
-
+        <form onSubmit={handleSubmit} className="space-y-3 mt-4">
           {pets.length > 1 && (
             <select
               value={selectedPetId}
               onChange={(e) => setSelectedPetId(e.target.value)}
+              className="border rounded px-2 py-1 w-full"
             >
               <option value="">Select a pet</option>
               {pets.map((p) => (
@@ -380,6 +510,7 @@ export default function BookPage() {
             </select>
           )}
 
+          {/* SERVICES */}
           <div>
             {SERVICE_OPTIONS.map((s) => (
               <label key={s} className="block">
@@ -399,41 +530,93 @@ export default function BookPage() {
             <div>Estimated time: {form.duration_min} minutes</div>
           )}
 
-          <input
-            type="date"
-            name="date"
-            value={form.date}
-            onChange={handleChange}
-          />
+          {/* DATE PICKER WITH VACATION + CLOSED DAY STYLING */}
+          <div className="w-full">
+            <DatePicker
+              selected={form.date ? new Date(form.date) : null}
+              onChange={(d) => {
+                const value = formatDate(d);
+                setForm((p) => ({ ...p, date: value, time: "" }));
+              }}
+              dateFormat="yyyy-MM-dd"
+              className="border rounded px-2 py-1 w-full"
+              placeholderText="Select date"
+              // Disable CLOSED days (no working_hours)
+              filterDate={(d) => {
+                if (!workingWeekdays.length) return true; // until loaded
+                const weekday = d.getDay();
+                return workingWeekdays.includes(weekday);
+              }}
+              // Styling for vacation + closed days
+              dayClassName={(d) => {
+                const f = formatDate(d);
+                if (vacationDates.includes(f)) {
+                  return "bg-red-300 text-white";
+                }
+                if (
+                  workingWeekdays.length &&
+                  !workingWeekdays.includes(d.getDay())
+                ) {
+                  return "bg-gray-200 text-gray-400";
+                }
+                return "";
+              }}
+              // Tooltips
+              renderDayContents={(day, date) => {
+                const f = formatDate(date);
+                let title = "";
+                if (vacationDates.includes(f)) {
+                  title = "Groomer is on vacation or partially unavailable";
+                } else if (
+                  workingWeekdays.length &&
+                  !workingWeekdays.includes(date.getDay())
+                ) {
+                  title = "Groomer does not work this day";
+                }
+                return (
+                  <span title={title || undefined}>
+                    {day}
+                  </span>
+                );
+              }}
+            />
+          </div>
 
-          {/* FINAL TIME SELECT */}
+          {/* TIME SELECT */}
           <select
             name="time"
             value={form.time}
             onChange={handleChange}
-            disabled={!form.date || !workingRange.length}
+            disabled={!form.date || !workingRange.length || isFullVacation}
+            className={`border rounded px-2 py-1 w-full ${
+              isFullVacation ? "bg-red-100" : ""
+            }`}
           >
             <option value="">
-              {workingRange.length
+              {isFullVacation
+                ? "Day Off — Vacation"
+                : workingRange.length
                 ? "Select time"
                 : "Groomer not working this day"}
             </option>
 
-            {workingRange
-              .filter((slot, idx) => {
-                const blocks = Math.ceil(Number(form.duration_min || 0) / 15);
-                const windowSlots = workingRange.slice(idx, idx + blocks);
-
-                if (windowSlots.length < blocks) return false;
-                if (windowSlots.some((s) => unavailable.includes(s))) return false;
-
-                return true;
-              })
-              .map((slot) => (
-                <option key={slot} value={slot}>
-                  {slot}
-                </option>
-              ))}
+            {!isFullVacation &&
+              workingRange
+                .filter((slot, idx) => {
+                  const blocks = Math.ceil(
+                    Number(form.duration_min || 0) / 15
+                  );
+                  const windowSlots = workingRange.slice(idx, idx + blocks);
+                  if (windowSlots.length < blocks) return false;
+                  if (windowSlots.some((s) => unavailable.includes(s)))
+                    return false;
+                  return true;
+                })
+                .map((slot) => (
+                  <option key={slot} value={slot}>
+                    {slot}
+                  </option>
+                ))}
           </select>
 
           <textarea
@@ -441,9 +624,14 @@ export default function BookPage() {
             value={form.notes}
             onChange={handleChange}
             placeholder="Notes"
+            className="border rounded px-2 py-1 w-full"
           />
 
-          <button type="submit" disabled={submitting}>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-4 py-2 bg-emerald-600 text-white rounded"
+          >
             {submitting ? "Submitting..." : "Confirm"}
           </button>
         </form>

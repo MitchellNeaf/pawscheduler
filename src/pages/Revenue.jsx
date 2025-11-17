@@ -8,219 +8,192 @@ export default function Revenue() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
 
+  // Filters
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(null);
+  const [includeUnpaid, setIncludeUnpaid] = useState(false);
+
   // Load logged-in groomer
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
+  // Load revenue data
   useEffect(() => {
     if (!user) return;
 
-    const fetchData = async () => {
-      const { data, error } = await supabase
+    (async () => {
+      const { data } = await supabase
         .from("appointments")
         .select(`
-          id,
-          date,
-          time,
-          amount,
-          paid,
-          services,
-          pets (
-            id,
-            name,
-            clients ( id, full_name )
-          )
+          id, date, time, amount, paid, no_show, services,
+          pets ( name, clients ( full_name ) )
         `)
         .eq("groomer_id", user.id)
         .order("date", { ascending: false })
         .order("time", { ascending: false });
 
-      if (error) {
-        console.error("Error loading revenue data:", error.message);
-      } else {
-        setAppointments(data || []);
-      }
-
+      setAppointments(data || []);
       setLoading(false);
-    };
-
-    fetchData();
+    })();
   }, [user]);
 
-  // Helpers
-  const toYMD = (d) => d.toLocaleDateString("en-CA");
-  const todayStr = toYMD(new Date());
-  const startOfWeek = getStartOfWeek(new Date());
-  const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-
-  const totalForRange = (startDate, endDate, paidOnly = true) =>
-    appointments
-      .filter((a) => {
-        const apptDate = new Date(a.date);
-        return (
-          apptDate >= startDate &&
-          apptDate <= endDate &&
-          (!paidOnly || a.paid)
-        );
-      })
-      .reduce((sum, a) => sum + (a.amount || 0), 0);
-
-  const totalUnpaid = appointments
-    .filter((a) => !a.paid)
-    .reduce((sum, a) => sum + (a.amount || 0), 0);
-
-  const paidAppointments = appointments.filter((a) => a.paid);
-  const unpaidAppointments = appointments.filter((a) => !a.paid);
-
-  // ⭐ Graceful loading screen
   if (loading) {
     return (
-      <main className="px-4 py-6 space-y-6">
-        <div className="h-6 w-48 bg-gray-200 rounded animate-pulse"></div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Loader />
-          <Loader />
-          <Loader />
-          <Loader />
-        </div>
-
-        <Loader />
+      <main className="p-6 space-y-6">
         <Loader />
       </main>
     );
   }
 
+  /* ----------------- FILTER LOGIC ----------------- */
+  const filtered = appointments.filter((a) => {
+    const d = new Date(a.date);
+    if (startDate && d < new Date(startDate)) return false;
+    if (endDate && d > new Date(endDate)) return false;
+    if (!includeUnpaid && !a.paid) return false;
+    return true;
+  });
+
+  /* ----------------- CALCULATIONS ----------------- */
+  const totalRevenue = filtered.reduce((sum, a) => sum + (a.amount || 0), 0);
+
+  // 2. Revenue by Service
+  const revenueByService = {};
+  filtered.forEach((a) => {
+    const list = Array.isArray(a.services) ? a.services : [a.services];
+    list.forEach((s) => {
+      if (!s) return;
+      revenueByService[s] = (revenueByService[s] || 0) + (a.amount || 0);
+    });
+  });
+
+  // 3. No-show revenue loss
+  const noShowLoss = appointments
+    .filter((a) => a.no_show)
+    .reduce((sum, a) => sum + (a.amount || 0), 0);
+
+  // 5. Monthly trend
+  const revenueByMonth = {};
+  appointments.forEach((a) => {
+    const key = a.date.slice(0, 7); // "YYYY-MM"
+    revenueByMonth[key] = (revenueByMonth[key] || 0) + (a.amount || 0);
+  });
+
   return (
-    <main className="px-4 py-6 space-y-6 max-w-5xl mx-auto">
-      <Link to="/" className="text-sm text-blue-600 hover:underline">
-        ← Back to Home
+    <main className="px-4 py-6 max-w-4xl mx-auto space-y-6">
+      <Link to="/" className="text-blue-600 text-sm underline">
+        ← Back
       </Link>
 
-      <h1 className="text-2xl font-bold text-gray-900">Revenue Overview</h1>
+      <h1 className="text-2xl font-bold">Revenue</h1>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <SummaryCard
-          title="Today"
-          amount={totalForRange(new Date(todayStr), new Date(todayStr))}
-        />
-        <SummaryCard
-          title="This Week"
-          amount={totalForRange(startOfWeek, new Date())}
-        />
-        <SummaryCard
-          title="This Month"
-          amount={totalForRange(startOfMonth, new Date())}
-        />
-        <SummaryCard title="Unpaid Total" amount={totalUnpaid} highlight />
+      {/* ----------------- FILTERS ----------------- */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-50 p-4 rounded border">
+        <div>
+          <label className="text-sm">Start Date</label>
+          <input
+            type="date"
+            className="border rounded p-1 w-full"
+            value={startDate || ""}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
+        </div>
+
+        <div>
+          <label className="text-sm">End Date</label>
+          <input
+            type="date"
+            className="border rounded p-1 w-full"
+            value={endDate || ""}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
+        </div>
+
+        <label className="flex items-center gap-2 mt-5">
+          <input
+            type="checkbox"
+            checked={includeUnpaid}
+            onChange={() => setIncludeUnpaid((x) => !x)}
+          />
+          <span className="text-sm">Include Unpaid</span>
+        </label>
+
+        <div className="text-right mt-5">
+          <div className="font-bold text-lg">${totalRevenue.toFixed(2)}</div>
+          <div className="text-xs text-gray-600">Filtered Total</div>
+        </div>
       </div>
 
-      {/* Paid Appointments */}
-      <Section
-        title="Paid Appointments"
-        data={paidAppointments}
-        emptyText="No paid appointments yet."
-      />
-
-      {/* Unpaid Appointments */}
-      <Section
-        title="Unpaid Appointments"
-        data={unpaidAppointments}
-        emptyText="No unpaid appointments."
-        unpaid
-      />
-    </main>
-  );
-}
-
-/* ----------------------------- SUMMARY CARD ----------------------------- */
-
-function SummaryCard({ title, amount, highlight }) {
-  const safe = Number(amount || 0);
-  return (
-    <div className="stat shadow-md border rounded-lg">
-      <div className="stat-label">{title}</div>
-      <div
-        className={`stat-value ${
-          highlight ? "text-red-700" : "text-gray-900"
-        }`}
-      >
-        ${safe.toFixed(2)}
-      </div>
-    </div>
-  );
-}
-
-/* ----------------------------- SECTIONS ----------------------------- */
-
-function Section({ title, data, emptyText, unpaid }) {
-  return (
-    <div className="card shadow-md border">
-      <div className="card-header">
-        <h2
-          className={`text-lg font-semibold ${
-            unpaid ? "text-red-700" : "text-gray-800"
-          }`}
-        >
-          {title}
-        </h2>
+      {/* ----------------- NO SHOW LOSS ----------------- */}
+      <div className="p-4 bg-red-50 border rounded">
+        <div className="font-bold text-red-700">
+          Lost Revenue (No-Shows): ${noShowLoss.toFixed(2)}
+        </div>
       </div>
 
-      <div className="card-body">
-        {data.length === 0 ? (
-          <p className="text-gray-500 text-sm">{emptyText}</p>
+      {/* ----------------- REVENUE BY SERVICE ----------------- */}
+      <div className="p-4 border rounded">
+        <h2 className="font-semibold mb-2">Revenue by Service</h2>
+        {Object.keys(revenueByService).length === 0 ? (
+          <p className="text-sm text-gray-500">No data.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm border-separate border-spacing-y-1">
-              <thead>
-                <tr className="text-left text-gray-600">
-                  <th>Date</th>
-                  <th>Time</th>
-                  <th>Pet</th>
-                  <th>Client</th>
-                  <th>Services</th>
-                  <th className="text-right">Amount</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {data.map((a) => (
-                  <tr
-                    key={a.id}
-                    className={`bg-white ${
-                      unpaid ? "bg-red-50" : "hover:bg-gray-50"
-                    }`}
-                  >
-                    <td>{a.date}</td>
-                    <td>{a.time?.slice(0, 5)}</td>
-                    <td>{a.pets?.name || "—"}</td>
-                    <td>{a.pets?.clients?.full_name || "—"}</td>
-                    <td>
-                      {Array.isArray(a.services)
-                        ? a.services.join(", ")
-                        : a.services || ""}
-                    </td>
-                    <td className="text-right font-medium">
-                      ${Number(a.amount || 0).toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="text-sm space-y-1">
+            {Object.entries(revenueByService).map(([service, amt]) => (
+              <li key={service}>
+                <span className="font-medium">{service}:</span> $
+                {amt.toFixed(2)}
+              </li>
+            ))}
+          </ul>
         )}
       </div>
-    </div>
+
+      {/* ----------------- MONTHLY TREND ----------------- */}
+      <div className="p-4 border rounded">
+        <h2 className="font-semibold mb-2">Monthly Trend</h2>
+        <ul className="text-sm space-y-1">
+          {Object.entries(revenueByMonth).map(([month, amt]) => (
+            <li key={month}>
+              <span className="font-medium">{month}:</span> $
+              {amt.toFixed(2)}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* ----------------- APPOINTMENT TABLE ----------------- */}
+      <div className="p-4 border rounded">
+        <h2 className="font-semibold mb-2">Appointments</h2>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm border-separate border-spacing-y-1">
+            <thead>
+              <tr className="text-left text-gray-600">
+                <th>Date</th>
+                <th>Time</th>
+                <th>Pet</th>
+                <th>Client</th>
+                <th>Amount</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filtered.map((a) => (
+                <tr key={a.id} className="bg-white hover:bg-gray-50">
+                  <td>{a.date}</td>
+                  <td>{a.time?.slice(0, 5)}</td>
+                  <td>{a.pets?.name || "—"}</td>
+                  <td>{a.pets?.clients?.full_name || "—"}</td>
+                  <td>${Number(a.amount || 0).toFixed(2)}</td>
+                  <td>{a.paid ? "Paid" : "Unpaid"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </main>
   );
-}
-
-/* ----------------------------- UTIL ----------------------------- */
-
-function getStartOfWeek(date) {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Monday
-  return new Date(d.setDate(diff));
 }

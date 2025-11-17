@@ -23,12 +23,11 @@ export default function Signup() {
 
     setLoading(true);
 
-    const { error: signErr } = await supabase.auth.signUp({
+    // Create Supabase auth user only
+    const { data: signData, error: signErr } = await supabase.auth.signUp({
       email,
       password,
-      options: {
-        data: { display_name: displayName }, // ✅ saved in user_metadata
-      },
+      options: { data: { display_name: displayName } },
     });
 
     if (signErr) {
@@ -37,7 +36,18 @@ export default function Signup() {
       return;
     }
 
-    alert("✅ Check your email to confirm your account before logging in.");
+    const user = signData.user;
+
+    if (!user) {
+      setError("Signup failed. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    // No groomer creation here!
+    // Trial will start automatically on first login (ProtectedRoute)
+
+    alert("📩 Check your email to confirm your account before logging in.");
     navigate("/auth");
     setLoading(false);
   };
@@ -53,10 +63,9 @@ export default function Signup() {
       <form onSubmit={handleSignup} className="space-y-3">
         <input
           type="text"
-          placeholder="Name"
+          placeholder="Business / Display Name"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          className="w-full border p-2 rounded"
           required
         />
 
@@ -65,7 +74,6 @@ export default function Signup() {
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full border p-2 rounded"
           required
         />
 
@@ -74,7 +82,6 @@ export default function Signup() {
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full border p-2 rounded"
           required
         />
 
@@ -83,7 +90,6 @@ export default function Signup() {
           placeholder="Confirm Password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
-          className="w-full border p-2 rounded"
           required
         />
 

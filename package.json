@@ -11,9 +11,11 @@
   "dependencies": {
     "@headlessui/react": "^1.7.15",
     "@supabase/supabase-js": "^2.50.3",
+    "date-fns": "^4.1.0",
     "pouchdb": "^8.0.1",
     "pouchdb-find": "^8.0.1",
     "react": "^18.2.0",
+    "react-datepicker": "^8.9.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.6.3",
     "react-scripts": "5.0.1"
@@ -37,7 +39,9 @@
     ]
   },
   "eslintConfig": {
-    "plugins": ["react-hooks"],
+    "plugins": [
+      "react-hooks"
+    ],
     "rules": {
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn"
