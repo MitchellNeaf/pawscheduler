@@ -109,24 +109,64 @@ export default function Profile() {
     loadSchedule();
   }, [loadSchedule]);
 
-  // ---------------- LOGO UPLOAD ----------------
+  // ---------------- IMPROVED LOGO UPLOAD (10MB + COMPRESSION) ----------------
   const handleLogoChange = async (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
 
-    if (file.size > 1024 * 1024) {
-      alert("Logo must be under 1MB.");
+    // Allow up to 10MB raw before compression
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Image too large. Max 10MB.");
       return;
     }
 
     setSaving(true);
 
-    const ext = file.name.split(".").pop();
+    // ---- AUTO COMPRESS (fixes iPhone huge images + orientation) ----
+    const compressImage = (file) => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        const reader = new FileReader();
+
+        reader.onload = (ev) => {
+          img.src = ev.target.result;
+        };
+
+        img.onload = () => {
+          const MAX_WIDTH = 1800; // Good resolution for logos
+          const scale = Math.min(1, MAX_WIDTH / img.width);
+
+          const canvas = document.createElement("canvas");
+          canvas.width = img.width * scale;
+          canvas.height = img.height * scale;
+
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+          // Compress to JPEG 85%
+          canvas.toBlob(
+            (blob) => {
+              resolve(new File([blob], file.name, { type: "image/jpeg" }));
+            },
+            "image/jpeg",
+            0.85
+          );
+        };
+
+        reader.readAsDataURL(file);
+      });
+    };
+
+    // If larger than 2MB → compress
+    const finalFile =
+      file.size > 2 * 1024 * 1024 ? await compressImage(file) : file;
+
+    const ext = finalFile.name.split(".").pop();
     const fileName = `${user.id}.${ext}`;
 
     const { error: uploadErr } = await supabase.storage
       .from("logos")
-      .upload(fileName, file, { upsert: true });
+      .upload(fileName, finalFile, { upsert: true });
 
     if (uploadErr) {
       alert("Upload failed: " + uploadErr.message);

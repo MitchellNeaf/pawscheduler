@@ -35,12 +35,21 @@
 }
 
 /* ---------------------------------------------
-   Buttons (New Clean System)
+   BUTTONS — iPhone/Safari FIXED VERSION
 ----------------------------------------------*/
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl 
-           text-sm font-medium shadow-sm transition-colors duration-200;
+    @apply inline-flex items-center justify-center gap-2 
+           px-4 py-2 rounded-2xl text-sm font-medium 
+           shadow-sm transition duration-200 select-none;
+
+    /* iPhone Fixes */
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    -webkit-tap-highlight-color: transparent;
+    border-radius: 14px; /* stronger than rounded-xl */
+    backface-visibility: hidden;
+    transform: translateZ(0);
   }
 
   /* Soft mint primary */
@@ -55,18 +64,19 @@
            hover:bg-gray-200 active:bg-gray-300;
   }
 
-  /* White + mint outline button */
+  /* White + mint outline */
   .btn-outline {
     @apply bg-white text-emerald-600 border border-emerald-300 
            hover:bg-emerald-50;
   }
 
-  /* Soft rose accent (optional) */
+  /* Soft rose accent */
   .btn-accent {
     @apply bg-rose-300 text-white 
            hover:bg-rose-400 active:bg-rose-500;
   }
 }
+
 
 /* ---------------------------------------------
    Cards, Chips, Stats
