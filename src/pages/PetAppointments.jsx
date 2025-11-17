@@ -534,8 +534,9 @@ export default function PetAppointments() {
 
       <form onSubmit={handleAddOrUpdate} className="space-y-3 mb-6">
         {/* DATE */}
-        <div className="w-full">
+        <div className="relative overflow-visible z-50">
           <DatePicker
+            id="date-input"
             selected={form.date ? parseYMD(form.date) : null}
             onChange={(d) => {
               if (!d) return;
@@ -547,6 +548,18 @@ export default function PetAppointments() {
             dateFormat="yyyy-MM-dd"
             className="border p-2 w-full rounded"
             placeholderText="Select date"
+
+            // 🔥 MOBILE FIXES
+            inline={window.innerWidth < 500}
+            popperPlacement="bottom-start"
+            popperModifiers={[
+              { name: "offset", options: { offset: [0, 12] } },
+            ]}
+            onCalendarOpen={() => {
+              const el = document.getElementById("date-input");
+              if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+            }}
+
             filterDate={(d) => {
               const f = toYMD(d);
               return !vacationDates.includes(f);
@@ -554,12 +567,8 @@ export default function PetAppointments() {
             dayClassName={(d) => {
               const f = toYMD(d);
               if (vacationDates.includes(f)) return "bg-red-300 text-white";
-              if (
-                workingWeekdays.length &&
-                !workingWeekdays.includes(d.getDay())
-              ) {
+              if (workingWeekdays.length && !workingWeekdays.includes(d.getDay()))
                 return "bg-gray-200 text-gray-500";
-              }
               return "";
             }}
             renderDayContents={(day, date) => {
@@ -567,16 +576,14 @@ export default function PetAppointments() {
               let title = "";
               if (vacationDates.includes(f)) {
                 title = "Groomer is on vacation or partially unavailable";
-              } else if (
-                workingWeekdays.length &&
-                !workingWeekdays.includes(date.getDay())
-              ) {
+              } else if (workingWeekdays.length && !workingWeekdays.includes(date.getDay())) {
                 title = "Closed day — groomer override allowed";
               }
               return <span title={title || undefined}>{day}</span>;
             }}
           />
         </div>
+
 
         {/* TIME */}
         <select
