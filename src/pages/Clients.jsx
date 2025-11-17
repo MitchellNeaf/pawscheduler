@@ -10,6 +10,7 @@ export default function Clients() {
   const [search, setSearch] = useState("");
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [editingClient, setEditingClient] = useState(null);
 
   // Get logged-in groomer
   useEffect(() => {
@@ -19,19 +20,25 @@ export default function Clients() {
   // Fetch data
   const fetchData = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: clientData } = await supabase
+      const { data: clientData, error: clientError } = await supabase
         .from("clients")
         .select("*")
         .eq("groomer_id", user.id)
         .order("created_at", { ascending: false });
 
-      const { data: petData } = await supabase
+      if (clientError) console.error("Client fetch error:", clientError);
+
+      const { data: petData, error: petError } = await supabase
         .from("pets")
         .select("*")
         .eq("groomer_id", user.id);
+
+      if (petError) console.error("Pet fetch error:", petError);
 
       setClients(clientData || []);
       setPets(petData || []);
@@ -46,19 +53,22 @@ export default function Clients() {
     fetchData();
   }, [fetchData]);
 
-  // Combined search
+  // Combined search (client name / email / phone + pet info)
   const filteredClients = clients.filter((client) => {
     const q = search.toLowerCase();
 
-    const clientMatch = client.full_name?.toLowerCase().includes(q);
+    const clientMatch =
+      (client.full_name || "").toLowerCase().includes(q) ||
+      (client.email || "").toLowerCase().includes(q) ||
+      (client.phone || "").toLowerCase().includes(q);
 
     const petMatch = pets
       .filter((p) => p.client_id === client.id)
       .some(
         (p) =>
-          p.name?.toLowerCase().includes(q) ||
-          p.breed?.toLowerCase().includes(q) ||
-          (p.tags || []).some((t) => t.toLowerCase().includes(q))
+          (p.name || "").toLowerCase().includes(q) ||
+          (p.breed || "").toLowerCase().includes(q) ||
+          (p.tags || []).some((t) => (t || "").toLowerCase().includes(q))
       );
 
     return clientMatch || petMatch;
@@ -78,7 +88,7 @@ export default function Clients() {
           </label>
           <input
             type="text"
-            placeholder="Type a client name, pet name, breed, or tag…"
+            placeholder="Type a client name, email, phone, pet name, breed, or tag…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full md:w-96 shadow-sm"
@@ -86,22 +96,31 @@ export default function Clients() {
         </div>
       </div>
 
-      {/* Add Client */}
+      {/* Add / Edit Client */}
       <div className="card mb-8">
-        <div className="card-header">
-          <h2 className="m-0 font-semibold">Add Client</h2>
+        <div className="card-header flex justify-between items-center">
+          <h2 className="m-0 font-semibold">
+            {editingClient ? "Edit Client" : "Add Client"}
+          </h2>
         </div>
         <div className="card-body">
-          <ClientForm onClientAdded={fetchData} user={user} />
+          <ClientForm
+            onClientSaved={fetchData}
+            editingClient={editingClient}
+            onCancelEdit={() => setEditingClient(null)}
+          />
         </div>
       </div>
 
       {/* Client List */}
       <ul className="space-y-4">
         {filteredClients.map((client) => (
-          <li key={client.id} className="card hover:shadow-lg transition">
+          <li
+            key={client.id}
+            className="card hover:shadow-lg transition"
+          >
             <div className="card-body">
-              <div className="flex justify-between items-start">
+              <div className="flex justify-between items-start gap-3">
                 <div>
                   <Link
                     to={`/clients/${client.id}`}
@@ -109,8 +128,26 @@ export default function Clients() {
                   >
                     {client.full_name}
                   </Link>
-                  <div className="text-gray-600 text-sm">{client.phone}</div>
+
+                  {client.email && (
+                    <div className="text-gray-600 text-sm">
+                      {client.email}
+                    </div>
+                  )}
+
+                  {client.phone && (
+                    <div className="text-gray-600 text-sm">
+                      {client.phone}
+                    </div>
+                  )}
                 </div>
+
+                <button
+                  className="btn-secondary text-sm"
+                  onClick={() => setEditingClient(client)}
+                >
+                  Edit
+                </button>
               </div>
 
               {/* Pets Under Client */}
