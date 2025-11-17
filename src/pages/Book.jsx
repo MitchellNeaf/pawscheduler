@@ -286,7 +286,8 @@ export default function BookPage() {
     if (earliest) {
       setForm((prev) => ({ ...prev, time: earliest }));
     }
-  }, [form.date, form.duration_min, workingRange, unavailable]);
+  }, [form.date, form.duration_min, workingRange, unavailable, form.time]);
+
 
   // ---------------- CLIENT MINI-LOGIN ----------------
   const handleClientLogin = async (e) => {
