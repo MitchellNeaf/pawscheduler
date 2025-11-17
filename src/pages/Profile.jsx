@@ -22,15 +22,16 @@ export default function Profile() {
   const [logoUrl, setLogoUrl] = useState(null);
   const [user, setUser] = useState(null);
 
-  // Working hours + breaks state
   const [hours, setHours] = useState({});
   const [breaks, setBreaks] = useState({});
   const [hoursLoading, setHoursLoading] = useState(true);
   const [hoursSaving, setHoursSaving] = useState(false);
 
-  // ---------------- LOAD LOGGED-IN USER ----------------
+  // ---------------- LOAD USER ----------------
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
+    supabase.auth.getUser().then(({ data }) =>
+      setUser(data.user || null)
+    );
   }, []);
 
   // ---------------- LOAD PROFILE ----------------
@@ -38,13 +39,13 @@ export default function Profile() {
     if (!user) return;
 
     const loadProfile = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("groomers")
         .select("*")
         .eq("id", user.id)
         .single();
 
-      if (!error && data) {
+      if (data) {
         setFullName(data.full_name || "");
         setSlug(data.slug || "");
         setLogoUrl(data.logo_url || null);
@@ -56,7 +57,7 @@ export default function Profile() {
     loadProfile();
   }, [user]);
 
-  // ---------------- LOAD HOURS + BREAKS ----------------
+  // ---------------- LOAD SCHEDULE ----------------
   const loadSchedule = useCallback(async () => {
     if (!user) return;
 
@@ -79,16 +80,8 @@ export default function Profile() {
       const day = hrs?.find((h) => h.weekday === i);
 
       newHours[i] = day
-        ? {
-            start: day.start_time,
-            end: day.end_time,
-            enabled: true,
-          }
-        : {
-            start: "09:00",
-            end: "17:00",
-            enabled: false,
-          };
+        ? { start: day.start_time, end: day.end_time, enabled: true }
+        : { start: "09:00", end: "17:00", enabled: false };
 
       newBreaks[i] =
         brk
@@ -109,12 +102,11 @@ export default function Profile() {
     loadSchedule();
   }, [loadSchedule]);
 
-  // ---------------- IMPROVED LOGO UPLOAD (10MB + COMPRESSION) ----------------
+  // ---------------- LOGO UPLOAD (FINAL FIX) ----------------
   const handleLogoChange = async (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
 
-    // Allow up to 10MB raw before compression
     if (file.size > 10 * 1024 * 1024) {
       alert("Image too large. Max 10MB.");
       return;
@@ -122,34 +114,32 @@ export default function Profile() {
 
     setSaving(true);
 
-    // ---- AUTO COMPRESS (fixes iPhone huge images + orientation) ----
-    const compressImage = (file) => {
+    // Convert JPG/JPEG/PNG → PNG
+    const convertToPng = (file) => {
       return new Promise((resolve) => {
-        const img = new Image();
         const reader = new FileReader();
+        const img = new Image();
 
-        reader.onload = (ev) => {
-          img.src = ev.target.result;
-        };
+        reader.onload = (ev) => (img.src = ev.target.result);
 
         img.onload = () => {
-          const MAX_WIDTH = 1800; // Good resolution for logos
-          const scale = Math.min(1, MAX_WIDTH / img.width);
-
           const canvas = document.createElement("canvas");
-          canvas.width = img.width * scale;
-          canvas.height = img.height * scale;
+          canvas.width = img.width;
+          canvas.height = img.height;
 
           const ctx = canvas.getContext("2d");
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0);
 
-          // Compress to JPEG 85%
           canvas.toBlob(
             (blob) => {
-              resolve(new File([blob], file.name, { type: "image/jpeg" }));
+              resolve(
+                new File([blob], "logo.png", {
+                  type: "image/png",
+                })
+              );
             },
-            "image/jpeg",
-            0.85
+            "image/png",
+            1.0
           );
         };
 
@@ -157,16 +147,16 @@ export default function Profile() {
       });
     };
 
-    // If larger than 2MB → compress
-    const finalFile =
-      file.size > 2 * 1024 * 1024 ? await compressImage(file) : file;
+    const pngFile = await convertToPng(file);
 
-    const ext = finalFile.name.split(".").pop();
-    const fileName = `${user.id}.${ext}`;
+    const filePath = `${user.id}/logo.png`;
 
     const { error: uploadErr } = await supabase.storage
       .from("logos")
-      .upload(fileName, finalFile, { upsert: true });
+      .upload(filePath, pngFile, {
+        upsert: true,
+        contentType: "image/png",
+      });
 
     if (uploadErr) {
       alert("Upload failed: " + uploadErr.message);
@@ -174,8 +164,11 @@ export default function Profile() {
       return;
     }
 
-    const { data } = supabase.storage.from("logos").getPublicUrl(fileName);
-    const publicUrl = data.publicUrl;
+    const { data: publicData } = supabase.storage
+      .from("logos")
+      .getPublicUrl(filePath);
+
+    let publicUrl = publicData.publicUrl + "?v=" + Date.now();
 
     await supabase
       .from("groomers")
@@ -186,7 +179,7 @@ export default function Profile() {
     setSaving(false);
   };
 
-  // ---------------- SAVE PROFILE FIELDS ----------------
+  // ---------------- SAVE PROFILE ----------------
   const saveProfile = async () => {
     if (!user) return;
     setSaving(true);
@@ -204,7 +197,7 @@ export default function Profile() {
     setSaving(false);
   };
 
-  // ---------------- SAVE HOURS + BREAKS ----------------
+  // ---------------- SAVE HOURS ----------------
   const saveSchedule = async () => {
     if (!user) return;
     setHoursSaving(true);
@@ -225,14 +218,14 @@ export default function Profile() {
         });
       }
 
-      breaks[i].forEach((b) => {
+      breaks[i].forEach((b) =>
         breaksToInsert.push({
           groomer_id: user.id,
           weekday: i,
           break_start: b.start,
           break_end: b.end,
-        });
-      });
+        })
+      );
     }
 
     if (hoursToInsert.length > 0) {
@@ -292,15 +285,12 @@ export default function Profile() {
         {saving ? "Saving…" : "Save Changes"}
       </button>
 
-      {/* ------------------------------------------- */}
-      {/*             WORKING HOURS SECTION            */}
-      {/* ------------------------------------------- */}
-
       <section className="mt-10 border-t pt-8">
         <h2 className="text-xl font-bold mb-4">Working Hours</h2>
 
         {Object.keys(hours).map((key) => {
           const dayIndex = Number(key);
+
           return (
             <div key={dayIndex} className="border p-4 rounded mb-4 bg-gray-50">
               <div className="flex items-center justify-between">
@@ -402,11 +392,11 @@ export default function Profile() {
                           className="text-red-600"
                           onClick={() =>
                             setBreaks((prev) => {
-                              const updated = { ...prev };
-                              updated[dayIndex] = updated[dayIndex].filter(
+                              const copy = { ...prev };
+                              copy[dayIndex] = copy[dayIndex].filter(
                                 (_, i) => i !== idx
                               );
-                              return updated;
+                              return copy;
                             })
                           }
                         >
@@ -436,7 +426,6 @@ export default function Profile() {
           );
         })}
 
-        {/* Save hours BEFORE vacations */}
         <button
           onClick={saveSchedule}
           disabled={hoursSaving}
@@ -445,7 +434,6 @@ export default function Profile() {
           {hoursSaving ? "Saving Schedule…" : "Save Schedule"}
         </button>
 
-        {/* VACATION SECTION */}
         <VacationSection userId={user.id} />
       </section>
     </main>
