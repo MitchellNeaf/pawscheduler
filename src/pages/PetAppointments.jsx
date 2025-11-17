@@ -523,10 +523,11 @@ export default function PetAppointments() {
     <div className="p-6">
       <Link
         to={`/clients/${pet?.client_id}`}
-        className="text-blue-600 underline"
+        className="btn btn-secondary mb-4 inline-block"
       >
-        &larr; Back to Pets
+        ← Back to Pets
       </Link>
+
 
       <h1 className="text-xl font-bold mt-2 mb-4">
         Appointments for {pet?.name}
@@ -549,12 +550,12 @@ export default function PetAppointments() {
             className="border p-2 w-full rounded"
             placeholderText="Select date"
 
-            // 🔥 MOBILE FIXES
+            /* MOBILE — show full inline calendar */
             inline={window.innerWidth < 500}
-            popperPlacement="bottom-start"
-            popperModifiers={[
-              { name: "offset", options: { offset: [0, 12] } },
-            ]}
+
+            /* ❌ REMOVED popperPlacement and popperModifiers 
+              (these caused: fn is not a function) */
+
             onCalendarOpen={() => {
               const el = document.getElementById("date-input");
               if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -582,6 +583,7 @@ export default function PetAppointments() {
               return <span title={title || undefined}>{day}</span>;
             }}
           />
+
         </div>
 
 
@@ -702,9 +704,10 @@ export default function PetAppointments() {
           Send appointment reminder?
         </label>
 
-        <button className="bg-emerald-600 text-white px-4 py-2 rounded">
+        <button className="btn btn-primary w-full">
           {editingId ? "Update Appointment" : "Add Appointment"}
         </button>
+
       </form>
 
       {/* APPOINTMENT LIST */}
@@ -742,22 +745,25 @@ export default function PetAppointments() {
               <div className="mt-2 flex flex-wrap gap-4 text-sm">
                 <button
                   onClick={() => handleRebook(appt.date, appt.time)}
-                  className="text-emerald-600 underline"
+                  className="btn btn-outline"
                 >
                   🔁 Rebook 4 Weeks
                 </button>
+
                 <button
                   onClick={() => startEdit(appt)}
-                  className="text-blue-600 underline"
+                  className="btn btn-outline"
                 >
                   ✏️ Edit
                 </button>
+
                 <button
                   onClick={() => handleDelete(appt.id)}
-                  className="text-red-600 underline"
+                  className="btn btn-outline text-red-600 border-red-300 hover:bg-red-50"
                 >
                   🗑 Delete
                 </button>
+
               </div>
 
               <div className="flex flex-wrap items-center gap-6 mt-2 text-sm">

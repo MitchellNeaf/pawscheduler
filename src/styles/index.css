@@ -110,3 +110,57 @@
   th { @apply bg-gray-50 text-gray-700 font-semibold uppercase text-xs tracking-wide; }
   tr:nth-child(even) { @apply bg-gray-50; }
 }
+
+
+/* ====== GLOBAL BUTTON STYLES ====== */
+
+.btn-primary {
+  background: #10b981; /* emerald-500 */
+  color: white;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #0f9665;
+  font-weight: 600;
+  transition: 0.15s;
+}
+.btn-primary:hover {
+  background: #0f9665;
+}
+
+.btn-secondary {
+  background: #e5e7eb; /* gray-200 */
+  color: #1f2937;      /* gray-800 */
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-weight: 600;
+  transition: 0.15s;
+}
+.btn-secondary:hover {
+  background: #d1d5db;
+}
+
+.btn-danger {
+  background: #ef4444; /* red-500 */
+  color: white;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #dc2626;
+  font-weight: 600;
+  transition: 0.15s;
+}
+.btn-danger:hover {
+  background: #dc2626;
+}
+
+/* Chips (tags) */
+.chip {
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: #e5e7eb;
+  font-size: 0.8rem;
+}
+.chip-danger {
+  background: #fecaca;  /* red-200 */
+  color: #b91c1c;        /* red-700 */
+}
