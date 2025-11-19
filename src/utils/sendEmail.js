@@ -9,7 +9,7 @@ export async function sendEmail({ to, subject, text }) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY}`, // OK when JWT verify is OFF
+      "Authorization": `Bearer ${process.env.REACT_APP_SUPABASE_ANON_KEY}`,
     },
     body: JSON.stringify({ to, subject, text }),
   });
