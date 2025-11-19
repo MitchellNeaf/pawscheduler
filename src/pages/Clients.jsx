@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../supabase";
 import ClientForm from "../components/ClientForm";
 import Loader from "../components/Loader";
+import { sendEmail } from "../utils/sendEmail"; // ✅ IMPORTED
 
 export default function Clients() {
   const [clients, setClients] = useState([]);
@@ -53,7 +54,7 @@ export default function Clients() {
     fetchData();
   }, [fetchData]);
 
-  // Combined search (client name / email / phone + pet info)
+  // Combined search
   const filteredClients = clients.filter((client) => {
     const q = search.toLowerCase();
 
@@ -78,7 +79,24 @@ export default function Clients() {
 
   return (
     <main className="px-4 pb-10 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Clients</h1>
+
+      {/* HEADER + SEND TEST EMAIL BUTTON */}
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Clients</h1>
+
+        <button
+          className="btn-primary"
+          onClick={() =>
+            sendEmail({
+              to: user?.email || "mitcherneaf@gmail.com",
+              subject: "PawScheduler Test Email",
+              text: "This is your PawScheduler MailerSend test email.",
+            })
+          }
+        >
+          Send Test Email
+        </button>
+      </div>
 
       {/* Search Box */}
       <div className="card mb-6">
@@ -115,10 +133,7 @@ export default function Clients() {
       {/* Client List */}
       <ul className="space-y-4">
         {filteredClients.map((client) => (
-          <li
-            key={client.id}
-            className="card hover:shadow-lg transition"
-          >
+          <li key={client.id} className="card hover:shadow-lg transition">
             <div className="card-body">
               <div className="flex justify-between items-start gap-3">
                 <div>
@@ -130,15 +145,11 @@ export default function Clients() {
                   </Link>
 
                   {client.email && (
-                    <div className="text-gray-600 text-sm">
-                      {client.email}
-                    </div>
+                    <div className="text-gray-600 text-sm">{client.email}</div>
                   )}
 
                   {client.phone && (
-                    <div className="text-gray-600 text-sm">
-                      {client.phone}
-                    </div>
+                    <div className="text-gray-600 text-sm">{client.phone}</div>
                   )}
                 </div>
 
@@ -160,7 +171,6 @@ export default function Clients() {
                       {pet.breed && (
                         <span className="text-gray-500"> — {pet.breed}</span>
                       )}
-
                       {pet.tags?.length > 0 && (
                         <span className="ml-2 text-xs text-gray-500">
                           [{pet.tags.join(", ")}]

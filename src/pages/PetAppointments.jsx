@@ -4,6 +4,7 @@ import { useParams, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabase";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { sendEmail } from "../utils/sendEmail";
 
 const toYMD = (d) => d.toLocaleDateString("en-CA");
 
@@ -463,6 +464,31 @@ export default function PetAppointments() {
     } else {
       setAppointments((prev) => [data, ...prev]);
     }
+
+    // --------------------------------------------------
+// 📧 SEND EMAIL REMINDER (manual on save/update)
+// --------------------------------------------------
+if (reminderEnabled && data?.date && data?.time) {
+  // Load client email from pet → client relation
+  const { data: clientData } = await supabase
+    .from("pets")
+    .select("clients(email)")
+    .eq("id", petId)
+    .single();
+
+  const clientEmail = clientData?.clients?.email;
+
+  if (clientEmail) {
+    await sendEmail({
+      to: clientEmail,
+      subject: "Grooming Appointment Reminder",
+      text: `Hi! This is a reminder for your grooming appointment on ${
+        data.date
+      } at ${data.time?.slice(0, 5)}.`,
+    });
+  }
+}
+
 
     setForm({
       date: "",
