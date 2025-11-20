@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
 serve(async (req) => {
-  // CORS preflight
+  // --- CORS PRE-FLIGHT ---
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       status: 204,
@@ -34,7 +34,7 @@ serve(async (req) => {
     let safeJson;
     try {
       safeJson = await msRes.json();
-    } catch (_err) {
+    } catch {
       safeJson = { note: "Mailersend returned non-JSON response" };
     }
 

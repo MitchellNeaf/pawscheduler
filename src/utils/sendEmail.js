@@ -1,4 +1,5 @@
 // src/utils/sendEmail.js
+console.log("sendEmail() called with:", { to, subject, text });
 
 export async function sendEmail({ to, subject, text }) {
   const url = `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/send-email`;
