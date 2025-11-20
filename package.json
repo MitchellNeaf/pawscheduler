@@ -1,0 +1,50 @@
+{
+  "name": "pawscheduler",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
+  },
+  "dependencies": {
+    "@headlessui/react": "^1.7.15",
+    "@supabase/supabase-js": "^2.50.3",
+    "date-fns": "^4.1.0",
+    "pouchdb": "^8.0.1",
+    "pouchdb-find": "^8.0.1",
+    "react": "^18.2.0",
+    "react-datepicker": "^8.9.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^7.6.3",
+    "react-scripts": "5.0.1"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.14",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "postcss": "^8.4.24",
+    "tailwindcss": "^3.3.2"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "eslintConfig": {
+    "plugins": [
+      "react-hooks"
+    ],
+    "rules": {
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn"
+    }
+  }
+}
