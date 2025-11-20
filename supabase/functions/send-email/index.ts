@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
 serve(async (req) => {
-  // CORS
+  // CORS preflight
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       status: 204,
@@ -17,7 +17,7 @@ serve(async (req) => {
     const { to, subject, text } = await req.json();
     const apiKey = Deno.env.get("MAILERSEND_API_KEY");
 
-    const res = await fetch("https://api.mailersend.com/v1/email", {
+    const msRes = await fetch("https://api.mailersend.com/v1/email", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
@@ -31,15 +31,27 @@ serve(async (req) => {
       }),
     });
 
-    const data = await res.json();
+    let safeJson;
+    try {
+      safeJson = await msRes.json();
+    } catch (_err) {
+      safeJson = { note: "Mailersend returned non-JSON response" };
+    }
 
-    return new Response(JSON.stringify(data), {
-      status: res.ok ? 200 : 400,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-      },
-    });
-
+    return new Response(
+      JSON.stringify({
+        success: msRes.ok,
+        status: msRes.status,
+        mailersend: safeJson,
+      }),
+      {
+        status: msRes.ok ? 200 : 400,
+        headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Content-Type": "application/json",
+        },
+      }
+    );
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,

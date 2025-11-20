@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { supabase } from "../supabase";
 import ClientForm from "../components/ClientForm";
 import Loader from "../components/Loader";
-import { sendEmail } from "../utils/sendEmail"; // ✅ IMPORTED
+import { sendEmail } from "../utils/sendEmail"; // keep this for future use
 
 export default function Clients() {
   const [clients, setClients] = useState([]);
@@ -80,22 +80,9 @@ export default function Clients() {
   return (
     <main className="px-4 pb-10 max-w-4xl mx-auto">
 
-      {/* HEADER + SEND TEST EMAIL BUTTON */}
+      {/* HEADER (test email button removed) */}
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Clients</h1>
-
-        <button
-          className="btn-primary"
-          onClick={() =>
-            sendEmail({
-              to: user?.email || "mitcherneaf@gmail.com",
-              subject: "PawScheduler Test Email",
-              text: "This is your PawScheduler MailerSend test email.",
-            })
-          }
-        >
-          Send Test Email
-        </button>
       </div>
 
       {/* Search Box */}
