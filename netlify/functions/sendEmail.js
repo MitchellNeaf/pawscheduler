@@ -21,7 +21,7 @@ export async function handler(event, context) {
       },
       body: JSON.stringify({
         from: {
-          email: "noreply@pawscheduler.com",
+          email: "noreply@pawscheduler.app",  // <-- FIXED
           name: "PawScheduler"
         },
         to: [{ email: to }],
