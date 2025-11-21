@@ -1,61 +1,63 @@
 import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 serve(async (req) => {
-  // --- CORS PRE-FLIGHT ---
+  // Handle preflight CORS request
   if (req.method === "OPTIONS") {
     return new Response("ok", {
       status: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, content-type",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-      },
+      headers: corsHeaders,
     });
+  }
+
+  // Authorization check
+  const auth = req.headers.get("authorization")?.replace("Bearer ", "");
+  if (!auth) {
+    return new Response(
+      JSON.stringify({ code: 401, message: "Missing authorization header" }),
+      { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 
   try {
     const { to, subject, text } = await req.json();
-    const apiKey = Deno.env.get("MAILERSEND_API_KEY");
 
     const msRes = await fetch("https://api.mailersend.com/v1/email", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        Authorization: `Bearer ${Deno.env.get("MAILERSEND_API_KEY")}`,
       },
       body: JSON.stringify({
-        from: { email: "reminder@pawscheduler.app", name: "PawScheduler" },
+        from: { email: "reminder@pawscheduler.com" },
         to: [{ email: to }],
         subject,
         text,
       }),
     });
 
-    let safeJson;
-    try {
-      safeJson = await msRes.json();
-    } catch {
-      safeJson = { note: "Mailersend returned non-JSON response" };
-    }
+    const bodyText = await msRes.text();
 
     return new Response(
       JSON.stringify({
-        success: msRes.ok,
+        ok: msRes.ok,
         status: msRes.status,
-        mailersend: safeJson,
+        mailersend_response: bodyText,
       }),
       {
         status: msRes.ok ? 200 : 400,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Content-Type": "application/json",
-        },
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       }
     );
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { "Access-Control-Allow-Origin": "*" },
-    });
+    return new Response(
+      JSON.stringify({ error: String(err) }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   }
 });
