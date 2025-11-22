@@ -466,45 +466,61 @@ export default function PetAppointments() {
     }
 
     // --------------------------------------------------
+// --------------------------------------------------
 // 📧 SEND EMAIL REMINDER (manual on save/update)
 // --------------------------------------------------
 if (reminderEnabled && data?.date && data?.time) {
-  // Load client email from pet → client relation
-  const { data: clientData } = await supabase
+
+  // 1) get the pet row so we know client_id
+  const { data: petRow } = await supabase
     .from("pets")
-    .select("clients(email)")
+    .select("client_id, name")
     .eq("id", petId)
     .single();
 
-  const clientEmail = clientData?.clients?.email;
+  if (!petRow?.client_id) {
+    console.warn("No client_id found for pet — cannot send email");
+  } else {
 
-  if (clientEmail) {
-    await sendEmail({
-      to: clientEmail,
-      subject: "Your Grooming Appointment is Confirmed",
-      template: "confirmation",
-      data: {
-        logo_url: user?.logo_url ?? "",
-        business_name: user?.business_name ?? "",
-        business_address: user?.business_address ?? "",
-        business_phone: user?.business_phone ?? "",
-        groomer_email: user?.email ?? "",
-        pet_name: pet.name,
-        date: data.date,
-        time: data.time?.slice(0, 5),
-        duration_min: data.duration_min,
-        services: Array.isArray(data.services)
-          ? data.services.join(", ")
-          : data.services,
-        price: data.amount ?? "",
-        notes_block: data.notes
-          ? `<tr><td><strong>Notes:</strong> ${data.notes}</td></tr>`
-          : ""
-      }
-    });
+    // 2) get client email
+    const { data: clientRow } = await supabase
+      .from("clients")
+      .select("email")
+      .eq("id", petRow.client_id)
+      .single();
 
+    const clientEmail = clientRow?.email;
+
+    if (clientEmail) {
+      await sendEmail({
+        to: clientEmail,
+        subject: "Your Grooming Appointment is Confirmed",
+        template: "confirmation",
+        data: {
+          logo_url: user?.logo_url ?? "",
+          business_name: user?.business_name ?? "",
+          business_address: user?.business_address ?? "",
+          business_phone: user?.business_phone ?? "",
+          groomer_email: user?.email ?? "",
+
+          // Appointment info
+          pet_name: petRow.name,
+          date: data.date,
+          time: data.time?.slice(0, 5),
+          duration_min: data.duration_min,
+          services: Array.isArray(data.services)
+            ? data.services.join(", ")
+            : data.services,
+          price: data.amount ?? "",
+          notes_block: data.notes
+            ? `<tr><td><strong>Notes:</strong> ${data.notes}</td></tr>`
+            : ""
+        }
+      });
+    }
   }
 }
+
 
 
     setForm({
