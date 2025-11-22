@@ -497,6 +497,7 @@ if (reminderEnabled && data?.date && data?.time) {
         subject: "Your Grooming Appointment is Confirmed",
         template: "confirmation",
         data: {
+          groomer_id: user.id,
           logo_url: user?.logo_url ?? "",
           business_name: user?.business_name ?? "",
           business_address: user?.business_address ?? "",
