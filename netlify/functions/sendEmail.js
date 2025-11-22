@@ -1,11 +1,7 @@
-import path from "path";
-import fs from "fs";
-import fetch from "node-fetch";
+const path = require("path");
+const fs = require("fs");
+const fetch = require("node-fetch");
 
-// Fix __dirname for ES modules on Netlify
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
-
-// Simple templating function
 function fillTemplate(template, data) {
   let output = template;
   for (const key in data) {
@@ -15,7 +11,7 @@ function fillTemplate(template, data) {
   return output;
 }
 
-export async function handler(event) {
+exports.handler = async function(event) {
   try {
     const body = JSON.parse(event.body || "{}");
     const { to, subject, template, data } = body;
@@ -27,41 +23,39 @@ export async function handler(event) {
       };
     }
 
-    // Path to: netlify/email_templates/
-    const templatesDir = path.join(__dirname, "../email_templates");
+    // This resolves to: /var/task/netlify/functions/
+    // Templates are in: /var/task/netlify/email_templates/
+    const templatesDir = path.join(__dirname, "..", "email_templates");
 
     const fileName =
       template === "reminder" ? "reminder.html" : "confirmation.html";
 
     const htmlPath = path.join(templatesDir, fileName);
 
-    // Load the template from disk
+    // Read template
     const rawHtml = fs.readFileSync(htmlPath, "utf8");
 
-    // Fill placeholders
+    // Fill HTML placeholders
     const html = fillTemplate(rawHtml, data);
 
-    // Send via MailerSend
-    const msRes = await fetch("https://api.mailersend.com/v1/email", {
+    // Send with MailerSend
+    const res = await fetch("https://api.mailersend.com/v1/email", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${process.env.MAILERSEND_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        from: {
-          email: "noreply@pawscheduler.app",
-          name: "PawScheduler"
-        },
+        from: { email: "noreply@pawscheduler.app", name: "PawScheduler" },
         to: [{ email: to }],
         subject,
         html
       })
     });
 
-    const msText = await msRes.text();
+    const msText = await res.text();
 
-    if (!msRes.ok) {
+    if (!res.ok) {
       console.error("MailerSend Error:", msText);
       return {
         statusCode: 500,
@@ -81,4 +75,4 @@ export async function handler(event) {
       body: JSON.stringify({ error: err.message })
     };
   }
-}
+};
