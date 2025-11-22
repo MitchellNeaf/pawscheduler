@@ -104,7 +104,7 @@ export default function Upgrade() {
           <button
             disabled={loading}
             className="btn btn-primary w-full mt-6 rounded-xl py-3 font-semibold"
-            onClick={() => startCheckout("price_monthly_1499")}
+            onClick={() => startCheckout("price_1SWPjN0Mk2iocb201J3WV5RJ")}
           >
             Upgrade Monthly
           </button>
@@ -132,7 +132,7 @@ export default function Upgrade() {
           <button
             disabled={loading}
             className="btn btn-primary w-full mt-6 rounded-xl py-3 font-semibold"
-            onClick={() => startCheckout("price_yearly_11988")}
+            onClick={() => startCheckout("price_1SWPjN0Mk2iocb201J3WV5RJ")}
           >
             Upgrade Yearly
           </button>
