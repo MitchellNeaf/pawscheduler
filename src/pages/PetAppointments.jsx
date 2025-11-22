@@ -498,13 +498,15 @@ if (reminderEnabled && data?.date && data?.time) {
         template: "confirmation",
         data: {
           groomer_id: user.id,
+
+          confirm_url: `https://app.pawscheduler.app/.netlify/functions/confirmAppointment?id=${data.id}`,
+
           logo_url: user?.logo_url ?? "",
           business_name: user?.business_name ?? "",
           business_address: user?.business_address ?? "",
           business_phone: user?.business_phone ?? "",
           groomer_email: user?.email ?? "",
-
-          // Appointment info
+          
           pet_name: petRow.name,
           date: data.date,
           time: data.time?.slice(0, 5),
@@ -518,6 +520,7 @@ if (reminderEnabled && data?.date && data?.time) {
             : ""
         }
       });
+
     }
   }
 }

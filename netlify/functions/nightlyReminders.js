@@ -15,28 +15,15 @@ function fillTemplate(template, data) {
 
 exports.handler = async () => {
   try {
-    // -------------------------------
-    // 1. SETUP SUPABASE
-    // -------------------------------
     const supabase = createClient(
       process.env.SUPABASE_URL,
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // Convert 7 PM EST → UTC
-    // Netlify cron uses UTC, so we do nothing here.
-    // Cron schedule will be set in netlify.toml.
-
-    // -------------------------------
-    // 2. GET TOMORROW'S DATE
-    // -------------------------------
     const now = new Date();
     now.setDate(now.getDate() + 1);
     const tomorrow = now.toISOString().slice(0, 10);
 
-    // -------------------------------
-    // 3. FETCH ALL APPOINTMENTS FOR TOMORROW
-    // -------------------------------
     const { data: appts, error } = await supabase
       .from("appointments")
       .select(`
@@ -65,23 +52,16 @@ exports.handler = async () => {
       return { statusCode: 200, body: "No reminders to send." };
     }
 
-    // -------------------------------
-    // 4. LOAD REMINDER TEMPLATE
-    // -------------------------------
     const templatesDir = path.join(__dirname, "..", "email_templates");
     const rawHtml = fs.readFileSync(
       path.join(templatesDir, "reminder.html"),
       "utf8"
     );
 
-    // -------------------------------
-    // 5. PROCESS EACH APPOINTMENT
-    // -------------------------------
     for (const a of appts) {
       const email = a.pets?.clients?.email;
       if (!email) continue;
 
-      // Fetch groomer profile (branding)
       const { data: groomer } = await supabase
         .from("groomers")
         .select("*")
@@ -104,12 +84,10 @@ exports.handler = async () => {
         price: a.amount ?? "",
         notes_block: a.notes
           ? `<tr><td><strong>Notes:</strong> ${a.notes}</td></tr>`
-          : ""
+          : "",
+        confirm_url: `https://app.pawscheduler.app/.netlify/functions/confirmAppointment?id=${a.id}`
       });
 
-      // -------------------------------
-      // 6. SEND EMAIL THROUGH MAILERSEND
-      // -------------------------------
       const res = await fetch("https://api.mailersend.com/v1/email", {
         method: "POST",
         headers: {
@@ -129,19 +107,13 @@ exports.handler = async () => {
         continue;
       }
 
-      // -------------------------------
-      // 7. MARK AS SENT
-      // -------------------------------
       await supabase
         .from("appointments")
         .update({ reminder_sent: true })
         .eq("id", a.id);
     }
 
-    return {
-      statusCode: 200,
-      body: "Reminders sent successfully."
-    };
+    return { statusCode: 200, body: "Reminders sent successfully." };
 
   } catch (err) {
     console.error("Nightly Reminders Error:", err);
