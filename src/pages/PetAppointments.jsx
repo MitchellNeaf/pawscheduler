@@ -481,11 +481,28 @@ if (reminderEnabled && data?.date && data?.time) {
   if (clientEmail) {
     await sendEmail({
       to: clientEmail,
-      subject: "Grooming Appointment Reminder",
-      text: `Hi! This is a reminder for your grooming appointment on ${
-        data.date
-      } at ${data.time?.slice(0, 5)}.`,
+      subject: "Your Grooming Appointment is Confirmed",
+      template: "confirmation",
+      data: {
+        logo_url: user?.logo_url ?? "",
+        business_name: user?.business_name ?? "",
+        business_address: user?.business_address ?? "",
+        business_phone: user?.business_phone ?? "",
+        groomer_email: user?.email ?? "",
+        pet_name: pet.name,
+        date: data.date,
+        time: data.time?.slice(0, 5),
+        duration_min: data.duration_min,
+        services: Array.isArray(data.services)
+          ? data.services.join(", ")
+          : data.services,
+        price: data.amount ?? "",
+        notes_block: data.notes
+          ? `<tr><td><strong>Notes:</strong> ${data.notes}</td></tr>`
+          : ""
+      }
     });
+
   }
 }
 

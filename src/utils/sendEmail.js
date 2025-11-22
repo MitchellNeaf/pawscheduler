@@ -1,11 +1,11 @@
-export async function sendEmail({ to, subject, text }) {
+export async function sendEmail({ to, subject, template, data }) {
   try {
     const res = await fetch("/.netlify/functions/sendEmail", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ to, subject, text })
+      body: JSON.stringify({ to, subject, template, data })
     });
 
     if (!res.ok) {
