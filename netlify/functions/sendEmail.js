@@ -29,7 +29,8 @@ exports.handler = async function(event) {
     }
 
     // Resolve path to template directory
-    const templatesDir = path.join(__dirname, "..", "email_templates");
+    const templatesDir = path.join(__dirname, "..", "..", "email_templates");
+
 
     const fileName = template === "reminder"
       ? "reminder.html"
