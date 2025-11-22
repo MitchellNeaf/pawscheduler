@@ -4,12 +4,17 @@ import { supabase } from "../supabase";
 
 export default function Upgrade() {
   const [daysLeft, setDaysLeft] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [userEmail, setUserEmail] = useState("");
+  const [userId, setUserId] = useState("");
 
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      setUserEmail(user.email);
+      setUserId(user.id);
 
       const { data: groomer } = await supabase
         .from("groomers")
@@ -23,14 +28,34 @@ export default function Upgrade() {
         const diff = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
         setDaysLeft(diff);
       }
-
-      setLoading(false);
     };
 
     load();
   }, []);
 
-  if (loading) return <p className="text-center mt-10">Loading...</p>;
+  const startCheckout = async (priceId) => {
+    setLoading(true);
+
+    const resp = await fetch("/.netlify/functions/createCheckout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        priceId,
+        userId,
+        email: userEmail
+      })
+    });
+
+    const json = await resp.json();
+
+    if (json.url) {
+      window.location.href = json.url;
+    } else {
+      console.error("Stripe checkout error:", json);
+      setLoading(false);
+      alert("Failed to launch Stripe Checkout.");
+    }
+  };
 
   return (
     <div className="max-w-lg mx-auto p-6">
@@ -43,7 +68,6 @@ export default function Upgrade() {
           Keep your bookings, reminders, and schedule running smoothly.
         </p>
 
-        {/* Trial Warnings */}
         {daysLeft !== null && daysLeft >= 0 && (
           <div className="mt-4 bg-yellow-100 border border-yellow-200 text-yellow-800 px-4 py-2 rounded-xl font-semibold">
             ⏳ Your trial ends in <strong>{daysLeft}</strong> days.
@@ -78,8 +102,9 @@ export default function Upgrade() {
           </ul>
 
           <button
+            disabled={loading}
             className="btn btn-primary w-full mt-6 rounded-xl py-3 font-semibold"
-            onClick={() => alert("Stripe monthly checkout coming soon")}
+            onClick={() => startCheckout("price_monthly_1499")}
           >
             Upgrade Monthly
           </button>
@@ -105,15 +130,19 @@ export default function Upgrade() {
           </ul>
 
           <button
+            disabled={loading}
             className="btn btn-primary w-full mt-6 rounded-xl py-3 font-semibold"
-            onClick={() => alert("Stripe yearly checkout coming soon")}
+            onClick={() => startCheckout("price_yearly_11988")}
           >
             Upgrade Yearly
           </button>
         </div>
       </div>
 
-      {/* Footer */}
+      {loading && (
+        <p className="mt-6 text-center text-gray-500">Redirecting to Stripe…</p>
+      )}
+
       <div className="mt-10 text-center text-sm text-gray-500">
         Powered by{" "}
         <span className="font-semibold text-gray-700">PawScheduler</span>
