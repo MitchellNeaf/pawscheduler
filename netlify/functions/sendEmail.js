@@ -1,12 +1,7 @@
-import path from "path";
-import { fileURLToPath } from "url";
-import fs from "fs";
-import fetch from "node-fetch";
+const path = require("path");
+const fs = require("fs");
+const fetch = require("node-fetch");
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Replaces {{variables}} in template with real values
 function fillTemplate(template, data) {
   let output = template;
   for (const key in data) {
@@ -16,15 +11,14 @@ function fillTemplate(template, data) {
   return output;
 }
 
-export async function handler(event) {
+exports.handler = async function(event) {
   try {
     const body = JSON.parse(event.body);
-
     const {
       to,
       subject,
-      template,      // "confirmation" or "reminder"
-      data           // { pet_name, date, time, etc }
+      template,
+      data
     } = body;
 
     if (!to || !subject || !template || !data) {
@@ -34,26 +28,26 @@ export async function handler(event) {
       };
     }
 
-    // Pick template file
-    const templateFile =
-      template === "reminder"
-        ? "reminder.html"
-        : "confirmation.html";
+    // Resolve path to template directory
+    const templatesDir = path.join(__dirname, "..", "email_templates");
 
-    // Full path to HTML
-    const htmlPath = path.join(__dirname, "..", "email_templates", templateFile);
+    const fileName = template === "reminder"
+      ? "reminder.html"
+      : "confirmation.html";
 
-    // Load HTML from disk
+    const htmlPath = path.join(templatesDir, fileName);
+
+    // Read template
     const rawHtml = fs.readFileSync(htmlPath, "utf8");
 
-    // Fill HTML with appointment/groomer data
+    // Fill HTML
     const html = fillTemplate(rawHtml, data);
 
-    // Send via MailerSend
+    // Send email
     const res = await fetch("https://api.mailersend.com/v1/email", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.MAILERSEND_API_KEY}`,
+        "Authorization": `Bearer ${process.env.MAILERSEND_API_KEY}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -79,10 +73,10 @@ export async function handler(event) {
     };
 
   } catch (err) {
-    console.error("SendEmail error:", err);
+    console.error("SendEmail Error:", err);
     return {
       statusCode: 500,
       body: JSON.stringify({ error: err.message })
     };
   }
-}
+};
