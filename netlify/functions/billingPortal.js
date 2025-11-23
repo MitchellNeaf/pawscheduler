@@ -5,35 +5,50 @@ const { createClient } = require("@supabase/supabase-js");
 exports.handler = async (event) => {
   try {
     const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
 
     const body = JSON.parse(event.body || "{}");
     const { userId, returnUrl } = body;
 
     if (!userId) {
-      return { statusCode: 400, body: "Missing userId" };
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: "Missing userId" })
+      };
     }
 
-    // Load groomer so we can fetch their stripe customer ID
-    const { data: groomer } = await supabase
+    // Load groomer row to get Stripe customer ID
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    const { data: groomer, error } = await supabase
       .from("groomers")
       .select("stripe_customer_id")
       .eq("id", userId)
       .single();
 
-    if (!groomer?.stripe_customer_id) {
+    if (error || !groomer) {
+      console.error("Missing groomer:", error);
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "No Stripe customer found" })
+        body: JSON.stringify({ error: "Groomer not found" })
       };
     }
 
+    if (!groomer.stripe_customer_id) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({
+          error: "No Stripe customer found — user has not subscribed yet."
+        })
+      };
+    }
+
+    // Create billing portal session
     const session = await stripe.billingPortal.sessions.create({
       customer: groomer.stripe_customer_id,
-      return_url: returnUrl
+      return_url: returnUrl || "https://app.pawscheduler.app/profile"
     });
 
     return {
