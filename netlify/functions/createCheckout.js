@@ -21,7 +21,6 @@ exports.handler = async (event) => {
       mode: "subscription",
       payment_method_types: ["card"],
       line_items: [{ price: priceId, quantity: 1 }],
-      customer_email: body.email,
       success_url: "https://app.pawscheduler.app/upgrade?success=1",
       cancel_url: "https://app.pawscheduler.app/upgrade?canceled=1",
       metadata: {
