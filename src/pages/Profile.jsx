@@ -27,12 +27,12 @@ export default function Profile() {
   const [hoursLoading, setHoursLoading] = useState(true);
   const [hoursSaving, setHoursSaving] = useState(false);
 
-  // -------------- LOAD USER --------------
+  // ---------------- LOAD USER ----------------
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
-  // -------------- LOAD PROFILE --------------
+  // ---------------- LOAD PROFILE ----------------
   useEffect(() => {
     if (!user) return;
 
@@ -55,7 +55,7 @@ export default function Profile() {
     loadProfile();
   }, [user]);
 
-  // -------------- LOAD SCHEDULE --------------
+  // ---------------- LOAD SCHEDULE ----------------
   const loadSchedule = useCallback(async () => {
     if (!user) return;
 
@@ -100,7 +100,7 @@ export default function Profile() {
     loadSchedule();
   }, [loadSchedule]);
 
-  // -------------- LOGO UPLOAD --------------
+  // ---------------- LOGO UPLOAD ----------------
   const handleLogoChange = async (e) => {
     const file = e.target.files[0];
     if (!file || !user) return;
@@ -171,7 +171,7 @@ export default function Profile() {
     setSaving(false);
   };
 
-  // -------------- SAVE PROFILE --------------
+  // ---------------- SAVE PROFILE ----------------
   const saveProfile = async () => {
     if (!user) return;
     setSaving(true);
@@ -189,7 +189,7 @@ export default function Profile() {
     setSaving(false);
   };
 
-  // -------------- SAVE HOURS --------------
+  // ---------------- SAVE HOURS ----------------
   const saveSchedule = async () => {
     if (!user) return;
     setHoursSaving(true);
@@ -232,7 +232,7 @@ export default function Profile() {
     alert("Schedule saved!");
   };
 
-  // -------------- BILLING PORTAL --------------
+  // ---------------- BILLING PORTAL ----------------
   const handleManageBilling = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
@@ -257,11 +257,14 @@ export default function Profile() {
     <main className="max-w-lg mx-auto p-6 space-y-10">
       <h1 className="text-2xl font-bold">Your Profile</h1>
 
-      {/* 🔥 Trial countdown banner */}
+      {/* TRIAL COUNTDOWN */}
       <TrialBanner userId={user?.id} />
 
-      {/* 🔥 Subscription box */}
-      <SubscriptionStatus userId={user?.id} />
+      {/* SUBSCRIPTION STATUS BOX */}
+      <SubscriptionStatus
+        userId={user?.id}
+        onManageBilling={handleManageBilling}
+      />
 
       {logoUrl ? (
         <img
@@ -302,12 +305,8 @@ export default function Profile() {
         {saving ? "Saving…" : "Save Changes"}
       </button>
 
-      <button
-        onClick={handleManageBilling}
-        className="btn-outline w-full mt-2 py-3 rounded-xl border text-center font-semibold"
-      >
-        Manage Subscription
-      </button>
+      {/* Manage Billing (hidden for trial users) */}
+      {/* This button is now moved inside SubscriptionStatus */}
 
       <section className="mt-10 border-t pt-8">
         <h2 className="text-xl font-bold mb-4">Working Hours</h2>
@@ -464,7 +463,7 @@ export default function Profile() {
   );
 }
 
-/* ---------------- Trial Banner ---------------- */
+/* ---------------- TRIAL BANNER ---------------- */
 function TrialBanner({ userId }) {
   const [daysLeft, setDaysLeft] = useState(null);
   const [status, setStatus] = useState(null);
@@ -491,42 +490,46 @@ function TrialBanner({ userId }) {
     load();
   }, [userId]);
 
-  if (!status || status !== "trial") return null;
+  if (!status) return null;
 
-  if (daysLeft < 0) {
+  // Trial expired
+  if (status === "trial" && daysLeft < 0) {
     return (
       <div className="bg-red-100 text-red-700 p-3 rounded-md mb-4 font-semibold">
-        🚫 Your trial has ended — please upgrade to continue.
+        🚫 Your trial has ended — please{" "}
+        <a href="/upgrade" className="underline font-bold">
+          upgrade to continue
+        </a>
+        .
       </div>
     );
   }
 
-  if (daysLeft <= 5) {
+  // Trial active
+  if (status === "trial" && daysLeft >= 0) {
     return (
       <div className="bg-yellow-100 text-yellow-800 p-3 rounded-md mb-4 font-semibold">
-        ⏳ Your trial ends in <strong>{daysLeft}</strong> days.
+        ⏳ Your trial ends in <strong>{daysLeft}</strong> days.{" "}
+        <a href="/upgrade" className="underline font-bold">
+          Upgrade now →
+        </a>
       </div>
     );
   }
 
-  return (
-    <div className="bg-emerald-50 text-emerald-800 p-3 rounded-md mb-4 font-semibold">
-      Trial active — <strong>{daysLeft}</strong> days remaining.
-    </div>
-  );
+  return null;
 }
 
-/* ---------------- Subscription Status Component ---------------- */
-function SubscriptionStatus({ userId }) {
+/* ---------------- SUBSCRIPTION STATUS ---------------- */
+function SubscriptionStatus({ userId, onManageBilling }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [reactivating, setReactivating] = useState(false);
 
   useEffect(() => {
     const loadStatus = async () => {
       const { data } = await supabase
         .from("groomers")
-        .select("subscription_status, trial_end_date")
+        .select("subscription_status, cancel_at_period_end")
         .eq("id", userId)
         .single();
 
@@ -537,93 +540,49 @@ function SubscriptionStatus({ userId }) {
     loadStatus();
   }, [userId]);
 
-
-  const openBillingPortal = async () => {
-    const resp = await fetch("/.netlify/functions/billingPortal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
-    });
-
-    const json = await resp.json();
-    if (json.url) window.location.href = json.url;
-  };
-
-  const reactivate = async () => {
-    setReactivating(true);
-
-    const resp = await fetch("/.netlify/functions/reactivateSubscription", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId }),
-    });
-
-    const json = await resp.json();
-    setReactivating(false);
-
-    if (json.success) {
-      alert("Subscription reactivated!");
-      window.location.reload();
-    } else {
-      alert("Failed to reactivate subscription.");
-    }
-  };
-
   if (loading) return <p className="text-gray-500">Loading subscription…</p>;
+
+  const sub = status.subscription_status;
 
   return (
     <div className="p-4 bg-white border rounded-xl shadow-sm mt-6">
       <h3 className="text-lg font-semibold mb-2">Subscription</h3>
 
-      {status.subscription_status === "active" &&
-        !status.cancel_at_period_end && (
-          <>
-            <p className="text-green-700 font-semibold">Active Subscription</p>
-            <button
-              onClick={openBillingPortal}
-              className="btn-primary w-full mt-4"
-            >
-              Manage Billing
-            </button>
-          </>
-        )}
+      {/* Softer green badge for Active */}
+      {sub === "active" && (
+        <div className="bg-emerald-50 text-emerald-700 px-3 py-2 rounded-md font-semibold inline-block mb-3">
+          ✔ Active Subscription
+        </div>
+      )}
 
-      {status.subscription_status === "active" &&
-        status.cancel_at_period_end && (
-          <>
-            <p className="text-orange-700 font-semibold">
-              Subscription will stop at the end of this billing period.
-            </p>
+      {/* --- Manage Billing (only active users) --- */}
+      {sub === "active" && (
+        <button
+          onClick={onManageBilling}
+          className="btn-primary w-full mt-3"
+        >
+          Manage Billing
+        </button>
+      )}
 
-            <button
-              onClick={reactivate}
-              disabled={reactivating}
-              className="btn-primary w-full mt-4 bg-green-600"
-            >
-              {reactivating ? "Reactivating…" : "Reactivate Subscription"}
-            </button>
+      {/* --- Trial Users See Upgrade --- */}
+      {sub === "trial" && (
+        <a
+          href="/upgrade"
+          className="btn-primary w-full mt-3 text-center block"
+        >
+          Upgrade Now
+        </a>
+      )}
 
-            <button
-              onClick={openBillingPortal}
-              className="btn-primary w-full mt-4"
-            >
-              Manage Billing
-            </button>
-          </>
-        )}
-
-      {status.subscription_status === "expired" && (
-        <>
-          <p className="text-red-700 font-semibold">
-            Your subscription has ended.
-          </p>
-          <a
-            href="/upgrade"
-            className="btn-primary w-full mt-4 text-center block"
-          >
-            Renew Subscription
-          </a>
-        </>
+      {/* --- Expired Users --- */}
+      {sub === "expired" && (
+        <a
+          href="/upgrade"
+          className="btn-primary w-full mt-3 text-center block"
+        >
+          Renew Subscription
+        </a>
       )}
     </div>
   );
