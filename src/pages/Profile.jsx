@@ -526,9 +526,7 @@ function SubscriptionStatus({ userId }) {
     const loadStatus = async () => {
       const { data } = await supabase
         .from("groomers")
-        .select(
-          "subscription_status, stripe_customer_id, stripe_subscription_id, cancel_at_period_end"
-        )
+        .select("subscription_status, trial_end_date")
         .eq("id", userId)
         .single();
 
@@ -538,6 +536,7 @@ function SubscriptionStatus({ userId }) {
 
     loadStatus();
   }, [userId]);
+
 
   const openBillingPortal = async () => {
     const resp = await fetch("/.netlify/functions/billingPortal", {
