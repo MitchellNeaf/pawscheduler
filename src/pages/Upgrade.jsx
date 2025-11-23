@@ -7,6 +7,7 @@ export default function Upgrade() {
   const [loading, setLoading] = useState(false);
   const [userEmail, setUserEmail] = useState("");
   const [userId, setUserId] = useState("");
+  const [justPaid, setJustPaid] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -22,10 +23,26 @@ export default function Upgrade() {
         .eq("id", user.id)
         .single();
 
+      // If already active, auto-redirect to dashboard
+      if (groomer?.subscription_status === "active") {
+        window.location.href = "/";
+        return;
+      }
+
+      // If success query param present → user just completed checkout
+      if (window.location.search.includes("success=1")) {
+        setJustPaid(true);
+
+        // Give webhook ~1s to finish writing before redirecting
+        setTimeout(() => {
+          window.location.href = "/";
+        }, 1800);
+      }
+
       if (groomer) {
         const now = new Date();
         const end = new Date(groomer.trial_end_date);
-        const diff = Math.ceil((end - now) / (1000 * 60 * 60 * 24));
+        const diff = Math.ceil((end - now) / 86400000);
         setDaysLeft(diff);
       }
     };
@@ -57,6 +74,20 @@ export default function Upgrade() {
     }
   };
 
+  if (justPaid) {
+    return (
+      <div className="max-w-lg mx-auto p-10 text-center">
+        <h1 className="text-3xl font-bold text-emerald-700 mb-4">
+          🎉 Thank you!
+        </h1>
+        <p className="text-gray-700 text-lg">
+          Your subscription is being activated…
+        </p>
+        <p className="text-gray-500 mt-3">Redirecting you now…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-lg mx-auto p-6">
       {/* Header */}
@@ -84,7 +115,7 @@ export default function Upgrade() {
       {/* Pricing Grid */}
       <div className="grid gap-6 sm:grid-cols-2">
 
-        {/* Monthly Plan */}
+        {/* Monthly */}
         <div className="card hover:shadow-lg transition p-6">
           <h2 className="text-xl font-semibold text-gray-800">Monthly</h2>
 
@@ -104,13 +135,13 @@ export default function Upgrade() {
           <button
             disabled={loading}
             className="btn btn-primary w-full mt-6 rounded-xl py-3 font-semibold"
-            onClick={() => startCheckout("price_1SWPjN0Mk2iocb201J3WV5RJ")}
+            onClick={() => startCheckout("price_1SWPid0Mk2iocb20BpzG7FAN")}
           >
             Upgrade Monthly
           </button>
         </div>
 
-        {/* Yearly Plan */}
+        {/* Yearly */}
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 shadow-sm hover:shadow-md transition p-6">
           <h2 className="text-xl font-semibold text-emerald-900">Yearly</h2>
 
