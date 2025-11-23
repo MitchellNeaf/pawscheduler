@@ -9,6 +9,62 @@ const parseYMD = (s) => {
   return new Date(y, m - 1, d);
 };
 
+/* ---------------- Trial Banner (Schedule Page) ---------------- */
+function ScheduleTrialBanner({ userId }) {
+  const [status, setStatus] = useState(null);
+  const [daysLeft, setDaysLeft] = useState(null);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data } = await supabase
+        .from("groomers")
+        .select("subscription_status, trial_end_date")
+        .eq("id", userId)
+        .single();
+
+      if (!data) return;
+
+      setStatus(data.subscription_status);
+
+      const now = new Date();
+      const end = new Date(data.trial_end_date);
+      const diff = Math.ceil((end - now) / 86400000);
+      setDaysLeft(diff);
+    };
+
+    load();
+  }, [userId]);
+
+  if (!status) return null;
+
+  if (status === "trial") {
+    // Trial expired
+    if (daysLeft < 0) {
+      return (
+        <div className="bg-red-100 text-red-700 p-3 rounded-md font-semibold mb-4">
+          🚫 Your free trial has ended —{" "}
+          <Link to="/upgrade" className="underline font-bold">
+            upgrade to continue
+          </Link>
+          .
+        </div>
+      );
+    }
+
+    // Trial active
+    return (
+      <div className="bg-yellow-100 text-yellow-800 p-3 rounded-md font-semibold mb-4">
+        ⏳ Trial ends in <strong>{daysLeft}</strong> days —
+        <Link to="/upgrade" className="underline font-bold ml-1">
+          Upgrade
+        </Link>
+      </div>
+    );
+  }
+
+  return null; // Paid = no banner
+}
+
 export default function Schedule() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -163,10 +219,9 @@ export default function Schedule() {
 
   // UNPAID TODAY
   const unpaidToday = filteredAppointments.filter((appt) => {
-    // ⭐ FIX — LOCAL DATE CONSTRUCTION
     const [y, m, d] = appt.date.split("-").map(Number);
     const [H, M] = (appt.time || "00:00").split(":").map(Number);
-    const start = new Date(y, m - 1, d, H, M); // ⭐ FIX
+    const start = new Date(y, m - 1, d, H, M);
 
     const end = new Date(start.getTime() + (appt.duration_min || 15) * 60000);
     return (
@@ -190,6 +245,9 @@ export default function Schedule() {
       </Link>
 
       <h1 className="text-2xl font-bold text-gray-900">Schedule</h1>
+
+      {/* 🔥 TRIAL BANNER */}
+      {user && <ScheduleTrialBanner userId={user.id} />}
 
       {totalUnpaidToday > 0 && (
         <div className="stat mb-4">
@@ -234,12 +292,11 @@ export default function Schedule() {
             const start = (appt.time || "00:00").slice(0, 5);
             const end = getEndTime(start, appt.duration_min || 15);
 
-            // ⭐ FIX — replace UTC-based date parsing
             const [y, m, d] = appt.date.split("-").map(Number);
             const [H, M] = start.split(":").map(Number);
-            const localStart = new Date(y, m - 1, d, H, M); // ⭐ FIX
+            const localStart = new Date(y, m - 1, d, H, M);
 
-            const isPast = localStart < new Date(); // ⭐ FIX
+            const isPast = localStart < new Date();
 
             return (
               <div
@@ -361,7 +418,6 @@ export default function Schedule() {
                       🗑 Delete
                     </button>
 
-                    {/* Toggles */}
                     <ToggleCheckbox
                       label="Confirmed"
                       field="confirmed"
