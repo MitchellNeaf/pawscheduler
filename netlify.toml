@@ -13,6 +13,5 @@
 
 # Nightly reminder cron job (7 PM EST = 00:00 UTC)
 [[scheduled]]
-  name = "nightly-reminders"
-  cron = "0 0 * * *"
-  function = "nightlyReminders"
+  schedule = "0 0 * * *"
+  path = "/.netlify/functions/nightlyReminders"
