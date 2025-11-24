@@ -11,7 +11,7 @@
 [functions]
   included_files = ["netlify/email_templates/*"]
 
-# Nightly reminder cron job (7 PM EST = 00:00 UTC)
 [[scheduled]]
-  schedule = "0 0 * * *"
-  path = "/.netlify/functions/nightlyReminders"
+  name = "nightly-reminders"
+  cron = "0 0 * * *"
+  function = "nightlyReminders"
