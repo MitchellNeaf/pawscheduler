@@ -14,6 +14,6 @@
 [[scheduled]]
   name = "nightly-reminders"
   # Runs at 7:17 PM EST / 8:17 PM EDT
-  cron = "17 0 * * *"
+  cron = "29 0 * * *"
   function = "nightlyReminders"
 
