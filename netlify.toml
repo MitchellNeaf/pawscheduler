@@ -15,5 +15,5 @@
 
 [[scheduled]]
   name = "nightly-reminders"
-  cron = "10 1 * * *"
+  cron = "50 1 * * *"
   function = "nightlyReminders"

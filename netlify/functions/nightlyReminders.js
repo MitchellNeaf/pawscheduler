@@ -20,9 +20,18 @@ exports.handler = async () => {
       process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
+    // 🌎 FIX: Calculate tomorrow in America/New_York instead of UTC
     const now = new Date();
-    now.setDate(now.getDate() + 1);
-    const tomorrow = now.toISOString().slice(0, 10);
+    const estNow = new Date(
+      now.toLocaleString("en-US", { timeZone: "America/New_York" })
+    );
+    estNow.setDate(estNow.getDate() + 1);
+
+    // Convert back to YYYY-MM-DD in EST
+    const tomorrow = estNow.toISOString().slice(0, 10);
+
+    // DEBUG LOG
+    console.log("EST Tomorrow:", tomorrow);
 
     const { data: appts, error } = await supabase
       .from("appointments")
@@ -48,6 +57,9 @@ exports.handler = async () => {
       .eq("reminder_sent", false);
 
     if (error) throw error;
+
+    console.log("Appointments found:", appts?.length || 0);
+
     if (!appts || appts.length === 0) {
       return { statusCode: 200, body: "No reminders to send." };
     }
@@ -60,7 +72,11 @@ exports.handler = async () => {
 
     for (const a of appts) {
       const email = a.pets?.clients?.email;
-      if (!email) continue;
+
+      if (!email) {
+        console.log(`Skipping appointment ${a.id} — no client email`);
+        continue;
+      }
 
       const { data: groomer } = await supabase
         .from("groomers")
@@ -111,6 +127,8 @@ exports.handler = async () => {
         .from("appointments")
         .update({ reminder_sent: true })
         .eq("id", a.id);
+
+      console.log(`Sent reminder for appointment ${a.id} to ${email}`);
     }
 
     return { statusCode: 200, body: "Reminders sent successfully." };
