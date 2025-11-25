@@ -1,6 +1,7 @@
 [build]
   command = "npm run build"
   publish = "build"
+  # This line can stay or be removed
   functions = "netlify/functions"
 
 [[redirects]]
@@ -9,11 +10,10 @@
   status = 200
 
 [functions]
+  directory = "netlify/functions"   # 👈 THIS IS THE MISSING PIECE
   included_files = ["netlify/email_templates/*"]
 
 [[scheduled]]
   name = "nightly-reminders"
-  # Runs at 7:17 PM EST / 8:17 PM EDT
-  cron = "42 0 * * *"
+  cron = "10 1 * * *"
   function = "nightlyReminders"
-
