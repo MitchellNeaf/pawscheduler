@@ -83,14 +83,40 @@ export default function AuthPage() {
           onChange={(e) => setEmail(e.target.value)}
           required
         />
+
         <input
           type="password"
           placeholder="Password"
-          className="border rounded w-full p-2 mb-4"
+          className="border rounded w-full p-2 mb-2"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
         />
+
+        {/* 🔵 Forgot Password Button */}
+        <button
+          type="button"
+          className="text-sm text-blue-600 underline mb-4"
+          onClick={async () => {
+            if (!email) {
+              setError("Enter your email above first.");
+              return;
+            }
+
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+              redirectTo: `${window.location.origin}/reset-password`,
+            });
+
+            if (error) {
+              setError(error.message);
+            } else {
+              setError("");
+              alert("Password reset email sent. Check your inbox.");
+            }
+          }}
+        >
+          Forgot Password?
+        </button>
 
         <button
           type="submit"

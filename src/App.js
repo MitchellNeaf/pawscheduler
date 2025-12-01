@@ -10,7 +10,7 @@ import {
 } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
-
+import ResetPassword from "./pages/ResetPassword";
 import Signup from "./pages/Signup";
 import AuthPage from "./pages/AuthPage";
 import Onboarding from "./pages/Onboarding";
@@ -178,6 +178,7 @@ function AppShell() {
         <Route path="/upgrade" element={<Upgrade />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/book/:slug" element={<Book />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* PROTECTED ROUTES */}
         <Route path="/" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
