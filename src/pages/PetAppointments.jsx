@@ -351,6 +351,7 @@ export default function PetAppointments() {
     };
 
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, petId, editIdFromURL, cloneIdFromURL, autoShift]);
 
   // AUTO-DURATION
