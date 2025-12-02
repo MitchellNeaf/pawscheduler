@@ -5,6 +5,7 @@ import { Link, useNavigate } from "react-router-dom";
 import Loader from "../components/Loader";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import React from "react";
 
 const toYMD = (d) => d.toLocaleDateString("en-CA");
 const parseYMD = (s) => {
