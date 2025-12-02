@@ -155,7 +155,7 @@ function getEndTime(start, durationMin) {
   ).padStart(2, "0")}`;
 }
 
-/* ---------------- Pet Select Modal (WITH SEARCH) ---------------- */
+/* ---------------- Pet Select Modal ---------------- */
 
 function PetSelectModal({
   open,
@@ -170,7 +170,6 @@ function PetSelectModal({
 
   if (!open) return null;
 
-  // filter logic
   const filtered = pets.filter((p) => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
@@ -185,7 +184,6 @@ function PetSelectModal({
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[80vh] flex flex-col">
         
-        {/* HEADER */}
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h2 className="font-semibold text-gray-800">
             Add appointment at {slot} on {date}
@@ -193,7 +191,6 @@ function PetSelectModal({
           <button onClick={onClose} className="text-gray-500 text-sm">✕</button>
         </div>
 
-        {/* SEARCH BAR */}
         <div className="px-4 py-2 border-b bg-gray-50">
           <input
             type="text"
@@ -204,7 +201,6 @@ function PetSelectModal({
           />
         </div>
 
-        {/* LIST */}
         <div className="p-4 overflow-y-auto flex-1">
           {loading ? (
             <Loader />
@@ -244,7 +240,6 @@ function PetSelectModal({
           )}
         </div>
 
-        {/* FOOTER */}
         <div className="px-4 py-3 border-t text-right">
           <button
             onClick={onClose}
@@ -257,7 +252,6 @@ function PetSelectModal({
     </div>
   );
 }
-
 
 /* ---------------- Main Schedule Component ---------------- */
 
@@ -279,12 +273,10 @@ export default function Schedule() {
 
   const navigate = useNavigate();
 
-  // Load logged-in groomer
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
-  // Load day schedule (working hours, breaks, appointments)
   useEffect(() => {
     if (!user || !selectedDate) return;
 
@@ -314,16 +306,14 @@ export default function Schedule() {
             .eq("weekday", weekday),
           supabase
             .from("appointments")
-            .select(
-              `
-            id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-            max_parallel, services, notes, confirmed, no_show, paid, amount,
-            pets (
-              id, name, tags, client_id,
-              clients ( id, full_name, phone )
-            )
-          `
-            )
+            .select(`
+              id, pet_id, groomer_id, date, time, duration_min, slot_weight,
+              max_parallel, services, notes, confirmed, no_show, paid, amount,
+              pets (
+                id, name, tags, client_id,
+                clients ( id, full_name, phone )
+              )
+            `)
             .eq("groomer_id", user.id)
             .eq("date", selectedDate)
             .order("time", { ascending: true }),
@@ -363,7 +353,6 @@ export default function Schedule() {
     loadDay();
   }, [user, selectedDate]);
 
-  // DELETE appointment
   const handleDelete = async (id) => {
     if (!user) return;
 
@@ -381,7 +370,6 @@ export default function Schedule() {
     setAppointments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  // REBOOK 4 WEEKS
   const handleRebook = async (appt) => {
     if (!user) return;
 
@@ -409,7 +397,6 @@ export default function Schedule() {
     alert("Rebooked for 4 weeks later.");
   };
 
-  // Open pet select modal for a slot
   const openSlot = async (slot) => {
     setModalSlot(slot);
     setPetModalOpen(true);
@@ -418,12 +405,10 @@ export default function Schedule() {
       setLoadingPets(true);
       const { data } = await supabase
         .from("pets")
-        .select(
-          `
-        id, name, tags, client_id,
-        clients ( id, full_name )
-      `
-        )
+        .select(`
+          id, name, tags, client_id,
+          clients ( id, full_name )
+        `)
         .eq("groomer_id", user.id)
         .order("name", { ascending: true });
 
@@ -449,8 +434,6 @@ export default function Schedule() {
     );
   }
 
-  /* ---------------- Filtering (for cards) ---------------- */
-
   const today = new Date();
   const todayStr = toYMD(today);
 
@@ -464,8 +447,6 @@ export default function Schedule() {
       appt.pets?.tags?.some((t) => t.toLowerCase().includes(q))
     );
   });
-
-  /* ---------------- Unpaid Today (for today's date only) ---------------- */
 
   const unpaidToday =
     selectedDate === todayStr
@@ -485,8 +466,6 @@ export default function Schedule() {
     (sum, a) => sum + (a.amount || 0),
     0
   );
-
-  /* ---------------- Per-slot occupancy ---------------- */
 
   const appointmentsCoveringSlot = (slot) => {
     const [sh, sm] = slot.split(":").map(Number);
@@ -508,10 +487,8 @@ export default function Schedule() {
       (sum, a) => sum + (a.slot_weight || 1),
       0
     );
-    return { slot, usedWeight, appts: slotAppts };
+    return { slot, usedWeight };
   });
-
-  /* ---------------- Render ---------------- */
 
   return (
     <main className="px-4 py-6 space-y-4">
@@ -534,7 +511,6 @@ export default function Schedule() {
         </div>
       )}
 
-      {/* DATE & SEARCH BAR */}
       <div className="card mb-4">
         <div className="card-body flex flex-col md:flex-row gap-4">
           <div className="relative overflow-visible z-20">
@@ -544,11 +520,6 @@ export default function Schedule() {
               dateFormat="yyyy-MM-dd"
               className="border p-2 rounded w-full"
               inline={window.innerWidth < 500}
-              onCalendarOpen={() =>
-                document
-                  .getElementById("schedule-date-input")
-                  ?.scrollIntoView({ block: "center", behavior: "smooth" })
-              }
               id="schedule-date-input"
             />
           </div>
@@ -604,7 +575,6 @@ export default function Schedule() {
         </div>
       </div>
 
-      {/* CAPACITY GRID */}
       {workingRange.length > 0 && (
         <div className="card mb-6">
           <div className="card-body">
@@ -615,7 +585,6 @@ export default function Schedule() {
                   gridTemplateColumns: `80px repeat(${capacity}, minmax(0, 1fr))`,
                 }}
               >
-                {/* Header row */}
                 <div className="border-b bg-gray-50 px-2 py-1 font-semibold">
                   Time
                 </div>
@@ -628,32 +597,16 @@ export default function Schedule() {
                   </div>
                 ))}
 
-                {/* Rows */}
                 {slotsWithInfo.map(({ slot, usedWeight }) => {
                   const isBreak = breakSlots.includes(slot);
                   const isFull = usedWeight >= capacity;
-                  let colorClass = "";
-                  if (isBreak) {
-                    colorClass = "bg-gray-100";
-                  } else if (usedWeight === 0) {
-                    colorClass = "";
-                  } else if (usedWeight < capacity) {
-                    colorClass = "bg-green-100";
-                  } else if (usedWeight === capacity) {
-                    colorClass = "bg-red-100";
-                  }
 
                   return (
-                    <>
-                      {/* Time label */}
-                      <div
-                        key={`${slot}-label`}
-                        className="border-t px-2 py-1 text-gray-700 font-medium"
-                      >
+                    <React.Fragment key={slot}>
+                      <div className="border-t px-2 py-1 text-gray-700 font-medium">
                         {slot}
                       </div>
 
-                      {/* Capacity cells */}
                       {Array.from({ length: capacity }).map((_, idx) => {
                         const clickable = !isBreak && !isFull;
                         const baseClasses =
@@ -666,7 +619,7 @@ export default function Schedule() {
                           <div
                             key={`${slot}-c${idx}`}
                             className={`${baseClasses} ${clickClasses} ${
-                              !isBreak && usedWeight > 0 ? colorClass : ""
+                              isBreak ? "bg-gray-100" : ""
                             }`}
                             onClick={() =>
                               clickable ? openSlot(slot) : undefined
@@ -681,14 +634,25 @@ export default function Schedule() {
                             ) : usedWeight === 0 ? (
                               <span className="inline-block w-5 h-5 rounded border border-dashed border-blue-300" />
                             ) : idx < usedWeight ? (
-                              <span className="inline-block w-5 h-5 rounded bg-blue-300" />
+                              <span
+                                className={`
+                                  inline-block w-5 h-5 rounded
+                                  ${
+                                    usedWeight === 1
+                                      ? "bg-green-300"
+                                      : usedWeight < capacity
+                                      ? "bg-orange-300"
+                                      : "bg-red-300"
+                                  }
+                                `}
+                              />
                             ) : (
                               <span className="inline-block w-5 h-5 rounded border border-gray-200" />
                             )}
                           </div>
                         );
                       })}
-                    </>
+                    </React.Fragment>
                   );
                 })}
               </div>
@@ -697,7 +661,6 @@ export default function Schedule() {
         </div>
       )}
 
-      {/* APPOINTMENT CARDS */}
       {filteredAppointments.length === 0 ? (
         <p className="text-gray-600 italic">
           No appointments for this day (or search filter).
@@ -726,7 +689,6 @@ export default function Schedule() {
                 />
 
                 <div className="card-body space-y-2">
-                  {/* DATE + TIME + SIZE ICON */}
                   <div className="flex justify-between items-center">
                     <div>
                       <div className="text-sm text-gray-500">{appt.date}</div>
@@ -741,13 +703,11 @@ export default function Schedule() {
                     </div>
                   </div>
 
-                  {/* PET + SIZE BADGE */}
                   <div className="flex items-center gap-2 text-xl font-bold text-gray-800">
                     {appt.pets?.name}
                     <span className={`chip ${size.bg}`}>{size.label}</span>
                   </div>
 
-                  {/* TAGS */}
                   {appt.pets?.tags?.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {appt.pets.tags.map((tag) =>
@@ -766,7 +726,6 @@ export default function Schedule() {
                     </div>
                   )}
 
-                  {/* CLIENT */}
                   <div className="text-sm text-gray-600 flex flex-wrap gap-3 items-center">
                     <span>{appt.pets?.clients?.full_name}</span>
                     {appt.pets?.clients?.phone && (
@@ -787,7 +746,6 @@ export default function Schedule() {
                     )}
                   </div>
 
-                  {/* SERVICES */}
                   {appt.services?.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {(Array.isArray(appt.services)
@@ -801,7 +759,6 @@ export default function Schedule() {
                     </div>
                   )}
 
-                  {/* AMOUNT */}
                   {typeof appt.amount === "number" && (
                     <div
                       className={`text-sm font-medium ${
@@ -813,14 +770,12 @@ export default function Schedule() {
                     </div>
                   )}
 
-                  {/* NOTES */}
                   {appt.notes && (
                     <div className="text-sm italic text-gray-500">
                       {appt.notes}
                     </div>
                   )}
 
-                  {/* ACTION BUTTONS */}
                   <div className="flex flex-wrap gap-3 pt-2">
                     <button
                       className="btn-secondary"
@@ -874,7 +829,6 @@ export default function Schedule() {
         </div>
       )}
 
-      {/* PET SELECT MODAL */}
       <PetSelectModal
         open={petModalOpen}
         onClose={() => setPetModalOpen(false)}
