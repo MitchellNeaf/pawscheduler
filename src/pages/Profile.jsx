@@ -21,6 +21,7 @@ export default function Profile() {
   const [slug, setSlug] = useState("");
   const [logoUrl, setLogoUrl] = useState(null);
   const [user, setUser] = useState(null);
+  const [maxParallel, setMaxParallel] = useState(1);
 
   const [hours, setHours] = useState({});
   const [breaks, setBreaks] = useState({});
@@ -47,6 +48,8 @@ export default function Profile() {
         setFullName(data.full_name || "");
         setSlug(data.slug || "");
         setLogoUrl(data.logo_url || null);
+        setMaxParallel(data.max_parallel ?? 1);
+
       }
 
       setLoading(false);
@@ -183,8 +186,10 @@ export default function Profile() {
       .update({
         full_name: fullName,
         slug: cleanSlug,
+        max_parallel: maxParallel,
       })
       .eq("id", user.id);
+
 
     setSaving(false);
   };
@@ -289,6 +294,22 @@ export default function Profile() {
       />
 
       <label className="block mt-4 font-medium">Public Booking Slug</label>
+      <label className="block mt-4 font-medium">Max Dogs at Same Time</label>
+      <div className="flex items-center gap-3">
+        <select
+          value={maxParallel}
+          onChange={(e) => setMaxParallel(Number(e.target.value))}
+          className="border rounded p-2 w-32"
+        >
+          {[1,2,3,4,5].map((n) => (
+            <option key={n} value={n}>{n}</option>
+          ))}
+        </select>
+        <span className="text-sm text-gray-600">
+          (Total pets you can groom simultaneously)
+        </span>
+      </div>
+
       <input
         value={slug}
         onChange={(e) =>

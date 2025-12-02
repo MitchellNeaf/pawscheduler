@@ -6,12 +6,15 @@ import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import { sendEmail } from "../utils/sendEmail";
 
-const toYMD = (d) => d.toLocaleDateString("en-CA");
+const toYMD = (d) =>
+  `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(
+    d.getUTCDate()
+  ).padStart(2, "0")}`;
 
 const parseYMD = (str) => {
   if (!str) return null;
   const [y, m, d] = str.split("-").map(Number);
-  return new Date(y, m - 1, d);
+  return new Date(y, m - 1, d); // keep this local
 };
 
 const START_HOUR = 6;
@@ -53,6 +56,7 @@ export default function PetAppointments() {
     date: "",
     time: "",
     duration_min: 15,
+    slot_weight: 1,
     services: [],
     notes: "",
     amount: "",
@@ -64,48 +68,63 @@ export default function PetAppointments() {
 
   const [workingRange, setWorkingRange] = useState([]);
   const [unavailable, setUnavailable] = useState([]);
+  const [slotLoad, setSlotLoad] = useState({});
   const [override, setOverride] = useState(false);
   const [vacationBlocks, setVacationBlocks] = useState([]);
 
   const [vacationDates, setVacationDates] = useState([]);
   const [workingWeekdays, setWorkingWeekdays] = useState([]);
 
-  // Load current user
+  // Load current auth user
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
-  // Load vacation days for date
+  // Load groomer profile (max_parallel + branding)
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      const { data: groomer } = await supabase
+        .from("groomers")
+        .select(
+          "max_parallel, logo_url, business_name, business_phone, business_address"
+        )
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (groomer) {
+        setUser((prev) => ({ ...prev, ...groomer }));
+      }
+    })();
+  }, [user?.id]);
+
+  // Load vacation days for selected date
   const loadVacations = useCallback(
     async (date) => {
       if (!user || !date) return [];
 
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("vacation_days")
         .select("*")
         .eq("groomer_id", user.id)
         .eq("date", date);
 
-      if (error || !data?.length) return [];
+      if (!data?.length) return [];
 
       return data.map((vac) => {
-        const fullDay = !vac.start_time && !vac.end_time;
-        if (fullDay) return { type: "full" };
-
-        const startNorm = vac.start_time ? vac.start_time.slice(0, 5) : null;
-        const endNorm = vac.end_time ? vac.end_time.slice(0, 5) : null;
+        if (!vac.start_time && !vac.end_time) return { type: "full" };
 
         return {
           type: "partial",
-          start: startNorm,
-          end: endNorm,
+          start: vac.start_time ? vac.start_time.slice(0, 5) : null,
+          end: vac.end_time ? vac.end_time.slice(0, 5) : null,
         };
       });
     },
     [user]
   );
 
-  // Load schedule for a given date (working hours, breaks, existing appts, vacation)
+  // Load schedule (hours, breaks, existing appts) for date
   const loadScheduleForDate = useCallback(
     async (selectedDate) => {
       if (!selectedDate || !user) return;
@@ -117,23 +136,27 @@ export default function PetAppointments() {
       if (vacationInfo.some((v) => v.type === "full")) {
         setWorkingRange([]);
         setUnavailable([...TIME_SLOTS]);
+        setSlotLoad({});
         return;
       }
 
       const [y, m, d] = selectedDate.split("-").map(Number);
-      const weekday = new Date(y, m - 1, d).getDay();
+      const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+
+
 
       // Working hours
-      const { data: hours, error: hoursError } = await supabase
+      const { data: hours } = await supabase
         .from("working_hours")
         .select("*")
         .eq("groomer_id", user.id)
         .eq("weekday", weekday)
         .maybeSingle();
 
-      if (hoursError || !hours) {
+      if (!hours) {
         setWorkingRange([]);
         setUnavailable([...TIME_SLOTS]);
+        setSlotLoad({});
         return;
       }
 
@@ -143,7 +166,6 @@ export default function PetAppointments() {
         startIdx === -1 || endIdx === -1
           ? []
           : TIME_SLOTS.slice(startIdx, endIdx + 1);
-
       setWorkingRange(range);
 
       // Breaks
@@ -161,27 +183,32 @@ export default function PetAppointments() {
         TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakBlocked.add(s));
       });
 
-      // Existing appts
+      // Existing appointments → slotLoad
       const { data: appts } = await supabase
         .from("appointments")
-        .select("id, time, duration_min")
+        .select("id, time, duration_min, slot_weight")
         .eq("date", selectedDate)
         .eq("groomer_id", user.id);
 
-      const apptBlocked = new Set();
+      const newSlotLoad = {};
       (appts || []).forEach((a) => {
-        if (a.id === editingId) return; // don't block the slot for the appt we're editing
+        if (a.id === editingId) return; // ignore current editing appt
+
         const t = a.time?.slice(0, 5);
-        const idx = TIME_SLOTS.indexOf(t);
-        if (idx === -1) return;
+        const start = TIME_SLOTS.indexOf(t);
+        if (start === -1) return;
+
         const blocks = Math.ceil((a.duration_min || 15) / 15);
+        const w = a.slot_weight ?? 1;
+
         for (let i = 0; i < blocks; i++) {
-          const slot = TIME_SLOTS[idx + i];
-          if (slot) apptBlocked.add(slot);
+          const slot = TIME_SLOTS[start + i];
+          if (!slot) continue;
+          newSlotLoad[slot] = (newSlotLoad[slot] || 0) + w;
         }
       });
 
-      // Partial vacation
+      // Partial vacations
       const vacationPartial = new Set();
       vacationInfo.forEach((vac) => {
         if (vac.type === "partial") {
@@ -194,45 +221,39 @@ export default function PetAppointments() {
         }
       });
 
-      setUnavailable([
-        ...new Set([...breakBlocked, ...apptBlocked, ...vacationPartial]),
-      ]);
+      setUnavailable([...new Set([...breakBlocked, ...vacationPartial])]);
+      setSlotLoad(newSlotLoad);
     },
     [user, editingId, loadVacations]
   );
 
-  // Calendar meta: vacation dates
+  // Calendar: vacation dates
   useEffect(() => {
     if (!user) return;
-
     (async () => {
       const { data } = await supabase
         .from("vacation_days")
         .select("date")
         .eq("groomer_id", user.id);
-
       if (data) setVacationDates(data.map((v) => v.date));
     })();
   }, [user]);
 
-  // Calendar meta: working weekdays
+  // Calendar: working weekdays
   useEffect(() => {
     if (!user) return;
-
     (async () => {
       const { data } = await supabase
         .from("working_hours")
         .select("weekday")
         .eq("groomer_id", user.id);
-
       if (data) {
-        const days = Array.from(new Set(data.map((h) => h.weekday)));
-        setWorkingWeekdays(days);
+        setWorkingWeekdays([...new Set(data.map((h) => h.weekday))]);
       }
     })();
   }, [user]);
 
-  // Helper to parse services on edit/clone
+  // Helper: parse services from string/array
   const parseServices = (value) => {
     if (Array.isArray(value)) return value;
     if (typeof value === "string" && value.trim()) {
@@ -241,15 +262,16 @@ export default function PetAppointments() {
     return [];
   };
 
-  // Start editing an appointment
+  // Start editing
   const startEdit = (appt) => {
-    const parsedServices = parseServices(appt.services);
+    const parsed = parseServices(appt.services);
 
     setForm({
       date: appt.date,
       time: appt.time?.slice(0, 5) || "",
       duration_min: String(appt.duration_min || 15),
-      services: parsedServices,
+      slot_weight: appt.slot_weight ?? 1,
+      services: parsed,
       notes: appt.notes || "",
       amount: appt.amount || "",
     });
@@ -258,25 +280,29 @@ export default function PetAppointments() {
     setOtherService("");
     setEditingId(appt.id);
     setOverride(false);
+
     if (appt.date) loadScheduleForDate(appt.date);
   };
 
-  // Start cloning an appointment
+  // Start cloning
   const startClone = (appt) => {
-    const parsedServices = parseServices(appt.services);
+    const parsed = parseServices(appt.services);
 
     let newDate = appt.date;
     if (autoShift && appt.date) {
-      const d = new Date(appt.date);
+      const [y, m, day] = appt.date.split("-").map(Number);
+      const d = new Date(y, m - 1, day);
       d.setDate(d.getDate() + 28);
-      newDate = toYMD(d);
+      newDate = toYMD(d);   // <-- FIXED
     }
+
 
     setForm({
       date: newDate,
       time: appt.time?.slice(0, 5) || "",
       duration_min: String(appt.duration_min || 15),
-      services: parsedServices,
+      slot_weight: appt.slot_weight ?? 1,
+      services: parsed,
       notes: appt.notes || "",
       amount: appt.amount || "",
     });
@@ -285,6 +311,7 @@ export default function PetAppointments() {
     setOtherService("");
     setEditingId(null);
     setOverride(false);
+
     if (newDate) loadScheduleForDate(newDate);
   };
 
@@ -292,7 +319,7 @@ export default function PetAppointments() {
   useEffect(() => {
     if (!user || !petId) return;
 
-    const loadData = async () => {
+    const load = async () => {
       const { data: petData } = await supabase
         .from("pets")
         .select("*")
@@ -318,6 +345,14 @@ export default function PetAppointments() {
       setAppointments(apptData || []);
       setLoading(false);
 
+      // Default slot_weight from PET for NEW appointments only
+      if (!editIdFromURL && !cloneIdFromURL) {
+        setForm((prev) => ({
+          ...prev,
+          slot_weight: petData.slot_weight ?? 1,
+        }));
+      }
+
       if (apptData && editIdFromURL) {
         const a = apptData.find((x) => x.id === editIdFromURL);
         if (a) startEdit(a);
@@ -329,23 +364,61 @@ export default function PetAppointments() {
       }
     };
 
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    load();
   }, [user, petId, editIdFromURL, cloneIdFromURL, autoShift]);
 
-  // Auto-select earliest available time if none chosen yet
+  // AUTO-DURATION: based ONLY on services (Option A)
+  useEffect(() => {
+    const s = form.services;
+
+    if (s.length === 1 && s.includes("Nails")) {
+      return setForm((f) => ({ ...f, duration_min: "15" }));
+    }
+
+    if (
+      s.includes("Deshedding") ||
+      s.includes("Tick Treatment") ||
+      s.length >= 5
+    ) {
+      return setForm((f) => ({ ...f, duration_min: "60" }));
+    }
+
+    if (s.includes("Wash") && s.includes("Cut")) {
+      return setForm((f) => ({ ...f, duration_min: "45" }));
+    }
+
+    if (s.includes("Wash") || s.includes("Cut") || s.length >= 2) {
+      return setForm((f) => ({ ...f, duration_min: "30" }));
+    }
+
+    // Default baseline for most dogs
+    return setForm((f) => ({ ...f, duration_min: "45" }));
+  }, [form.services]);
+
+  // AUTO-SELECT earliest usable time
   useEffect(() => {
     if (!form.date || !workingRange.length || !form.duration_min) return;
     if (form.time) return;
 
     const blocks = Math.ceil(Number(form.duration_min) / 15);
+    const cap = user?.max_parallel ?? 1;
+    const weight = Number(form.slot_weight || 1);
 
     const earliest = workingRange.find((slot, idx) => {
       const windowSlots = workingRange.slice(idx, idx + blocks);
       if (windowSlots.length < blocks) return false;
+
+      // hard blocks
       if (!override && windowSlots.some((s) => unavailable.includes(s)))
         return false;
-      return true;
+
+      // capacity check
+      const fits = windowSlots.every((s) => {
+        const existing = slotLoad[s] || 0;
+        return existing + weight <= cap;
+      });
+
+      return fits;
     });
 
     if (earliest) {
@@ -354,14 +427,16 @@ export default function PetAppointments() {
   }, [
     form.date,
     form.duration_min,
-    form.time,        // ✅ add this
+    form.time,
+    form.slot_weight,
     workingRange,
     unavailable,
-    override
+    override,
+    slotLoad,
+    user?.max_parallel,
   ]);
 
-
-  // Form change handler
+  // FORM CHANGE HANDLER
   const handleChange = (e) => {
     const { name, value } = e.target;
 
@@ -384,13 +459,17 @@ export default function PetAppointments() {
       }
     }
 
+    if (name === "slot_weight") {
+      setForm((p) => ({ ...p, slot_weight: Number(value) || 1 }));
+      return;
+    }
+
     setForm((p) => ({ ...p, [name]: value }));
   };
 
-  // Toggle services
+  // TOGGLE SERVICES
   const toggleService = (service) => {
     if (service === "Other") {
-      // just toggle "Other" in the list; input field is separate
       setForm((prev) => {
         const exists = prev.services.includes("Other");
         return {
@@ -412,7 +491,7 @@ export default function PetAppointments() {
     }));
   };
 
-  // Save appointment (add or update)
+  // SAVE (add or update)
   const handleAddOrUpdate = async (e) => {
     e.preventDefault();
     if (!user) return;
@@ -433,6 +512,8 @@ export default function PetAppointments() {
       services: finalServices,
       notes: form.notes,
       duration_min: Number(form.duration_min),
+      slot_weight: Number(form.slot_weight || 1),
+      max_parallel: user?.max_parallel ?? 1,
       amount: form.amount ? parseFloat(form.amount) : null,
       reminder_enabled: reminderEnabled,
     };
@@ -465,72 +546,59 @@ export default function PetAppointments() {
       setAppointments((prev) => [data, ...prev]);
     }
 
-    // --------------------------------------------------
-// --------------------------------------------------
-// 📧 SEND EMAIL REMINDER (manual on save/update)
-// --------------------------------------------------
-if (reminderEnabled && data?.date && data?.time) {
+    // SEND EMAIL CONFIRMATION
+    if (reminderEnabled && data?.date && data?.time) {
+      const { data: petRow } = await supabase
+        .from("pets")
+        .select("client_id, name")
+        .eq("id", petId)
+        .single();
 
-  // 1) get the pet row so we know client_id
-  const { data: petRow } = await supabase
-    .from("pets")
-    .select("client_id, name")
-    .eq("id", petId)
-    .single();
+      if (petRow?.client_id) {
+        const { data: clientRow } = await supabase
+          .from("clients")
+          .select("email")
+          .eq("id", petRow.client_id)
+          .single();
 
-  if (!petRow?.client_id) {
-    console.warn("No client_id found for pet — cannot send email");
-  } else {
+        const clientEmail = clientRow?.email;
 
-    // 2) get client email
-    const { data: clientRow } = await supabase
-      .from("clients")
-      .select("email")
-      .eq("id", petRow.client_id)
-      .single();
-
-    const clientEmail = clientRow?.email;
-
-    if (clientEmail) {
-      await sendEmail({
-        to: clientEmail,
-        subject: "Your Grooming Appointment is Confirmed",
-        template: "confirmation",
-        data: {
-          groomer_id: user.id,
-
-          confirm_url: `https://app.pawscheduler.app/.netlify/functions/confirmAppointment?id=${data.id}`,
-
-          logo_url: user?.logo_url ?? "",
-          business_name: user?.business_name ?? "",
-          business_address: user?.business_address ?? "",
-          business_phone: user?.business_phone ?? "",
-          groomer_email: user?.email ?? "",
-          
-          pet_name: petRow.name,
-          date: data.date,
-          time: data.time?.slice(0, 5),
-          duration_min: data.duration_min,
-          services: Array.isArray(data.services)
-            ? data.services.join(", ")
-            : data.services,
-          price: data.amount ?? "",
-          notes_block: data.notes
-            ? `<tr><td><strong>Notes:</strong> ${data.notes}</td></tr>`
-            : ""
+        if (clientEmail) {
+          await sendEmail({
+            to: clientEmail,
+            subject: "Your Grooming Appointment is Confirmed",
+            template: "confirmation",
+            data: {
+              groomer_id: user.id,
+              confirm_url: `https://app.pawscheduler.app/.netlify/functions/confirmAppointment?id=${data.id}`,
+              logo_url: user?.logo_url ?? "",
+              business_name: user?.business_name ?? "",
+              business_address: user?.business_address ?? "",
+              business_phone: user?.business_phone ?? "",
+              groomer_email: user?.email ?? "",
+              pet_name: petRow.name,
+              date: data.date,
+              time: data.time?.slice(0, 5),
+              duration_min: data.duration_min,
+              services: Array.isArray(data.services)
+                ? data.services.join(", ")
+                : data.services,
+              price: data.amount ?? "",
+              notes_block: data.notes
+                ? `<tr><td><strong>Notes:</strong> ${data.notes}</td></tr>`
+                : "",
+            },
+          });
         }
-      });
-
+      }
     }
-  }
-}
 
-
-
+    // RESET FORM
     setForm({
       date: "",
       time: "",
       duration_min: 15,
+      slot_weight: 1,
       services: [],
       notes: "",
       amount: "",
@@ -542,13 +610,13 @@ if (reminderEnabled && data?.date && data?.time) {
     setVacationBlocks([]);
     setWorkingRange([]);
     setUnavailable([]);
+    setSlotLoad({});
   };
 
-  // Delete
+  // DELETE
   const handleDelete = async (id) => {
     if (!user) return;
-    const ok = window.confirm("Delete this appointment?");
-    if (!ok) return;
+    if (!window.confirm("Delete this appointment?")) return;
 
     await supabase
       .from("appointments")
@@ -559,12 +627,14 @@ if (reminderEnabled && data?.date && data?.time) {
     setAppointments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  // Rebook 4 weeks later
+  // REBOOK 4 weeks later
   const handleRebook = (date, time) => {
     if (!date || !time) return;
-    const d = new Date(`${date}T${time}`);
-    d.setDate(d.getDate() + 28);
-    const newDate = toYMD(d);
+    const [y, m, d] = date.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    dt.setDate(dt.getDate() + 28);
+    const newDate = toYMD(dt);
+
 
     setForm((p) => ({
       ...p,
@@ -582,6 +652,9 @@ if (reminderEnabled && data?.date && data?.time) {
   const isFullVacation =
     vacationBlocks.some((v) => v.type === "full") && form.date;
 
+  const capacity = user?.max_parallel ?? 1;
+  const weight = Number(form.slot_weight || 1);
+
   return (
     <div className="p-6">
       <Link
@@ -590,7 +663,6 @@ if (reminderEnabled && data?.date && data?.time) {
       >
         ← Back to Pets
       </Link>
-
 
       <h1 className="text-xl font-bold mt-2 mb-4">
         Appointments for {pet?.name}
@@ -601,7 +673,16 @@ if (reminderEnabled && data?.date && data?.time) {
         <div className="relative overflow-visible z-50">
           <DatePicker
             id="date-input"
-            selected={form.date ? parseYMD(form.date) : null}
+            selected={
+              form.date
+                ? new Date(
+                    Number(form.date.substring(0,4)),
+                    Number(form.date.substring(5,7)) - 1,
+                    Number(form.date.substring(8,10))
+                  )
+                : null
+            }
+
             onChange={(d) => {
               if (!d) return;
               const value = toYMD(d);
@@ -612,18 +693,13 @@ if (reminderEnabled && data?.date && data?.time) {
             dateFormat="yyyy-MM-dd"
             className="border p-2 w-full rounded"
             placeholderText="Select date"
-
-            /* MOBILE — show full inline calendar */
             inline={window.innerWidth < 500}
-
-            /* ❌ REMOVED popperPlacement and popperModifiers 
-              (these caused: fn is not a function) */
-
-            onCalendarOpen={() => {
-              const el = document.getElementById("date-input");
-              if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
-            }}
-
+            onCalendarOpen={() =>
+              document.getElementById("date-input")?.scrollIntoView({
+                block: "center",
+                behavior: "smooth",
+              })
+            }
             filterDate={(d) => {
               const f = toYMD(d);
               return !vacationDates.includes(f);
@@ -631,7 +707,10 @@ if (reminderEnabled && data?.date && data?.time) {
             dayClassName={(d) => {
               const f = toYMD(d);
               if (vacationDates.includes(f)) return "bg-red-300 text-white";
-              if (workingWeekdays.length && !workingWeekdays.includes(d.getDay()))
+              if (
+                workingWeekdays.length &&
+                !workingWeekdays.includes(d.getDay())
+              )
                 return "bg-gray-200 text-gray-500";
               return "";
             }}
@@ -640,15 +719,16 @@ if (reminderEnabled && data?.date && data?.time) {
               let title = "";
               if (vacationDates.includes(f)) {
                 title = "Groomer is on vacation or partially unavailable";
-              } else if (workingWeekdays.length && !workingWeekdays.includes(date.getDay())) {
+              } else if (
+                workingWeekdays.length &&
+                !workingWeekdays.includes(date.getDay())
+              ) {
                 title = "Closed day — groomer override allowed";
               }
               return <span title={title || undefined}>{day}</span>;
             }}
           />
-
         </div>
-
 
         {/* TIME */}
         <select
@@ -680,12 +760,21 @@ if (reminderEnabled && data?.date && data?.time) {
                 );
                 const windowSlots = workingRange.slice(idx, idx + blocks);
                 if (windowSlots.length < blocks) return false;
+
+                // Hard blocks
                 if (
                   !override &&
                   windowSlots.some((s) => unavailable.includes(s))
                 )
                   return false;
-                return true;
+
+                // Capacity
+                const fits = windowSlots.every((s) => {
+                  const existing = slotLoad[s] || 0;
+                  return existing + weight <= capacity;
+                });
+
+                return fits;
               })
               .map((slot) => (
                 <option key={slot} value={slot}>
@@ -708,6 +797,26 @@ if (reminderEnabled && data?.date && data?.time) {
             </option>
           ))}
         </select>
+
+        {/* SIZE / DIFFICULTY */}
+        <div>
+          <label className="font-medium block mb-1">
+            Dog size / difficulty
+          </label>
+          <select
+            name="slot_weight"
+            value={form.slot_weight}
+            onChange={handleChange}
+            className="border p-2 w-full rounded"
+          >
+            <option value={1}>Small / Medium (1 spot)</option>
+            <option value={2}>Large (2 spots)</option>
+            <option value={3}>Giant / Heavy Coat (3 spots)</option>
+          </select>
+          <p className="text-xs text-gray-500 mt-1">
+            Higher values block more of your capacity during this time.
+          </p>
+        </div>
 
         {/* SERVICES */}
         <div>
@@ -770,7 +879,6 @@ if (reminderEnabled && data?.date && data?.time) {
         <button className="btn btn-primary w-full">
           {editingId ? "Update Appointment" : "Add Appointment"}
         </button>
-
       </form>
 
       {/* APPOINTMENT LIST */}
@@ -826,7 +934,6 @@ if (reminderEnabled && data?.date && data?.time) {
                 >
                   🗑 Delete
                 </button>
-
               </div>
 
               <div className="flex flex-wrap items-center gap-6 mt-2 text-sm">
@@ -843,10 +950,11 @@ if (reminderEnabled && data?.date && data?.time) {
                         .select()
                         .single();
 
-                      if (!data) return;
-                      setAppointments((prev) =>
-                        prev.map((x) => (x.id === appt.id ? data : x))
-                      );
+                      if (data) {
+                        setAppointments((prev) =>
+                          prev.map((x) => (x.id === appt.id ? data : x))
+                        );
+                      }
                     }}
                   />
                   Confirmed
@@ -865,18 +973,18 @@ if (reminderEnabled && data?.date && data?.time) {
                         .select()
                         .single();
 
-                      if (!data) return;
-                      setAppointments((prev) =>
-                        prev.map((x) => (x.id === appt.id ? data : x))
-                      );
+                      if (data) {
+                        setAppointments((prev) =>
+                          prev.map((x) => (x.id === appt.id ? data : x))
+                        );
+                      }
                     }}
                   />
                   No-Show
                 </label>
 
                 <span className="text-xs text-gray-500">
-                  Reminder:{" "}
-                  {appt.reminder_enabled ? "On" : "Off"}
+                  Reminder: {appt.reminder_enabled ? "On" : "Off"}
                 </span>
               </div>
             </li>
