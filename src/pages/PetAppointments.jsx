@@ -11,12 +11,6 @@ const toYMD = (d) =>
     d.getUTCDate()
   ).padStart(2, "0")}`;
 
-const parseYMD = (str) => {
-  if (!str) return null;
-  const [y, m, d] = str.split("-").map(Number);
-  return new Date(y, m - 1, d); // keep this local
-};
-
 const START_HOUR = 6;
 const END_HOUR = 21;
 
@@ -124,7 +118,7 @@ export default function PetAppointments() {
     [user]
   );
 
-  // Load schedule (hours, breaks, existing appts) for date
+  // Load schedule (hours, breaks, existing appts)
   const loadScheduleForDate = useCallback(
     async (selectedDate) => {
       if (!selectedDate || !user) return;
@@ -143,9 +137,6 @@ export default function PetAppointments() {
       const [y, m, d] = selectedDate.split("-").map(Number);
       const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 
-
-
-      // Working hours
       const { data: hours } = await supabase
         .from("working_hours")
         .select("*")
@@ -168,7 +159,6 @@ export default function PetAppointments() {
           : TIME_SLOTS.slice(startIdx, endIdx + 1);
       setWorkingRange(range);
 
-      // Breaks
       const { data: breaks } = await supabase
         .from("working_breaks")
         .select("*")
@@ -183,7 +173,6 @@ export default function PetAppointments() {
         TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakBlocked.add(s));
       });
 
-      // Existing appointments → slotLoad
       const { data: appts } = await supabase
         .from("appointments")
         .select("id, time, duration_min, slot_weight")
@@ -192,7 +181,7 @@ export default function PetAppointments() {
 
       const newSlotLoad = {};
       (appts || []).forEach((a) => {
-        if (a.id === editingId) return; // ignore current editing appt
+        if (a.id === editingId) return;
 
         const t = a.time?.slice(0, 5);
         const start = TIME_SLOTS.indexOf(t);
@@ -208,7 +197,7 @@ export default function PetAppointments() {
         }
       });
 
-      // Partial vacations
+      // partial vacations
       const vacationPartial = new Set();
       vacationInfo.forEach((vac) => {
         if (vac.type === "partial") {
@@ -253,7 +242,7 @@ export default function PetAppointments() {
     })();
   }, [user]);
 
-  // Helper: parse services from string/array
+  // Helper
   const parseServices = (value) => {
     if (Array.isArray(value)) return value;
     if (typeof value === "string" && value.trim()) {
@@ -262,7 +251,6 @@ export default function PetAppointments() {
     return [];
   };
 
-  // Start editing
   const startEdit = (appt) => {
     const parsed = parseServices(appt.services);
 
@@ -284,7 +272,6 @@ export default function PetAppointments() {
     if (appt.date) loadScheduleForDate(appt.date);
   };
 
-  // Start cloning
   const startClone = (appt) => {
     const parsed = parseServices(appt.services);
 
@@ -293,9 +280,8 @@ export default function PetAppointments() {
       const [y, m, day] = appt.date.split("-").map(Number);
       const d = new Date(y, m - 1, day);
       d.setDate(d.getDate() + 28);
-      newDate = toYMD(d);   // <-- FIXED
+      newDate = toYMD(d);
     }
-
 
     setForm({
       date: newDate,
@@ -315,7 +301,8 @@ export default function PetAppointments() {
     if (newDate) loadScheduleForDate(newDate);
   };
 
-  // Load pet + appointments
+  // FIXED ERRORING EFFECT
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!user || !petId) return;
 
@@ -345,7 +332,6 @@ export default function PetAppointments() {
       setAppointments(apptData || []);
       setLoading(false);
 
-      // Default slot_weight from PET for NEW appointments only
       if (!editIdFromURL && !cloneIdFromURL) {
         setForm((prev) => ({
           ...prev,
@@ -367,7 +353,7 @@ export default function PetAppointments() {
     load();
   }, [user, petId, editIdFromURL, cloneIdFromURL, autoShift]);
 
-  // AUTO-DURATION: based ONLY on services (Option A)
+  // AUTO-DURATION
   useEffect(() => {
     const s = form.services;
 
@@ -391,11 +377,10 @@ export default function PetAppointments() {
       return setForm((f) => ({ ...f, duration_min: "30" }));
     }
 
-    // Default baseline for most dogs
     return setForm((f) => ({ ...f, duration_min: "45" }));
   }, [form.services]);
 
-  // AUTO-SELECT earliest usable time
+  // AUTO-SELECT earliest usable slot
   useEffect(() => {
     if (!form.date || !workingRange.length || !form.duration_min) return;
     if (form.time) return;
@@ -408,11 +393,9 @@ export default function PetAppointments() {
       const windowSlots = workingRange.slice(idx, idx + blocks);
       if (windowSlots.length < blocks) return false;
 
-      // hard blocks
       if (!override && windowSlots.some((s) => unavailable.includes(s)))
         return false;
 
-      // capacity check
       const fits = windowSlots.every((s) => {
         const existing = slotLoad[s] || 0;
         return existing + weight <= cap;
@@ -467,7 +450,7 @@ export default function PetAppointments() {
     setForm((p) => ({ ...p, [name]: value }));
   };
 
-  // TOGGLE SERVICES
+  // TOGGLE SERVICE
   const toggleService = (service) => {
     if (service === "Other") {
       setForm((prev) => {
@@ -491,7 +474,7 @@ export default function PetAppointments() {
     }));
   };
 
-  // SAVE (add or update)
+  // SAVE
   const handleAddOrUpdate = async (e) => {
     e.preventDefault();
     if (!user) return;
@@ -546,7 +529,7 @@ export default function PetAppointments() {
       setAppointments((prev) => [data, ...prev]);
     }
 
-    // SEND EMAIL CONFIRMATION
+    // EMAIL CONFIRMATION
     if (reminderEnabled && data?.date && data?.time) {
       const { data: petRow } = await supabase
         .from("pets")
@@ -593,7 +576,6 @@ export default function PetAppointments() {
       }
     }
 
-    // RESET FORM
     setForm({
       date: "",
       time: "",
@@ -627,14 +609,13 @@ export default function PetAppointments() {
     setAppointments((prev) => prev.filter((a) => a.id !== id));
   };
 
-  // REBOOK 4 weeks later
+  // REBOOK
   const handleRebook = (date, time) => {
     if (!date || !time) return;
     const [y, m, d] = date.split("-").map(Number);
     const dt = new Date(y, m - 1, d);
     dt.setDate(dt.getDate() + 28);
     const newDate = toYMD(dt);
-
 
     setForm((p) => ({
       ...p,
@@ -676,13 +657,12 @@ export default function PetAppointments() {
             selected={
               form.date
                 ? new Date(
-                    Number(form.date.substring(0,4)),
-                    Number(form.date.substring(5,7)) - 1,
-                    Number(form.date.substring(8,10))
+                    Number(form.date.substring(0, 4)),
+                    Number(form.date.substring(5, 7)) - 1,
+                    Number(form.date.substring(8, 10))
                   )
                 : null
             }
-
             onChange={(d) => {
               if (!d) return;
               const value = toYMD(d);
@@ -706,25 +686,36 @@ export default function PetAppointments() {
             }}
             dayClassName={(d) => {
               const f = toYMD(d);
+              const weekday = new Date(
+                Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
+              ).getUTCDay();
+
               if (vacationDates.includes(f)) return "bg-red-300 text-white";
-              if (
-                workingWeekdays.length &&
-                !workingWeekdays.includes(d.getDay())
-              )
+              if (workingWeekdays.length && !workingWeekdays.includes(weekday))
                 return "bg-gray-200 text-gray-500";
+
               return "";
             }}
             renderDayContents={(day, date) => {
               const f = toYMD(date);
+              const weekday = new Date(
+                Date.UTC(
+                  date.getFullYear(),
+                  date.getMonth(),
+                  date.getDate()
+                )
+              ).getUTCDay();
+
               let title = "";
               if (vacationDates.includes(f)) {
                 title = "Groomer is on vacation or partially unavailable";
               } else if (
                 workingWeekdays.length &&
-                !workingWeekdays.includes(date.getDay())
+                !workingWeekdays.includes(weekday)
               ) {
                 title = "Closed day — groomer override allowed";
               }
+
               return <span title={title || undefined}>{day}</span>;
             }}
           />
@@ -758,17 +749,18 @@ export default function PetAppointments() {
                 const blocks = Math.ceil(
                   Number(form.duration_min || 15) / 15
                 );
-                const windowSlots = workingRange.slice(idx, idx + blocks);
+                const windowSlots = workingRange.slice(
+                  idx,
+                  idx + blocks
+                );
                 if (windowSlots.length < blocks) return false;
 
-                // Hard blocks
                 if (
                   !override &&
                   windowSlots.some((s) => unavailable.includes(s))
                 )
                   return false;
 
-                // Capacity
                 const fits = windowSlots.every((s) => {
                   const existing = slotLoad[s] || 0;
                   return existing + weight <= capacity;
@@ -798,7 +790,7 @@ export default function PetAppointments() {
           ))}
         </select>
 
-        {/* SIZE / DIFFICULTY */}
+        {/* SIZE */}
         <div>
           <label className="font-medium block mb-1">
             Dog size / difficulty
@@ -866,7 +858,7 @@ export default function PetAppointments() {
           className="border p-2 w-full rounded"
         />
 
-        {/* REMINDER TOGGLE */}
+        {/* REMINDER */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"

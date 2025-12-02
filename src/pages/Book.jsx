@@ -84,7 +84,6 @@ export default function BookPage() {
   const [workingRange, setWorkingRange] = useState([]);
   const [vacationBlocks, setVacationBlocks] = useState([]);
 
-  const [, setUpcomingAppts] = useState([]);
 
   const [vacationDates, setVacationDates] = useState([]);
   const [workingWeekdays, setWorkingWeekdays] = useState([]);
