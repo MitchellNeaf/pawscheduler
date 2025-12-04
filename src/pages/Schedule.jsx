@@ -5,7 +5,6 @@ import { Link } from "react-router-dom";
 import Loader from "../components/Loader";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
-import { sendEmail } from "../utils/sendEmail";
 
 const toYMD = (d) => {
   const year = d.getFullYear();
