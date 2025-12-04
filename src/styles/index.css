@@ -164,3 +164,49 @@
   background: #fecaca;  /* red-200 */
   color: #b91c1c;        /* red-700 */
 }
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* ======================================
+   SCHEDULE OVERRIDES — ALWAYS WIN
+====================================== */
+@layer utilities {
+  .schedule-card {
+    @apply shadow-md border border-gray-200 hover:shadow-lg;
+  }
+
+  .schedule-header {
+    @apply bg-gray-100 text-gray-700 font-semibold px-3 py-2 shadow-sm;
+  }
+
+  .schedule-legend .chip {
+    @apply mb-1;
+  }
+
+  .schedule-grid-header {
+    @apply bg-gray-100 text-gray-700 px-3 py-2 shadow-sm;
+  }
+
+  .schedule-past {
+    @apply opacity-60;
+  }
+
+  .schedule-active {
+    @apply shadow-lg border-emerald-200;
+  }
+}
+
+/* ======================================
+   SEARCH HIGHLIGHT (SCHEDULE + LIST)
+====================================== */
+@layer utilities {
+  .search-match {
+    @apply ring-2 ring-emerald-400 ring-offset-2 ring-offset-white scale-[1.02] shadow-lg;
+  }
+
+  .search-dim {
+    @apply opacity-40;
+  }
+}

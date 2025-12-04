@@ -23,10 +23,10 @@ import Book from "./pages/Book";
 import Revenue from "./pages/Revenue";
 import Profile from "./pages/Profile";
 import Upgrade from "./pages/Upgrade";
+import Help from "./pages/Help";
 
 // =============================
 // 🔐 FIXED PROTECTED ROUTE
-// (This does NOT wrap /auth, /signup, /upgrade, /onboarding)
 // =============================
 function ProtectedRoute({ children }) {
   const navigate = useNavigate();
@@ -46,14 +46,12 @@ function ProtectedRoute({ children }) {
         return;
       }
 
-      // Load groomer row
       const { data: groomer } = await supabase
         .from("groomers")
         .select("*")
         .eq("id", currentUser.id)
         .maybeSingle();
 
-      // No groomer row → onboarding
       if (!groomer) {
         if (window.location.pathname !== "/onboarding") {
           navigate("/onboarding");
@@ -62,13 +60,11 @@ function ProtectedRoute({ children }) {
         return;
       }
 
-      // Trial logic
       const now = new Date();
       const trialEnd = groomer.trial_end_date
         ? new Date(groomer.trial_end_date)
         : null;
 
-      // Active trial
       if (
         groomer.subscription_status === "trial" &&
         trialEnd &&
@@ -82,7 +78,6 @@ function ProtectedRoute({ children }) {
         return;
       }
 
-      // Expired → update & redirect
       if (
         groomer.subscription_status === "trial" &&
         trialEnd &&
@@ -98,14 +93,12 @@ function ProtectedRoute({ children }) {
         return;
       }
 
-      // Already expired
       if (groomer.subscription_status === "expired") {
         navigate("/upgrade");
         setLoading(false);
         return;
       }
 
-      // Paid
       setLoading(false);
     };
 
@@ -133,7 +126,7 @@ function ProtectedRoute({ children }) {
 }
 
 // =============================
-// 🧭 NAVIGATION SHELL
+// 🧭 NAVIGATION SHELL (UPDATED)
 // =============================
 function AppShell() {
   const location = useLocation();
@@ -154,20 +147,49 @@ function AppShell() {
     <>
       {!hideNav && (
         <nav className="bg-white shadow-md px-4 py-2 mb-4 flex justify-between items-center">
-          <div className="flex gap-4 text-sm font-medium text-gray-700">
-            <Link to="/" className="hover:text-emerald-600">Clients</Link>
+
+          {/* DESKTOP NAV */}
+          <div className="hidden sm:flex gap-4 text-sm font-medium text-gray-700">
             <Link to="/schedule" className="hover:text-emerald-600">Schedule</Link>
+            <Link to="/" className="hover:text-emerald-600">Clients</Link>
             <Link to="/unpaid" className="hover:text-emerald-600">Unpaid</Link>
             <Link to="/revenue" className="hover:text-emerald-600">Revenue</Link>
             <Link to="/profile" className="hover:text-emerald-600">Profile</Link>
+            <Link to="/help" className="hover:text-emerald-600">Help</Link>
           </div>
 
+          {/* DESKTOP LOGOUT */}
           <button
             onClick={handleLogout}
-            className="text-xs text-gray-500 hover:text-red-600"
+            className="hidden sm:block text-xs text-gray-500 hover:text-red-600"
           >
             Logout
           </button>
+
+          {/* MOBILE DROPDOWN MENU */}
+          <div className="sm:hidden relative">
+            <details className="relative">
+              <summary className="cursor-pointer text-gray-700 px-2 py-1 border rounded hover:bg-gray-100">
+                Menu
+              </summary>
+
+              <div className="absolute right-0 mt-2 w-44 bg-white shadow-lg border rounded-md p-2 z-50 flex flex-col gap-2 text-sm">
+                <Link to="/schedule" className="hover:text-emerald-600">Schedule</Link>
+                <Link to="/" className="hover:text-emerald-600">Clients</Link>
+                <Link to="/unpaid" className="hover:text-emerald-600">Unpaid</Link>
+                <Link to="/revenue" className="hover:text-emerald-600">Revenue</Link>
+                <Link to="/profile" className="hover:text-emerald-600">Profile</Link>
+                <Link to="/help" className="hover:text-emerald-600">Help</Link>
+
+                <button
+                  onClick={handleLogout}
+                  className="text-xs text-gray-500 hover:text-red-600 text-left"
+                >
+                  Logout
+                </button>
+              </div>
+            </details>
+          </div>
         </nav>
       )}
 
@@ -179,6 +201,7 @@ function AppShell() {
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/book/:slug" element={<Book />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
 
         {/* PROTECTED ROUTES */}
         <Route path="/" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
