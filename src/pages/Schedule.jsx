@@ -1,7 +1,7 @@
 // src/pages/Schedule.jsx
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabase";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import Loader from "../components/Loader";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -733,7 +733,6 @@ export default function Schedule() {
   const [rebookModalOpen, setRebookModalOpen] = useState(false);
   const [rebookAppt, setRebookAppt] = useState(null);
 
-  const navigate = useNavigate();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
