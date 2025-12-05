@@ -35,101 +35,164 @@ export default function Help() {
       {/* MAIN CONTENT */}
       <main className="flex-1 overflow-y-auto p-8 space-y-10">
         <h1 className="text-2xl font-bold text-gray-800 mb-6">
-          PawScheduler Help
+          PawScheduler Help & Setup Guide
         </h1>
 
-        {/* SECTION TEMPLATE */}
+        {/* PROFILE */}
         <Section id="profile" title="Profile Setup">
-          <p>Your profile controls your business info and branding.</p>
+          <p>Your profile controls your business identity and how your clients see you.</p>
           <ul>
-            <li>Add business name, phone, email, and location.</li>
-            <li>Upload a logo to brand your booking page & emails.</li>
             <li>
-              Set your time zone so reminders and appointments show correctly.
+              <strong>Business Info:</strong> Add your name, business name, phone, and email.  
+              This appears in confirmations, receipts, and reminders.
+            </li>
+            <li>
+              <strong>Logo Upload:</strong> Your logo appears on your booking page and all automated emails.
+            </li>
+            <li>
+              <strong>Time Zone:</strong> Critical for correct appointment times and reminder emails.
+            </li>
+            <li>
+              <strong>Pro Tip:</strong> Add a friendly greeting or instruction in your business description.  
+              Example: “Please arrive 5 minutes early and ensure your pet has gone potty.”
             </li>
           </ul>
         </Section>
 
+        {/* WORKING HOURS */}
         <Section id="schedule" title="Working Hours">
           <ul>
-            <li>Choose which days you work and your grooming hours.</li>
             <li>
-              Available appointment times on the booking page follow this
-              schedule.
+              Set which days of the week you groom and the hours you’re available.
             </li>
-            <li>Update anytime — changes apply immediately.</li>
+            <li>
+              Appointment slots on your booking link adjust instantly based on these hours.
+            </li>
+            <li>
+              <strong>Breaks:</strong> Add mid-day breaks (e.g., lunch) to prevent clients from scheduling over them.
+            </li>
+            <li>
+              <strong>Pro Tip:</strong> Many groomers add a buffer (15–30 minutes) at the start or end of their day to reduce stress.
+            </li>
+            <li>
+              <strong>Common Mistake:</strong> Forgetting to adjust hours during holiday seasons — update anytime.
+            </li>
           </ul>
         </Section>
 
+        {/* VACATION */}
         <Section id="vacation" title="Vacation & Closed Days">
           <ul>
-            <li>Add vacation days or days you’re fully unavailable.</li>
-            <li>These dates disappear from the public booking calendar.</li>
-            <li>Edit or remove days with one click.</li>
+            <li>
+              Add dates where you’re completely unavailable — these vanish from the client booking calendar.
+            </li>
+            <li>
+              Perfect for: vacations, vet appointments, family events, or days you’re overbooked.
+            </li>
+            <li>
+              Delete or edit blocked days at any time.
+            </li>
+            <li>
+              <strong>Pro Tip:</strong> Block “prep days” after holidays or before shows when grooming demand spikes.
+            </li>
           </ul>
         </Section>
 
+        {/* SLUG */}
         <Section id="slug" title="Your Booking Link (Slug)">
           <p>
-            Your <strong>slug</strong> is the unique URL clients use to book
-            themselves — no login or account required.
+            Your <strong>slug</strong> is your personalized booking link — your clients use it to book themselves.
           </p>
           <ul>
             <li>
-              If your slug is <code>sally</code>, your link is{" "}
+              Example: If your slug is <code>sally</code> →  
               <code>https://app.pawscheduler.app/book/sally</code>.
             </li>
-            <li>Send this link in text messages, emails, or social media.</li>
             <li>
-              Clients fill out a short intake form and choose an available time.
+              No client account required — they simply click and book.
+            </li>
+            <li>
+              Share your link in your Instagram bio, text messages, Google Business page, or printed signs.
+            </li>
+            <li>
+              <strong>Pro Tip:</strong> Keep your slug short and memorable — like your business name.
             </li>
           </ul>
         </Section>
 
+        {/* DOG SIZES */}
         <Section id="dog-sizing" title="Dog Sizes & Capacity">
           <ul>
+            <li>You can assign each pet a size: Small, Medium, Large, XL, or custom.</li>
             <li>
-              Each pet can be assigned a size (Small, Medium, Large, XL, etc.).
+              PawScheduler uses <strong>capacity units</strong> to prevent overbooking.
             </li>
             <li>
-              Your <strong>daily capacity</strong> determines how many total
-              “size units” you can handle in the same time slot.
+              Example setup:
+              <ul className="list-disc ml-6 mt-1">
+                <li>Small = 1 unit</li>
+                <li>Medium = 1 units</li>
+                <li>Large = 2 units</li>
+                <li>XL = 3 units</li>
+              </ul>
             </li>
             <li>
-              Example: If you allow 3 units, one big dog = 2 units, one small =
-              1 unit → system prevents overbooking.
+              If your daily capacity is 3 units:  
+              – One XL dog fills your whole slot  
+              – One large + one small is allowed  
+              – Three small dogs also fits
             </li>
-            <li>Perfect for booking multiple dogs at once safely.</li>
+            <li>
+              <strong>Pro Tip:</strong> Perfect for households with multiple dogs — the system intelligently checks capacity.
+            </li>
           </ul>
         </Section>
 
+        {/* SCHEDULING */}
         <Section id="scheduling" title="Scheduling Clients">
           <ul>
-            <li>Create appointments manually from Clients, Pets, or Schedule.</li>
-            <li>Select pet, services, start time, and duration.</li>
             <li>
-              Quick-rebook button lets you instantly schedule the next visit.
+              Create appointments from: <strong>Clients</strong>, <strong>Pets</strong>, or the <strong>Schedule</strong> page.
             </li>
             <li>
-              Schedule page includes client contact shortcuts + appointment
-              status.
+              Set: pet, services, start time, duration, and internal notes.
+            </li>
+            <li>
+              <strong>Quick Rebook:</strong> One tap to schedule their next appointment (4–8 weeks recommended).
+            </li>
+            <li>
+              Schedule page includes:
+              <ul className="list-disc ml-6 mt-1">
+                <li>Tap to call or text the client</li>
+                <li>Appointment status indicators</li>
+                <li>Search bar for fast lookup</li>
+              </ul>
+            </li>
+            <li>
+              <strong>Pro Tip:</strong> Add behavior tags (“Bites”, “Anxious”, “Matting Risk”) to trigger Smart Alerts during rebooking.
             </li>
           </ul>
         </Section>
 
+        {/* CONFIRMATIONS */}
         <Section id="confirmation" title="Confirmations & No-Shows">
           <ul>
             <li>
-              You can manually mark an appointment as{" "}
-              <strong>Confirmed</strong>.
+              Toggle an appointment as <strong>Confirmed</strong> manually or let clients confirm through email reminders.
             </li>
             <li>
-              If email reminders are enabled, clients receive a confirmation
-              link — clicking it automatically updates the appointment.
+              When email reminders are enabled, clients receive:
+              <ul className="list-disc ml-6 mt-1">
+                <li>A confirmation link</li>
+                <li>Your business info</li>
+                <li>Appointment time/details</li>
+              </ul>
             </li>
             <li>
-              Marking an appointment as <strong>No-Show</strong> excludes it
-              from unpaid totals and helps you track reliability.
+              Marking an appointment as <strong>No-Show</strong> removes it from unpaid totals and helps track client reliability.
+            </li>
+            <li>
+              <strong>Best Practice:</strong> After two no-shows, many groomers require deposits — use the notes field to track policies.
             </li>
           </ul>
         </Section>
@@ -146,9 +209,7 @@ function Section({ id, title, children }) {
       className="scroll-mt-24 bg-white p-6 rounded-lg shadow-sm border"
     >
       <h2 className="text-xl font-semibold text-gray-800 mb-3">{title}</h2>
-      <div className="text-sm text-gray-700 space-y-2">
-        {children}
-      </div>
+      <div className="text-sm text-gray-700 space-y-2">{children}</div>
     </section>
   );
 }

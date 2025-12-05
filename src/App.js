@@ -26,6 +26,16 @@ import Profile from "./pages/Profile";
 import Upgrade from "./pages/Upgrade";
 import Help from "./pages/Help";
 
+// Legal pages
+import Terms from "./pages/legal/Terms";
+import Privacy from "./pages/legal/Privacy";
+import Refund from "./pages/legal/Refund";
+import Cookies from "./pages/legal/Cookies";
+import DPA from "./pages/legal/DPA";
+import Disclaimer from "./pages/legal/Disclaimer";
+import AUP from "./pages/legal/AUP";
+import Retention from "./pages/legal/Retention";
+
 // =============================
 // 🔐 FIXED PROTECTED ROUTE
 // =============================
@@ -115,11 +125,18 @@ function AppShell() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
+  // Hide nav + footer on public pages
   const hideNav =
     location.pathname.startsWith("/book/") ||
     location.pathname === "/auth" ||
     location.pathname === "/signup" ||
     location.pathname === "/upgrade" ||
+    location.pathname === "/onboarding";
+
+  const hideFooter =
+    location.pathname.startsWith("/book/") ||
+    location.pathname === "/auth" ||
+    location.pathname === "/signup" ||
     location.pathname === "/onboarding";
 
   const handleLogout = async () => {
@@ -129,30 +146,24 @@ function AppShell() {
 
   return (
     <>
+      {/* NAVIGATION BAR */}
       {!hideNav && (
         <nav className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 relative z-[9999]">
-
-          {/* TOP BAR */}
           <div className="flex items-center justify-between">
-
-            {/* Logo / Title */}
             <div className="text-2xl font-semibold tracking-tight text-gray-900">
               <span className="text-emerald-600">Paw</span>Scheduler
             </div>
 
-            {/* Mobile Menu Button */}
             <button
               onClick={() => setOpen(!open)}
               className="sm:hidden p-2 rounded-lg border border-gray-300
                          shadow-sm hover:bg-gray-100 transition"
             >
-              {/* Hamburger icon */}
               <div className="w-6 h-[2px] bg-gray-700 mb-1"></div>
               <div className="w-6 h-[2px] bg-gray-700 mb-1"></div>
               <div className="w-6 h-[2px] bg-gray-700"></div>
             </button>
 
-            {/* Desktop Menu */}
             <div className="hidden sm:flex items-center gap-6 text-sm font-medium">
               <Link to="/schedule" className="hover:text-emerald-600">Schedule</Link>
               <Link to="/" className="hover:text-emerald-600">Clients</Link>
@@ -170,7 +181,6 @@ function AppShell() {
             </div>
           </div>
 
-          {/* MOBILE DROPDOWN MENU */}
           {open && (
             <div
               className="sm:hidden mt-3 bg-white border border-gray-200 rounded-xl shadow-lg
@@ -208,15 +218,25 @@ function AppShell() {
 
       {/* ROUTES */}
       <Routes>
+        {/* Public legal pages */}
+        <Route path="/terms" element={<Terms />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/refund" element={<Refund />} />
+        <Route path="/cookies" element={<Cookies />} />
+        <Route path="/dpa" element={<DPA />} />
+        <Route path="/disclaimer" element={<Disclaimer />} />
+        <Route path="/aup" element={<AUP />} />
+        <Route path="/retention" element={<Retention />} />
+
+        {/* Public auth pages */}
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/upgrade" element={<Upgrade />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/book/:slug" element={<Book />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
 
-        {/* PROTECTED ROUTES */}
+        {/* Protected pages */}
         <Route path="/" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
         <Route path="/clients/:clientId" element={<ProtectedRoute><ClientPets /></ProtectedRoute>} />
         <Route path="/pets/:petId/appointments" element={<ProtectedRoute><PetAppointments /></ProtectedRoute>} />
@@ -224,7 +244,25 @@ function AppShell() {
         <Route path="/unpaid" element={<ProtectedRoute><UnpaidAppointments /></ProtectedRoute>} />
         <Route path="/revenue" element={<ProtectedRoute><Revenue /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+        <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
       </Routes>
+
+      {/* FOOTER */}
+      {!hideFooter && (
+        <footer className="text-center text-xs text-gray-500 py-6 mt-10">
+          © {new Date().getFullYear()} PawScheduler — All rights reserved.
+          <div className="mt-2 flex justify-center flex-wrap gap-4">
+            <a href="/terms">Terms</a>
+            <a href="/privacy">Privacy</a>
+            <a href="/refund">Refund Policy</a>
+            <a href="/cookies">Cookies</a>
+            <a href="/dpa">DPA</a>
+            <a href="/disclaimer">Disclaimer</a>
+            <a href="/aup">Acceptable Use</a>
+            <a href="/retention">Data Retention</a>
+          </div>
+        </footer>
+      )}
     </>
   );
 }
