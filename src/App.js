@@ -126,7 +126,7 @@ function ProtectedRoute({ children }) {
 }
 
 // =============================
-// 🧭 NAVIGATION SHELL (UPDATED)
+// 🧭 NAVIGATION SHELL — FIXED VERSION
 // =============================
 function AppShell() {
   const location = useLocation();
@@ -146,8 +146,10 @@ function AppShell() {
   return (
     <>
       {!hideNav && (
-        <nav className="bg-white shadow-md px-4 py-2 mb-4 flex justify-between items-center">
-
+        <nav
+          className="bg-white shadow-md px-4 py-2 mb-4 flex justify-between items-center
+                     relative z-[100] overflow-visible"
+        >
           {/* DESKTOP NAV */}
           <div className="hidden sm:flex gap-4 text-sm font-medium text-gray-700">
             <Link to="/schedule" className="hover:text-emerald-600">Schedule</Link>
@@ -166,14 +168,18 @@ function AppShell() {
             Logout
           </button>
 
-          {/* MOBILE DROPDOWN MENU */}
-          <div className="sm:hidden relative">
-            <details className="relative">
-              <summary className="cursor-pointer text-gray-700 px-2 py-1 border rounded hover:bg-gray-100">
+          {/* MOBILE MENU — FULLY FIXED */}
+          <div className="sm:hidden relative z-[200]">
+            <details className="relative z-[300]">
+              <summary className="cursor-pointer text-gray-700 px-3 py-1 border rounded 
+                                  hover:bg-gray-100 select-none">
                 Menu
               </summary>
 
-              <div className="absolute right-0 mt-2 w-44 bg-white shadow-lg border rounded-md p-2 z-50 flex flex-col gap-2 text-sm">
+              <div
+                className="absolute right-0 mt-2 w-44 bg-white shadow-xl border rounded-md p-3
+                           flex flex-col gap-3 text-sm z-[9999] overflow-visible"
+              >
                 <Link to="/schedule" className="hover:text-emerald-600">Schedule</Link>
                 <Link to="/" className="hover:text-emerald-600">Clients</Link>
                 <Link to="/unpaid" className="hover:text-emerald-600">Unpaid</Link>
@@ -201,6 +207,7 @@ function AppShell() {
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/book/:slug" element={<Book />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+       
         <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
 
         {/* PROTECTED ROUTES */}
