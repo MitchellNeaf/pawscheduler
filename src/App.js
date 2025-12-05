@@ -10,6 +10,7 @@ import {
 } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
+
 import ResetPassword from "./pages/ResetPassword";
 import Signup from "./pages/Signup";
 import AuthPage from "./pages/AuthPage";
@@ -30,7 +31,6 @@ import Help from "./pages/Help";
 // =============================
 function ProtectedRoute({ children }) {
   const navigate = useNavigate();
-
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showBanner, setShowBanner] = useState(false);
@@ -39,8 +39,8 @@ function ProtectedRoute({ children }) {
     const check = async () => {
       const { data } = await supabase.auth.getSession();
       const currentUser = data.session?.user || null;
-
       setUser(currentUser);
+
       if (!currentUser) {
         setLoading(false);
         return;
@@ -65,20 +65,10 @@ function ProtectedRoute({ children }) {
         ? new Date(groomer.trial_end_date)
         : null;
 
-      if (
-        groomer.subscription_status === "trial" &&
-        trialEnd &&
-        now <= trialEnd
-      ) {
+      if (groomer.subscription_status === "trial" && trialEnd && now <= trialEnd) {
         const daysLeft = Math.ceil((trialEnd - now) / 86400000);
-        if (daysLeft <= 5 && daysLeft >= 0) {
-          setShowBanner(true);
-        }
-        setLoading(false);
-        return;
-      }
-
-      if (
+        if (daysLeft <= 5 && daysLeft >= 0) setShowBanner(true);
+      } else if (
         groomer.subscription_status === "trial" &&
         trialEnd &&
         now > trialEnd
@@ -87,16 +77,9 @@ function ProtectedRoute({ children }) {
           .from("groomers")
           .update({ subscription_status: "expired" })
           .eq("id", currentUser.id);
-
         navigate("/upgrade");
-        setLoading(false);
-        return;
-      }
-
-      if (groomer.subscription_status === "expired") {
+      } else if (groomer.subscription_status === "expired") {
         navigate("/upgrade");
-        setLoading(false);
-        return;
       }
 
       setLoading(false);
@@ -126,10 +109,11 @@ function ProtectedRoute({ children }) {
 }
 
 // =============================
-// 🧭 NAVIGATION SHELL — FIXED VERSION
+// 🧭 PROFESSIONAL NAVIGATION BAR
 // =============================
 function AppShell() {
   const location = useLocation();
+  const [open, setOpen] = useState(false);
 
   const hideNav =
     location.pathname.startsWith("/book/") ||
@@ -146,68 +130,90 @@ function AppShell() {
   return (
     <>
       {!hideNav && (
-        <nav
-          className="bg-white shadow-md px-4 py-2 mb-4 flex justify-between items-center
-                     relative z-[100] overflow-visible"
-        >
-          {/* DESKTOP NAV */}
-          <div className="hidden sm:flex gap-4 text-sm font-medium text-gray-700">
-            <Link to="/schedule" className="hover:text-emerald-600">Schedule</Link>
-            <Link to="/" className="hover:text-emerald-600">Clients</Link>
-            <Link to="/unpaid" className="hover:text-emerald-600">Unpaid</Link>
-            <Link to="/revenue" className="hover:text-emerald-600">Revenue</Link>
-            <Link to="/profile" className="hover:text-emerald-600">Profile</Link>
-            <Link to="/help" className="hover:text-emerald-600">Help</Link>
-          </div>
+        <nav className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 relative z-[9999]">
 
-          {/* DESKTOP LOGOUT */}
-          <button
-            onClick={handleLogout}
-            className="hidden sm:block text-xs text-gray-500 hover:text-red-600"
-          >
-            Logout
-          </button>
+          {/* TOP BAR */}
+          <div className="flex items-center justify-between">
 
-          {/* MOBILE MENU — FULLY FIXED */}
-          <div className="sm:hidden relative z-[200]">
-            <details className="relative z-[300]">
-              <summary className="cursor-pointer text-gray-700 px-3 py-1 border rounded 
-                                  hover:bg-gray-100 select-none">
-                Menu
-              </summary>
+            {/* Logo / Title */}
+            <div className="text-2xl font-semibold tracking-tight text-gray-900">
+              <span className="text-emerald-600">Paw</span>Scheduler
+            </div>
 
-              <div
-                className="absolute right-0 mt-2 w-44 bg-white shadow-xl border rounded-md p-3
-                           flex flex-col gap-3 text-sm z-[9999] overflow-visible"
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setOpen(!open)}
+              className="sm:hidden p-2 rounded-lg border border-gray-300
+                         shadow-sm hover:bg-gray-100 transition"
+            >
+              {/* Hamburger icon */}
+              <div className="w-6 h-[2px] bg-gray-700 mb-1"></div>
+              <div className="w-6 h-[2px] bg-gray-700 mb-1"></div>
+              <div className="w-6 h-[2px] bg-gray-700"></div>
+            </button>
+
+            {/* Desktop Menu */}
+            <div className="hidden sm:flex items-center gap-6 text-sm font-medium">
+              <Link to="/schedule" className="hover:text-emerald-600">Schedule</Link>
+              <Link to="/" className="hover:text-emerald-600">Clients</Link>
+              <Link to="/unpaid" className="hover:text-emerald-600">Unpaid</Link>
+              <Link to="/revenue" className="hover:text-emerald-600">Revenue</Link>
+              <Link to="/profile" className="hover:text-emerald-600">Profile</Link>
+              <Link to="/help" className="hover:text-emerald-600">Help</Link>
+
+              <button
+                onClick={handleLogout}
+                className="text-xs text-gray-500 hover:text-red-600"
               >
-                <Link to="/schedule" className="hover:text-emerald-600">Schedule</Link>
-                <Link to="/" className="hover:text-emerald-600">Clients</Link>
-                <Link to="/unpaid" className="hover:text-emerald-600">Unpaid</Link>
-                <Link to="/revenue" className="hover:text-emerald-600">Revenue</Link>
-                <Link to="/profile" className="hover:text-emerald-600">Profile</Link>
-                <Link to="/help" className="hover:text-emerald-600">Help</Link>
-
-                <button
-                  onClick={handleLogout}
-                  className="text-xs text-gray-500 hover:text-red-600 text-left"
-                >
-                  Logout
-                </button>
-              </div>
-            </details>
+                Logout
+              </button>
+            </div>
           </div>
+
+          {/* MOBILE DROPDOWN MENU */}
+          {open && (
+            <div
+              className="sm:hidden mt-3 bg-white border border-gray-200 rounded-xl shadow-lg
+                         p-4 space-y-4 text-sm font-medium animate-fadeDown"
+            >
+              <Link to="/schedule" className="block text-gray-700 hover:text-emerald-600">
+                Schedule
+              </Link>
+              <Link to="/" className="block text-gray-700 hover:text-emerald-600">
+                Clients
+              </Link>
+              <Link to="/unpaid" className="block text-gray-700 hover:text-emerald-600">
+                Unpaid
+              </Link>
+              <Link to="/revenue" className="block text-gray-700 hover:text-emerald-600">
+                Revenue
+              </Link>
+              <Link to="/profile" className="block text-gray-700 hover:text-emerald-600">
+                Profile
+              </Link>
+              <Link to="/help" className="block text-gray-700 hover:text-emerald-600">
+                Help
+              </Link>
+
+              <button
+                onClick={handleLogout}
+                className="text-xs text-gray-500 hover:text-red-600"
+              >
+                Logout
+              </button>
+            </div>
+          )}
         </nav>
       )}
 
+      {/* ROUTES */}
       <Routes>
-        {/* PUBLIC ROUTES */}
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/upgrade" element={<Upgrade />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/book/:slug" element={<Book />} />
         <Route path="/reset-password" element={<ResetPassword />} />
-       
         <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
 
         {/* PROTECTED ROUTES */}
