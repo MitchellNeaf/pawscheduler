@@ -10,15 +10,18 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function handler(event, context) {
   try {
-    // 1️⃣ Get all users who have NOT verified
-    const { data: users, error } = await supabase.auth.admin.listUsers();
+    // 1️⃣ Load all users from Supabase Auth Admin
+    const { data, error } = await supabase.auth.admin.listUsers();
 
     if (error) {
       console.error("Supabase error:", error);
       return { statusCode: 500, body: "Failed to query users." };
     }
 
-    const unverified = users.users.filter(
+    const allUsers = data.users ?? [];
+
+    // 2️⃣ Filter unverified
+    const unverified = allUsers.filter(
       (u) => !u.email_confirmed_at
     );
 
@@ -28,11 +31,11 @@ export async function handler(event, context) {
 
     let sentCount = 0;
 
-    // 2️⃣ Loop and send email to each unverified user
+    // 3️⃣ Send emails
     for (const user of unverified) {
       try {
         await resend.emails.send({
-          from: "reminder@pawscheduler.com",
+          from: "PawScheduler <reminder@pawscheduler.com>",
           to: user.email,
           subject: "Please verify your PawScheduler account",
           html: `
@@ -47,7 +50,7 @@ export async function handler(event, context) {
 
         sentCount++;
 
-        // OPTIONAL: Update your signup_status table
+        // 4️⃣ OPTIONAL tracking table update
         await supabase
           .from("signup_status")
           .update({ followup_sent: true })
@@ -62,7 +65,7 @@ export async function handler(event, context) {
       body: `Sent follow-up emails to ${sentCount} unverified users.`,
     };
   } catch (err) {
-    console.error(err);
+    console.error("Fatal error:", err);
     return { statusCode: 500, body: "Server error." };
   }
 }
