@@ -1,71 +1,86 @@
-import { createClient } from "@supabase/supabase-js";
-import { Resend } from "resend";
+const path = require("path");
+const fs = require("fs");
+const fetch = require("node-fetch");
+const { createClient } = require("@supabase/supabase-js");
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-
-export async function handler(event, context) {
+exports.handler = async function(event) {
   try {
-    // 1️⃣ Load all users from Supabase Auth Admin
-    const { data, error } = await supabase.auth.admin.listUsers();
-
-    if (error) {
-      console.error("Supabase error:", error);
-      return { statusCode: 500, body: "Failed to query users." };
-    }
-
-    const allUsers = data.users ?? [];
-
-    // 2️⃣ Filter unverified
-    const unverified = allUsers.filter(
-      (u) => !u.email_confirmed_at
+    // 1️⃣ INIT SUPABASE (admin privileges)
+    const supabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    if (unverified.length === 0) {
-      return { statusCode: 200, body: "No unverified users found." };
+    // 2️⃣ Load all users
+    const { data, error } = await supabase.auth.admin.listUsers();
+    if (error) {
+      console.error("Supabase error:", error);
+      return { statusCode: 500, body: "Failed to load users." };
     }
+
+    const allUsers = data?.users ?? [];
+    const unverified = allUsers.filter(u => !u.email_confirmed_at);
+
+    if (unverified.length === 0) {
+      return {
+        statusCode: 200,
+        body: "No unverified users found."
+      };
+    }
+
+    // 3️⃣ Load reminder email template
+    const templatesDir = path.join(__dirname, "..", "email_templates");
+    const htmlPath = path.join(templatesDir, "reminder.html");
+    const rawHtml = fs.readFileSync(htmlPath, "utf8");
 
     let sentCount = 0;
 
-    // 3️⃣ Send emails
     for (const user of unverified) {
       try {
-        await resend.emails.send({
-          from: "PawScheduler <reminder@pawscheduler.com>",
-          to: user.email,
-          subject: "Please verify your PawScheduler account",
-          html: `
-            <p>Hi there! 👋</p>
-            <p>You started signing up for PawScheduler but haven't verified your email yet.</p>
-            <p>Please click the verification link sent earlier so you can finish setting up your account.</p>
-            <p>If you need a new link, reply to this email and we’ll help you out.</p>
-            <br/>
-            <p>— The PawScheduler Team</p>
-          `,
+        // Replace simple variables inside template
+        const html = rawHtml
+          .replace(/{{email}}/g, user.email)
+          .replace(/{{business_name}}/g, "PawScheduler");
+
+        // 4️⃣ Send via MailerSend (same as your working function)
+        const res = await fetch("https://api.mailersend.com/v1/email", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${process.env.MAILERSEND_API_KEY}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            from: { email: "noreply@pawscheduler.app", name: "PawScheduler" },
+            to: [{ email: user.email }],
+            subject: "Please verify your PawScheduler account",
+            html
+          })
         });
+
+        const msText = await res.text();
+
+        if (!res.ok) {
+          console.error("MailerSend error =>", msText);
+          continue; // don't crash, skip to next
+        }
 
         sentCount++;
 
-        // 4️⃣ OPTIONAL tracking table update
-        await supabase
-          .from("signup_status")
-          .update({ followup_sent: true })
-          .eq("email", user.email);
-      } catch (emailErr) {
-        console.error("Failed sending to:", user.email, emailErr);
+      } catch (err) {
+        console.error("Email failed:", user.email, err);
       }
     }
 
     return {
       statusCode: 200,
-      body: `Sent follow-up emails to ${sentCount} unverified users.`,
+      body: `Sent ${sentCount} verification reminder emails`
     };
+
   } catch (err) {
-    console.error("Fatal error:", err);
-    return { statusCode: 500, body: "Server error." };
+    console.error("Function error:", err);
+    return {
+      statusCode: 500,
+      body: "Server error."
+    };
   }
-}
+};
