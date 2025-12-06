@@ -59,6 +59,9 @@ exports.handler = async function(event) {
 
         const msText = await res.text();
 
+        console.log("MailerSend response:", msText);
+
+
         if (!res.ok) {
           console.error("MailerSend error =>", msText);
           continue; // don't crash, skip to next
