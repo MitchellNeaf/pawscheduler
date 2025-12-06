@@ -15,8 +15,6 @@ exports.handler = async function(event) {
     }
 
     const users = data?.users ?? [];
-
-    // 2️⃣ Filter only unverified accounts
     const unverified = users.filter(u => !u.email_confirmed_at);
 
     if (unverified.length === 0) {
@@ -28,17 +26,18 @@ exports.handler = async function(event) {
 
     let sentCount = 0;
 
-    // 3️⃣ Loop + resend Supabase verification email
+    // 2️⃣ Loop through and send verification via Supabase generate_link
     for (const user of unverified) {
       const { email } = user;
 
-      const { error: resendError } = await supabase.auth.admin.resend({
-        email,
-        type: "signup"
+      // Supabase will send verification email automatically
+      const { error: genError } = await supabase.auth.admin.generateLink({
+        type: "signup",
+        email
       });
 
-      if (resendError) {
-        console.error("Resend failed for", email, resendError.message);
+      if (genError) {
+        console.error("Resend failed for", email, genError.message);
         continue;
       }
 
