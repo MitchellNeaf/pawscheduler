@@ -3,6 +3,11 @@ const fs = require("fs");
 const fetch = require("node-fetch");
 const { createClient } = require("@supabase/supabase-js");
 
+// Sleep helper — wait N milliseconds
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 exports.handler = async function(event) {
   try {
     // 1️⃣ INIT SUPABASE (admin privileges)
@@ -35,14 +40,14 @@ exports.handler = async function(event) {
 
     let sentCount = 0;
 
+    // 4️⃣ Rate limit: 1 email every 7 seconds (max 8/minute)
     for (const user of unverified) {
       try {
-        // Replace simple variables inside template
         const html = rawHtml
           .replace(/{{email}}/g, user.email)
           .replace(/{{business_name}}/g, "PawScheduler");
 
-        // 4️⃣ Send via MailerSend (same as your working function)
+        // Send email
         const res = await fetch("https://api.mailersend.com/v1/email", {
           method: "POST",
           headers: {
@@ -51,6 +56,10 @@ exports.handler = async function(event) {
           },
           body: JSON.stringify({
             from: { email: "noreply@pawscheduler.app", name: "PawScheduler" },
+
+            // 👇👇 ADD THIS LINE — forwards replies to your Gmail
+            reply_to: { email: "pawscheduler@gmail.com", name: "PawScheduler" },
+
             to: [{ email: user.email }],
             subject: "Please verify your PawScheduler account",
             html
@@ -58,13 +67,11 @@ exports.handler = async function(event) {
         });
 
         const msText = await res.text();
-
         console.log("MailerSend response:", msText);
-
 
         if (!res.ok) {
           console.error("MailerSend error =>", msText);
-          continue; // don't crash, skip to next
+          continue;
         }
 
         sentCount++;
@@ -72,6 +79,9 @@ exports.handler = async function(event) {
       } catch (err) {
         console.error("Email failed:", user.email, err);
       }
+
+      // Wait 7 seconds before next email
+      await sleep(7000);
     }
 
     return {
