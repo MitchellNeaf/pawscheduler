@@ -22,7 +22,17 @@ export default function ClientPets() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ⭐ FORM includes slot_weight
+  // Vaccine form state
+  const [addShotPet, setAddShotPet] = useState(null);
+  const [shotForm, setShotForm] = useState({
+    shot_type: "Rabies",
+    date_given: "",
+    date_unknown: false,
+    date_expires: "",
+    notes: "",
+  });
+
+  // Pet form (includes slot_weight)
   const [form, setForm] = useState({
     name: "",
     breed: "",
@@ -39,7 +49,7 @@ export default function ClientPets() {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
-  // Load client + pets
+  // Load client + pets (with shot records)
   useEffect(() => {
     const loadData = async () => {
       const {
@@ -56,7 +66,7 @@ export default function ClientPets() {
 
       const { data: petData } = await supabase
         .from("pets")
-        .select("*")
+        .select("*, pet_shot_records(*)")
         .eq("client_id", clientId)
         .eq("groomer_id", user.id)
         .order("created_at", { ascending: false });
@@ -68,6 +78,21 @@ export default function ClientPets() {
 
     loadData();
   }, [clientId]);
+
+  const reloadPets = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    const { data: petData } = await supabase
+      .from("pets")
+      .select("*, pet_shot_records(*)")
+      .eq("client_id", clientId)
+      .eq("groomer_id", user.id)
+      .order("created_at", { ascending: false });
+
+    setPets(petData || []);
+  };
 
   const handleFormChange = (e) =>
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -81,7 +106,6 @@ export default function ClientPets() {
     }));
   };
 
-  // Reset form
   const resetForm = () => {
     setForm({
       name: "",
@@ -171,8 +195,7 @@ export default function ClientPets() {
   // Delete pet
   const handleDelete = async (id) => {
     if (!user) return;
-    const confirmDelete = window.confirm("Delete this pet?");
-    if (!confirmDelete) return;
+    if (!window.confirm("Delete this pet?")) return;
 
     const { error } = await supabase
       .from("pets")
@@ -194,9 +217,10 @@ export default function ClientPets() {
       <div className="mb-2">
         <Link to="/">&larr; Back to Clients</Link>
       </div>
+
       <h1 className="mt-2">{client.full_name}'s Pets</h1>
 
-      {/* FORM */}
+      {/* PET FORM */}
       <form onSubmit={handleSubmit} className="card mb-6">
         <div className="card-body space-y-3">
           <input
@@ -242,7 +266,6 @@ export default function ClientPets() {
             )}
           </div>
 
-          {/* NOTES */}
           <textarea
             name="notes"
             value={form.notes}
@@ -250,7 +273,7 @@ export default function ClientPets() {
             placeholder="Notes"
           />
 
-          {/* ⭐ NEW SIZE/DIFFICULTY DROPDOWN */}
+          {/* SIZE */}
           <label className="font-medium block mt-4">Size / Difficulty</label>
           <select
             name="slot_weight"
@@ -269,14 +292,17 @@ export default function ClientPets() {
             <option value={3}>XL / Special Care (3)</option>
           </select>
 
-          {/* BUTTONS */}
           <div className="flex flex-wrap gap-3 mt-3">
             <button type="submit" className="btn-primary">
               {editingId ? "Update Pet" : "Add Pet"}
             </button>
 
             {editingId && (
-              <button type="button" onClick={resetForm} className="btn-secondary">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="btn-secondary"
+              >
                 Cancel Edit
               </button>
             )}
@@ -302,7 +328,9 @@ export default function ClientPets() {
                       <span
                         key={`${pet.id}-${tag}-${i}`}
                         className={`chip ${
-                          ["Bites", "Anxious", "Aggressive", "Matting"].includes(tag)
+                          ["Bites", "Anxious", "Aggressive", "Matting"].includes(
+                            tag
+                          )
                             ? "chip-danger"
                             : ""
                         }`}
@@ -318,7 +346,7 @@ export default function ClientPets() {
                   <div className="text-sm text-gray-700 mt-2">{pet.notes}</div>
                 )}
 
-                {/* ⭐ SLOT WEIGHT DISPLAY */}
+                {/* SIZE */}
                 <div className="text-sm text-gray-600 mt-2">
                   Difficulty / Size:{" "}
                   <strong>
@@ -330,17 +358,51 @@ export default function ClientPets() {
                   </strong>
                 </div>
 
+                {/* SHOT RECORDS */}
+                <div className="mt-4">
+                  <div className="font-medium text-gray-800 mb-1">
+                    Shot Records
+                  </div>
+
+                  {pet.pet_shot_records?.length > 0 ? (
+                    <ul className="ml-3 list-disc text-sm text-gray-700">
+                      {pet.pet_shot_records.map((rec) => (
+                        <li key={rec.id}>
+                          <strong>{rec.shot_type}</strong> — expires{" "}
+                          {rec.date_expires}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="text-sm text-gray-500 italic">
+                      No shot records yet.
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => setAddShotPet(pet)}
+                    className="btn-secondary text-sm mt-2"
+                  >
+                    + Add Shot Record
+                  </button>
+                </div>
+
                 {/* BUTTONS */}
-                <div className="mt-3 flex flex-wrap gap-3 text-sm">
+                <div className="mt-4 flex flex-wrap gap-3 text-sm">
                   <Link
                     to={`/pets/${pet.id}/appointments`}
                     className="btn-secondary"
                   >
                     View Appointments
                   </Link>
-                  <button className="btn-primary" onClick={() => handleEdit(pet)}>
+
+                  <button
+                    className="btn-primary"
+                    onClick={() => handleEdit(pet)}
+                  >
                     ✏️ Edit
                   </button>
+
                   <button
                     className="btn-danger"
                     onClick={() => handleDelete(pet.id)}
@@ -353,6 +415,140 @@ export default function ClientPets() {
           ))
         )}
       </ul>
+
+      {/* ADD SHOT RECORD FORM */}
+      {addShotPet && (
+        <div className="card mt-6">
+          <div className="card-body">
+            <h3 className="font-semibold mb-4">
+              Add Shot Record for {addShotPet.name}
+            </h3>
+
+            <div className="space-y-4">
+              {/* SHOT TYPE */}
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Shot Type
+                </label>
+                <select
+                  value={shotForm.shot_type}
+                  onChange={(e) =>
+                    setShotForm({ ...shotForm, shot_type: e.target.value })
+                  }
+                  className="border p-2 rounded w-full"
+                >
+                  <option>Rabies</option>
+                  <option>Bordetella</option>
+                  <option>DHPP</option>
+                  <option>Other</option>
+                </select>
+              </div>
+
+              {/* DATE GIVEN */}
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Date Given
+                </label>
+
+                <input
+                  type="date"
+                  value={shotForm.date_given}
+                  onChange={(e) =>
+                    setShotForm({ ...shotForm, date_given: e.target.value })
+                  }
+                  className="border p-2 rounded w-full"
+                  disabled={shotForm.date_unknown}
+                />
+
+                <label className="flex items-center gap-2 mt-1 text-xs text-gray-600">
+                  <input
+                    type="checkbox"
+                    checked={shotForm.date_unknown}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setShotForm((prev) => ({
+                        ...prev,
+                        date_unknown: checked,
+                        date_given: checked ? "" : prev.date_given,
+                      }));
+                    }}
+                  />
+                  Date given unknown
+                </label>
+              </div>
+
+              {/* DATE EXPIRES */}
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Date Expires
+                </label>
+                <input
+                  type="date"
+                  value={shotForm.date_expires}
+                  onChange={(e) =>
+                    setShotForm({ ...shotForm, date_expires: e.target.value })
+                  }
+                  className="border p-2 rounded w-full"
+                  required
+                />
+              </div>
+
+              {/* NOTES */}
+              <div>
+                <label className="block text-sm font-medium mb-1">Notes</label>
+                <textarea
+                  value={shotForm.notes}
+                  onChange={(e) =>
+                    setShotForm({ ...shotForm, notes: e.target.value })
+                  }
+                  className="border p-2 rounded w-full"
+                  placeholder="Optional notes…"
+                />
+              </div>
+
+              {/* BUTTONS */}
+              <div className="flex gap-3 mt-2">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={async () => {
+                    await supabase.from("pet_shot_records").insert({
+                      pet_id: addShotPet.id,
+                      shot_type: shotForm.shot_type,
+                      date_given: shotForm.date_unknown
+                        ? null
+                        : shotForm.date_given || null,
+                      date_expires: shotForm.date_expires,
+                      notes: shotForm.notes || "",
+                    });
+
+                    setShotForm({
+                      shot_type: "Rabies",
+                      date_given: "",
+                      date_unknown: false,
+                      date_expires: "",
+                      notes: "",
+                    });
+
+                    setAddShotPet(null);
+                    await reloadPets();
+                  }}
+                >
+                  Save Shot
+                </button>
+
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setAddShotPet(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

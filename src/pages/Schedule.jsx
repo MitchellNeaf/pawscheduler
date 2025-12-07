@@ -6,17 +6,20 @@ import Loader from "../components/Loader";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
+// Utility: date formats
 const toYMD = (d) => {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
+
 const parseYMD = (s) => {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
 };
 
+// Time slots (15‑minute increments, 6:00–21:00)
 const START_HOUR = 6;
 const END_HOUR = 21;
 const TIME_SLOTS = [];
@@ -27,6 +30,18 @@ for (let hour = START_HOUR; hour <= END_HOUR; hour++) {
     );
   }
 }
+
+// Basic service list for checkboxes
+const SERVICE_OPTIONS = [
+  "Bath",
+  "Full Groom",
+  "Nails",
+  "Teeth",
+  "Deshed",
+  "Anal Glands",
+  "Puppy Trim",
+  "Other",
+];
 
 /* ---------------- Trial Banner ---------------- */
 function ScheduleTrialBanner({ userId }) {
@@ -60,7 +75,8 @@ function ScheduleTrialBanner({ userId }) {
           🚫 Your free trial has ended —{" "}
           <Link to="/upgrade" className="underline font-bold">
             upgrade to continue
-          </Link>.
+          </Link>
+          .
         </div>
       );
     }
@@ -78,6 +94,28 @@ function ScheduleTrialBanner({ userId }) {
 }
 
 /* ---------------- Helpers ---------------- */
+function isExpired(dateStr) {
+  if (!dateStr) return true; // treat missing as expired
+  const today = new Date().setHours(0, 0, 0, 0);
+  const expires = new Date(dateStr).setHours(0, 0, 0, 0);
+  return expires < today;
+}
+
+function isExpiringSoon(dateStr) {
+  if (!dateStr) return true; // treat missing as expiring soon
+  const today = new Date().setHours(0, 0, 0, 0);
+  const expires = new Date(dateStr).setHours(0, 0, 0, 0);
+  const diffDays = (expires - today) / 86400000;
+  return diffDays >= 0 && diffDays <= 30;
+}
+
+function getRabiesRecord(shot_records) {
+  if (!Array.isArray(shot_records)) return null;
+  return shot_records.find((r) =>
+    (r.shot_type || "").toLowerCase().includes("rabies")
+  );
+}
+
 function sizeBadge(weight) {
   switch (weight) {
     case 1:
@@ -111,27 +149,19 @@ function sizeBadge(weight) {
   }
 }
 
-const SERVICE_OPTIONS = [
-  "Full Groom",
-  "Bath Only",
-  "Nail Trim",
-  "Deshed",
-  "Teeth Cleaning",
-  "Other",
-];
-
 function matchesSearch(appt, query) {
   if (!query.trim()) return true;
-
   const q = query.toLowerCase();
 
   return (
     appt.pets?.name?.toLowerCase().includes(q) ||
     appt.pets?.clients?.full_name?.toLowerCase().includes(q) ||
     appt.pets?.tags?.some((t) => t.toLowerCase().includes(q)) ||
-    (Array.isArray(appt.services)
-      ? appt.services
-      : String(appt.services || "").split(","))
+    (
+      Array.isArray(appt.services)
+        ? appt.services
+        : String(appt.services || "").split(",")
+    )
       .join(" ")
       .toLowerCase()
       .includes(q)
@@ -142,10 +172,9 @@ function getEndTime(start, durationMin) {
   if (!start) return "—";
   const [h, m] = start.split(":").map(Number);
   const endMin = h * 60 + m + durationMin;
-  return `${String(Math.floor(endMin / 60)).padStart(
-    2,
-    "0"
-  )}:${String(endMin % 60).padStart(2, "0")}`;
+  return `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(
+    endMin % 60
+  ).padStart(2, "0")}`;
 }
 
 /* ---------------- Pet Select Modal ---------------- */
@@ -236,15 +265,7 @@ function PetSelectModal({ open, onClose, slot, date, pets, loading, onPickPet })
 }
 
 /* ---------------- New Appointment Modal ---------------- */
-function NewAppointmentModal({
-  open,
-  onClose,
-  pet,
-  form,
-  setForm,
-  onSave,
-  saving,
-}) {
+function NewAppointmentModal({ open, onClose, pet, form, setForm, onSave, saving }) {
   if (!open || !pet) return null;
 
   const handleChange = (field) => (e) => {
@@ -270,6 +291,10 @@ function NewAppointmentModal({
     });
   };
 
+  const rabies = getRabiesRecord(pet.shot_records);
+  const expired = isExpired(rabies?.date_expires);
+  const expSoon = isExpiringSoon(rabies?.date_expires);
+
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-lg max-w-md w-full max-h-[90vh] flex flex-col">
@@ -283,8 +308,29 @@ function NewAppointmentModal({
         <div className="p-4 space-y-3 overflow-y-auto flex-1">
           <div className="text-sm text-gray-700">
             <div className="font-semibold">{pet.name}</div>
-            <div className="text-xs text-gray-500">{pet.clients?.full_name}</div>
+            <div className="text-xs text-gray-500">
+              {pet.clients?.full_name}
+            </div>
           </div>
+
+          {/* Vaccine Warning */}
+          {!rabies ? (
+            <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">
+              ⚠️ No rabies record on file
+            </div>
+          ) : expired ? (
+            <div className="p-2 bg-red-100 text-red-700 text-xs rounded">
+              ⛔ Rabies expired on {rabies.date_expires}
+            </div>
+          ) : expSoon ? (
+            <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">
+              ⚠️ Rabies expires soon ({rabies.date_expires})
+            </div>
+          ) : (
+            <div className="p-2 bg-green-100 text-green-700 text-xs rounded">
+              🟢 Rabies up to date (expires {rabies.date_expires})
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3 text-sm">
             <label className="flex flex-col gap-1">
@@ -402,6 +448,7 @@ function NewAppointmentModal({
     </div>
   );
 }
+
 /* ---------------- Edit Appointment Modal ---------------- */
 function EditAppointmentModal({
   open,
@@ -423,7 +470,6 @@ function EditAppointmentModal({
         : field === "amount"
         ? Number(raw)
         : raw;
-
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -439,10 +485,13 @@ function EditAppointmentModal({
     });
   };
 
+  const rabies = getRabiesRecord(appt.shot_records);
+  const expired = isExpired(rabies?.date_expires);
+  const expSoon = isExpiringSoon(rabies?.date_expires);
+
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-lg max-w-md w-full max-h-[90vh] flex flex-col">
-
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h2 className="font-semibold text-gray-800">Edit Appointment</h2>
           <button onClick={onClose} className="text-gray-500 text-sm">
@@ -451,14 +500,32 @@ function EditAppointmentModal({
         </div>
 
         <div className="p-4 space-y-3 overflow-y-auto flex-1">
-
-          {/* Pet + Client */}
           <div className="text-sm text-gray-700">
             <div className="font-semibold">{appt.pets?.name}</div>
-            <div className="text-xs text-gray-500">{appt.pets?.clients?.full_name}</div>
+            <div className="text-xs text-gray-500">
+              {appt.pets?.clients?.full_name}
+            </div>
           </div>
 
-          {/* Date + Time */}
+          {/* Vaccine Warning */}
+          {!rabies ? (
+            <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">
+              ⚠️ No rabies record on file
+            </div>
+          ) : expired ? (
+            <div className="p-2 bg-red-100 text-red-700 text-xs rounded">
+              ⛔ Rabies expired on {rabies.date_expires}
+            </div>
+          ) : expSoon ? (
+            <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">
+              ⚠️ Rabies expires soon ({rabies.date_expires})
+            </div>
+          ) : (
+            <div className="p-2 bg-green-100 text-green-700 text-xs rounded">
+              🟢 Rabies up to date (expires {rabies.date_expires})
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3 text-sm">
             <label className="flex flex-col gap-1">
               <span className="font-medium text-gray-700">Date</span>
@@ -482,7 +549,6 @@ function EditAppointmentModal({
             </label>
           </div>
 
-          {/* Duration */}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">Duration</span>
             <select
@@ -499,7 +565,6 @@ function EditAppointmentModal({
             </select>
           </label>
 
-          {/* Amount */}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">Amount ($)</span>
             <input
@@ -512,7 +577,6 @@ function EditAppointmentModal({
             />
           </label>
 
-          {/* Services */}
           <div className="text-sm">
             <div className="font-medium text-gray-700 mb-1">Services</div>
             <div className="grid grid-cols-2 gap-1">
@@ -532,7 +596,6 @@ function EditAppointmentModal({
             </div>
           </div>
 
-          {/* Notes */}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">Notes</span>
             <textarea
@@ -542,7 +605,6 @@ function EditAppointmentModal({
             />
           </label>
 
-          {/* Reminder */}
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -593,7 +655,7 @@ function EditAppointmentModal({
 /* ---------------- Toggle Checkbox ---------------- */
 function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
   return (
-    <label className="flex items-center gap-2 text-sm">
+    <label className="flex items-center gap-2 text-xs sm:text-sm">
       <input
         type="checkbox"
         checked={appt[field] || false}
@@ -613,8 +675,17 @@ function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
             .single();
 
           if (!error && data) {
+            // Re-attach rabies records for this pet so icons stay accurate
+            const { data: shots } = await supabase
+              .from("pet_shot_records")
+              .select("*")
+              .eq("pet_id", data.pet_id)
+              .order("date_expires", { ascending: false });
+
+            const updated = { ...data, shot_records: shots || [] };
+
             setAppointments((prev) =>
-              prev.map((a) => (a.id === appt.id ? data : a))
+              prev.map((a) => (a.id === appt.id ? updated : a))
             );
           }
         }}
@@ -628,11 +699,12 @@ function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
 function startOfWeek(date) {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = (day + 6) % 7;
+  const diff = (day + 6) % 7; // Monday‑start
   d.setDate(d.getDate() - diff);
   d.setHours(0, 0, 0, 0);
   return d;
 }
+
 function addDays(date, days) {
   const d = new Date(date);
   d.setDate(d.getDate() + days);
@@ -647,7 +719,8 @@ function RebookWeekModal({ open, appt, onClose, onPickDate }) {
     if (!appt) return;
     const [y, m, d] = appt.date.split("-").map(Number);
     const original = new Date(y, m - 1, d);
-    original.setDate(original.getDate() + 42);
+    original.setDate(original.getDate() + 42); // 6 weeks
+
     const start = startOfWeek(original);
     setWeekStart(start);
     setSelectedDate(toYMD(start));
@@ -693,7 +766,9 @@ function RebookWeekModal({ open, appt, onClose, onPickDate }) {
           >
             ← Previous week
           </button>
+
           <span className="font-medium">{weekLabel}</span>
+
           <button
             className="px-2 py-1 border rounded text-xs"
             onClick={() => {
@@ -714,12 +789,15 @@ function RebookWeekModal({ open, appt, onClose, onPickDate }) {
               day: "numeric",
             });
             const isSelected = selectedDate === ymd;
+
             return (
               <button
                 key={ymd}
                 onClick={() => setSelectedDate(ymd)}
                 className={`border rounded px-2 py-2 text-left ${
-                  isSelected ? "bg-blue-600 text-white border-blue-600" : "bg-white"
+                  isSelected
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white"
                 }`}
               >
                 {label}
@@ -735,13 +813,11 @@ function RebookWeekModal({ open, appt, onClose, onPickDate }) {
           >
             Cancel
           </button>
+
           <button
             className="text-sm px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-50"
             disabled={!selectedDate}
-            onClick={() => {
-              if (!selectedDate) return;
-              onPickDate(selectedDate);
-            }}
+            onClick={() => onPickDate(selectedDate)}
           >
             Continue
           </button>
@@ -792,16 +868,17 @@ export default function Schedule() {
     amount: null,
     reminder_enabled: false,
   });
-
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [rebookModalOpen, setRebookModalOpen] = useState(false);
   const [rebookAppt, setRebookAppt] = useState(null);
 
+  /* Load user */
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
+  /* Load schedule data */
   useEffect(() => {
     if (!user || !selectedDate) return;
 
@@ -850,14 +927,18 @@ export default function Schedule() {
 
       setCapacity(groomer?.max_parallel || 1);
 
+      // No hours configured
       if (!hours) {
+        // Attach shot records for rabies icons
+        const apptsWithShots = await attachShotRecords(appts || []);
         setWorkingRange([]);
         setBreakSlots([]);
-        setAppointments(appts || []);
+        setAppointments(apptsWithShots);
         setLoading(false);
         return;
       }
 
+      // Build working range
       const startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
       const endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
       const range =
@@ -866,6 +947,7 @@ export default function Schedule() {
           : TIME_SLOTS.slice(startIdx, endIdx + 1);
       setWorkingRange(range);
 
+      // Build breaks
       const breakSet = new Set();
       (breaks || []).forEach((b) => {
         const bi = TIME_SLOTS.indexOf(b.break_start.slice(0, 5));
@@ -875,13 +957,43 @@ export default function Schedule() {
       });
       setBreakSlots([...breakSet]);
 
-      setAppointments(appts || []);
+      const apptsWithShots = await attachShotRecords(appts || []);
+      setAppointments(apptsWithShots);
       setLoading(false);
     };
 
     loadDay();
   }, [user, selectedDate]);
 
+  // Attach rabies shot records for a set of appointments
+  const attachShotRecords = async (appts) => {
+    if (!appts.length) return [];
+
+    const petIds = Array.from(
+      new Set(appts.map((a) => a.pet_id).filter(Boolean))
+    );
+
+    if (!petIds.length) return appts;
+
+    const { data: shots } = await supabase
+      .from("pet_shot_records")
+      .select("*")
+      .in("pet_id", petIds)
+      .order("date_expires", { ascending: false });
+
+    const grouped = {};
+    (shots || []).forEach((s) => {
+      if (!grouped[s.pet_id]) grouped[s.pet_id] = [];
+      grouped[s.pet_id].push(s);
+    });
+
+    return appts.map((a) => ({
+      ...a,
+      shot_records: grouped[a.pet_id] || [],
+    }));
+  };
+
+  /* Delete appointment */
   const handleDelete = async (id) => {
     if (!user) return;
     const ok = window.confirm("Delete this appointment?");
@@ -913,6 +1025,7 @@ export default function Schedule() {
     setRebookAppt(null);
   };
 
+  /* Open empty slot → pick pet */
   const openSlot = async (slot) => {
     setModalSlot(slot);
     setPetModalOpen(true);
@@ -933,10 +1046,23 @@ export default function Schedule() {
     }
   };
 
-  const handlePickPet = (pet) => {
+  /* Pick pet → load shots → open New Appointment modal */
+  const handlePickPet = async (pet) => {
     if (!pet || !modalSlot || !selectedDate) return;
+
     setPetModalOpen(false);
-    setNewPet(pet);
+
+    const { data: shots } = await supabase
+      .from("pet_shot_records")
+      .select("*")
+      .eq("pet_id", pet.id)
+      .order("date_expires", { ascending: false });
+
+    setNewPet({
+      ...pet,
+      shot_records: shots || [],
+    });
+
     setNewForm({
       date: selectedDate,
       time: modalSlot,
@@ -946,9 +1072,11 @@ export default function Schedule() {
       reminder_enabled: true,
       amount: null,
     });
+
     setNewModalOpen(true);
   };
 
+  /* Save new appointment */
   const handleSaveNew = async () => {
     if (!user || !newPet) return;
     if (!newForm.date || !newForm.time) {
@@ -988,8 +1116,17 @@ export default function Schedule() {
       return;
     }
 
+    // Attach shot records back onto the new appointment
+    const { data: shots } = await supabase
+      .from("pet_shot_records")
+      .select("*")
+      .eq("pet_id", newPet.id)
+      .order("date_expires", { ascending: false });
+
+    const withShots = { ...data, shot_records: shots || [] };
+
     setAppointments((prev) =>
-      [...prev, data].sort((a, b) =>
+      [...prev, withShots].sort((a, b) =>
         (a.time || "").localeCompare(b.time || "")
       )
     );
@@ -999,7 +1136,8 @@ export default function Schedule() {
     setModalSlot(null);
   };
 
-  const handleOpenEditModal = (appt) => {
+  /* Edit appt → load shots → open edit modal */
+  const handleOpenEditModal = async (appt) => {
     const servicesArray = Array.isArray(appt.services)
       ? appt.services
       : appt.services
@@ -1008,7 +1146,19 @@ export default function Schedule() {
           .map((s) => s.trim())
       : [];
 
-    setEditAppt(appt);
+    const { data: shots } = await supabase
+      .from("pet_shot_records")
+      .select("*")
+      .eq("pet_id", appt.pet_id)
+      .order("date_expires", { ascending: false });
+
+    const apptWithShots = {
+      ...appt,
+      shot_records: shots || [],
+    };
+
+    setEditAppt(apptWithShots);
+
     setEditForm({
       date: appt.date,
       time: (appt.time || "00:00").slice(0, 5),
@@ -1022,6 +1172,7 @@ export default function Schedule() {
     setEditModalOpen(true);
   };
 
+  /* Save Edit */
   const handleSaveEdit = async () => {
     if (!user || !editAppt) return;
     if (!editForm.date || !editForm.time) {
@@ -1059,9 +1210,17 @@ export default function Schedule() {
       return;
     }
 
+    const { data: shots } = await supabase
+      .from("pet_shot_records")
+      .select("*")
+      .eq("pet_id", data.pet_id)
+      .order("date_expires", { ascending: false });
+
+    const withShots = { ...data, shot_records: shots || [] };
+
     setAppointments((prev) =>
       prev
-        .map((a) => (a.id === editAppt.id ? data : a))
+        .map((a) => (a.id === editAppt.id ? withShots : a))
         .sort((a, b) => (a.time || "").localeCompare(b.time || ""))
     );
 
@@ -1081,16 +1240,9 @@ export default function Schedule() {
   const today = new Date();
   const todayStr = toYMD(today);
 
-  const filteredAppointments = appointments.filter((appt) => {
-    const q = search.toLowerCase();
-    if (!q) return true;
-
-    return (
-      appt.pets?.name?.toLowerCase().includes(q) ||
-      appt.pets?.clients?.full_name?.toLowerCase().includes(q) ||
-      appt.pets?.tags?.some((t) => t.toLowerCase().includes(q))
-    );
-  });
+  const filteredAppointments = appointments.filter((appt) =>
+    matchesSearch(appt, search)
+  );
 
   const unpaidToday =
     selectedDate === todayStr
@@ -1147,7 +1299,7 @@ export default function Schedule() {
   });
 
   return (
-    <main className="px-3 sm:px-4 py-6 space-y-6">
+    <main className="px-3 sm:px-4 py-6 space-y-6 max-w-6xl mx-auto">
       <Link to="/" className="text-sm text-blue-600 hover:underline">
         ← Back to Home
       </Link>
@@ -1177,7 +1329,7 @@ export default function Schedule() {
               onChange={(d) => d && setSelectedDate(toYMD(d))}
               dateFormat="yyyy-MM-dd"
               className="border p-2 rounded w-full"
-              inline={window.innerWidth < 500}
+              inline={typeof window !== "undefined" && window.innerWidth < 500}
               id="schedule-date-input"
             />
           </div>
@@ -1185,7 +1337,7 @@ export default function Schedule() {
           <div className="flex-1 flex flex-col gap-3">
             <input
               type="text"
-              placeholder="Search pet, client, or tag"
+              placeholder="Search pet, client, tag, or service"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full md:w-72 border rounded px-3 py-2 text-sm"
@@ -1247,6 +1399,7 @@ export default function Schedule() {
                 <div className="border-b bg-gray-100 px-3 py-2 font-semibold text-gray-700 text-sm shadow-sm">
                   Time
                 </div>
+
                 {Array.from({ length: capacity }).map((_, idx) => (
                   <div
                     key={`h${idx}`}
@@ -1256,7 +1409,7 @@ export default function Schedule() {
                   </div>
                 ))}
 
-                {/* MAIN FIXED GRID RENDER */}
+                {/* MAIN GRID BODY */}
                 {slotsWithInfo.map(({ slot, usedWeight }) => {
                   const isBreak = breakSlots.includes(slot);
                   const expanded = expandedSlotAppointments(slot);
@@ -1270,8 +1423,24 @@ export default function Schedule() {
 
                       {/* CAPACITY COLUMNS */}
                       {Array.from({ length: capacity }).map((_, idx) => {
-                        const cellAppt = expanded[idx] || null;
-                        const clickable = !isBreak && !cellAppt;
+                        const appt = expanded[idx] || null;
+                        const clickable = !isBreak && !appt;
+
+                        // Vaccine icon logic for grid
+                        let vaccineIcon = null;
+                        if (appt && appt.pets?.id) {
+                          const rabies = getRabiesRecord(
+                            appt.shot_records || []
+                          );
+
+                          if (!rabies) {
+                            vaccineIcon = "⚠️"; // no record
+                          } else if (isExpired(rabies.date_expires)) {
+                            vaccineIcon = "⛔"; // expired
+                          } else if (isExpiringSoon(rabies.date_expires)) {
+                            vaccineIcon = "⚠️"; // expiring soon
+                          }
+                        }
 
                         return (
                           <div
@@ -1285,53 +1454,63 @@ export default function Schedule() {
                             }`}
                             onClick={() => {
                               if (isBreak) return;
-                              if (!cellAppt) return openSlot(slot);
-                              handleOpenEditModal(cellAppt);
+                              if (!appt) return openSlot(slot);
+                              handleOpenEditModal(appt);
                             }}
                           >
+                            {/* BREAK */}
                             {isBreak ? (
                               idx === 0 && (
                                 <span className="text-[10px] text-gray-500">
                                   Break
                                 </span>
                               )
-                            ) : usedWeight === 0 ? (
+                            ) : !appt ? (
+                              /* EMPTY SLOT */
                               <span className="inline-block w-5 h-5 rounded border border-dashed border-blue-300" />
-                            ) : idx < usedWeight ? (
+                            ) : (
+                              /* APPOINTMENT BLOCK */
                               <div
                                 className={`
                                   flex flex-col items-center text-[9px] leading-tight transition-all
                                   ${
-                                    search.trim().length > 0 && matchesSearch(cellAppt, search)
+                                    search.trim().length > 0 && matchesSearch(appt, search)
                                       ? "search-match"
                                       : search.trim().length > 0
                                       ? "search-dim"
                                       : ""
                                   }
-
                                 `}
                               >
-                                <span
-                                  className={`
-                                    inline-block w-5 h-5 rounded
-                                    ${
-                                      usedWeight === 1
-                                        ? "bg-green-300"
-                                        : usedWeight < capacity
-                                        ? "bg-orange-300"
-                                        : "bg-red-300"
-                                    }
-                                  `}
-                                ></span>
+                                {/* TOP ROW: DOT + VACCINE ICON */}
+                                <div className="flex items-center gap-1">
+                                  <span
+                                    className={`
+                                      inline-block w-5 h-5 rounded
+                                      ${
+                                        usedWeight === 1
+                                          ? "bg-green-300"
+                                          : usedWeight < capacity
+                                          ? "bg-orange-300"
+                                          : "bg-red-300"
+                                      }
+                                    `}
+                                  ></span>
 
+                                  {vaccineIcon && (
+                                    <span className="text-[12px]">
+                                      {vaccineIcon}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* CLIENT NAME */}
                                 <span className="mt-0.5 text-center text-gray-700">
-                                  {cellAppt.pets?.clients?.full_name ||
-                                    "Client"}{" "}
-                                  ({cellAppt.pets?.name || "Pet"})
+                                  {appt.pets?.clients?.full_name || "Client"} (
+                                  {appt.pets?.name || "Pet"})
                                 </span>
                               </div>
-                            ) : (
-                              <span className="inline-block w-5 h-5 rounded border border-gray-200" />
+
                             )}
                           </div>
                         );
@@ -1345,7 +1524,7 @@ export default function Schedule() {
         </div>
       )}
 
-      {/* LIST VIEW OF APPOINTMENTS BELOW GRID */}
+      {/* LIST VIEW BELOW GRID */}
       {filteredAppointments.length === 0 ? (
         <p className="text-gray-600 italic">
           No appointments for this day (or search filter).
@@ -1357,10 +1536,21 @@ export default function Schedule() {
             const end = getEndTime(start, appt.duration_min || 15);
             const size = sizeBadge(appt.slot_weight || 1);
 
+            // Vaccine icon for list view
+            const rabies = getRabiesRecord(appt.shot_records || []);
+            let vaccineIcon = null;
+            if (!rabies) vaccineIcon = "⚠️";
+            else if (isExpired(rabies.date_expires)) vaccineIcon = "⛔";
+            else if (isExpiringSoon(rabies.date_expires)) vaccineIcon = "⚠️";
+
             const [y, m, d] = appt.date.split("-").map(Number);
             const [H, M] = start.split(":").map(Number);
             const localStart = new Date(y, m - 1, d, H, M);
             const isPast = localStart < new Date();
+
+            const servicesText = Array.isArray(appt.services)
+              ? appt.services.join(", ")
+              : appt.services || "";
 
             return (
               <div
@@ -1371,148 +1561,152 @@ export default function Schedule() {
                     : search.trim().length > 0
                     ? "search-dim"
                     : ""
-                }
-                ${isPast ? "opacity-60" : ""}`}
+                } ${isPast ? "opacity-60" : ""}`}
               >
                 <div
                   className={`absolute left-0 top-0 h-full w-2 ${size.bar} rounded-l`}
                 />
 
-                <div className="card-body space-y-2">
-                  <div className="flex justify-between items-center">
+                <div className="card-body space-y-3">
+                  {/* Top row: time + size + vaccine */}
+                  <div className="flex justify-between items-center flex-wrap gap-2">
                     <div>
                       <div className="text-sm text-gray-500">{appt.date}</div>
-                      <div className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                      <div className="text-lg font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
                         {start} – {end}
-                        <span title="Capacity weight">{size.icon}</span>
+                        <span>{size.icon}</span>
+                        {vaccineIcon && (
+                          <span className="text-xl">{vaccineIcon}</span>
+                        )}
                       </div>
                     </div>
 
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-gray-500 text-right">
                       {appt.duration_min} min
+                      {typeof appt.amount === "number" && (
+                        <div className="font-semibold text-gray-800">
+                          ${appt.amount.toFixed(2)}
+                        </div>
+                      )}
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 text-xl font-bold text-gray-800">
-                    {appt.pets?.name}
-                    <span className={`chip ${size.bg}`}>{size.label}</span>
+                  {/* Pet + Client + Tags */}
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                    <div>
+                      <div className="font-semibold text-gray-900">
+                        {appt.pets?.name || "Pet"}{" "}
+                        <span className="text-xs text-gray-500">
+                          {size.label}
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-700">
+                        {appt.pets?.clients?.full_name || "Client"}
+                      </div>
+
+                      {appt.pets?.tags?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {appt.pets.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="px-2 py-0.5 text-[11px] rounded bg-gray-100 text-gray-600"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Contact buttons */}
+                    <div className="flex flex-wrap gap-2 text-xs sm:text-sm">
+                      {appt.pets?.clients?.phone && (
+                        <>
+                          <a
+                            href={`tel:${appt.pets.clients.phone}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="px-2 py-1 border rounded hover:bg-gray-50 flex items-center gap-1"
+                          >
+                            📞 Call
+                          </a>
+                          <a
+                            href={`sms:${appt.pets.clients.phone}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="px-2 py-1 border rounded hover:bg-gray-50 flex items-center gap-1"
+                          >
+                            💬 Text
+                          </a>
+                        </>
+                      )}
+                    </div>
                   </div>
 
-                  {appt.pets?.tags?.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {appt.pets.tags.map((tag) =>
-                        ["Bites", "Anxious", "Aggressive", "Matting"].includes(
-                          tag
-                        ) ? (
-                          <span key={tag} className="chip chip-danger">
-                            ⚠ {tag}
-                          </span>
-                        ) : (
-                          <span key={tag} className="chip">
-                            {tag}
-                          </span>
-                        )
+                  {/* Services & Notes */}
+                  {(servicesText || appt.notes) && (
+                    <div className="text-xs sm:text-sm text-gray-700 space-y-1">
+                      {servicesText && (
+                        <div>
+                          <span className="font-semibold">Services: </span>
+                          <span>{servicesText}</span>
+                        </div>
+                      )}
+                      {appt.notes && (
+                        <div>
+                          <span className="font-semibold">Notes: </span>
+                          <span>{appt.notes}</span>
+                        </div>
                       )}
                     </div>
                   )}
 
-                  <div className="text-sm text-gray-600 flex flex-wrap gap-3 items-center">
-                    <span>{appt.pets?.clients?.full_name}</span>
-                    {appt.pets?.clients?.phone && (
-                      <>
-                        <a
-                          href={`tel:${appt.pets.clients.phone}`}
-                          className="text-blue-600 text-xs"
-                        >
-                          📞 Call
-                        </a>
-                        <a
-                          href={`sms:${appt.pets.clients.phone}`}
-                          className="text-blue-600 text-xs"
-                        >
-                          ✉️ Text
-                        </a>
-                      </>
-                    )}
-                  </div>
+                  {/* Actions row */}
+                  <div className="flex flex-wrap justify-between items-center gap-3 pt-1 border-t border-gray-100 mt-1">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <button
+                        onClick={() => handleOpenEditModal(appt)}
+                        className="px-2 py-1 text-xs sm:text-sm rounded border border-gray-300 hover:bg-gray-50"
+                      >
+                        ✏️ Edit
+                      </button>
 
-                  {appt.services?.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {(Array.isArray(appt.services)
-                        ? appt.services
-                        : String(appt.services)
-                            .split(",")
-                            .map((s) => s.trim())
-                      ).map((svc) => (
-                        <span key={svc} className="chip chip-brand">
-                          {svc}
-                        </span>
-                      ))}
+                      <button
+                        onClick={() => openRebookModal(appt)}
+                        className="px-2 py-1 text-xs sm:text-sm rounded border border-blue-500 text-blue-600 hover:bg-blue-50"
+                      >
+                        🔁 Rebook 6 weeks
+                      </button>
+
+                      <button
+                        onClick={() => handleDelete(appt.id)}
+                        className="px-2 py-1 text-xs sm:text-sm rounded border border-red-500 text-red-600 hover:bg-red-50"
+                      >
+                        🗑 Delete
+                      </button>
                     </div>
-                  )}
 
-                  {typeof appt.amount === "number" && (
-                    <div
-                      className={`text-sm font-medium ${
-                        appt.paid ? "text-gray-600" : "text-red-600"
-                      }`}
-                    >
-                      💲 {appt.amount.toFixed(2)}{" "}
-                      {appt.paid ? "(Paid)" : "(Unpaid)"}
+                    <div className="flex flex-wrap gap-3 items-center">
+                      <ToggleCheckbox
+                        label="Confirmed"
+                        field="confirmed"
+                        appt={appt}
+                        user={user}
+                        setAppointments={setAppointments}
+                      />
+                      <ToggleCheckbox
+                        label="No‑show"
+                        field="no_show"
+                        appt={appt}
+                        user={user}
+                        setAppointments={setAppointments}
+                      />
+                      <ToggleCheckbox
+                        label="Paid"
+                        field="paid"
+                        appt={appt}
+                        user={user}
+                        setAppointments={setAppointments}
+                      />
                     </div>
-                  )}
-
-                  {appt.notes && (
-                    <div className="text-sm italic text-gray-500">
-                      {appt.notes}
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-3 pt-2">
-                    <button
-                      className="btn-secondary"
-                      onClick={() => openRebookModal(appt)}
-                    >
-                      🔁 Rebook (6 Weeks)
-                    </button>
-
-                    <button
-                      className="btn-secondary"
-                      onClick={() => handleOpenEditModal(appt)}
-                    >
-                      ✏️ Edit
-                    </button>
-
-                    <button
-                      className="btn-danger"
-                      onClick={() => handleDelete(appt.id)}
-                    >
-                      🗑 Delete
-                    </button>
-
-                    <ToggleCheckbox
-                      label="Confirmed"
-                      field="confirmed"
-                      appt={appt}
-                      user={user}
-                      setAppointments={setAppointments}
-                    />
-
-                    <ToggleCheckbox
-                      label="No-Show"
-                      field="no_show"
-                      appt={appt}
-                      user={user}
-                      setAppointments={setAppointments}
-                    />
-
-                    <ToggleCheckbox
-                      label="Paid"
-                      field="paid"
-                      appt={appt}
-                      user={user}
-                      setAppointments={setAppointments}
-                    />
                   </div>
                 </div>
               </div>
@@ -1521,7 +1715,7 @@ export default function Schedule() {
         </div>
       )}
 
-      {/* MODALS */}
+      {/* Modals */}
       <PetSelectModal
         open={petModalOpen}
         onClose={() => setPetModalOpen(false)}
@@ -1534,12 +1728,7 @@ export default function Schedule() {
 
       <NewAppointmentModal
         open={newModalOpen}
-        onClose={() => {
-          if (!savingNew) {
-            setNewModalOpen(false);
-            setNewPet(null);
-          }
-        }}
+        onClose={() => setNewModalOpen(false)}
         pet={newPet}
         form={newForm}
         setForm={setNewForm}
@@ -1549,22 +1738,14 @@ export default function Schedule() {
 
       <EditAppointmentModal
         open={editModalOpen}
-        onClose={() => {
-          if (!savingEdit) {
-            setEditModalOpen(false);
-            setEditAppt(null);
-          }
-        }}
+        onClose={() => setEditModalOpen(false)}
         appt={editAppt}
         form={editForm}
         setForm={setEditForm}
         onSave={handleSaveEdit}
         onDelete={() => {
-          if (editAppt) {
-            handleDelete(editAppt.id);
-            setEditModalOpen(false);
-            setEditAppt(null);
-          }
+          if (editAppt) handleDelete(editAppt.id);
+          setEditModalOpen(false);
         }}
         saving={savingEdit}
       />
@@ -1572,10 +1753,7 @@ export default function Schedule() {
       <RebookWeekModal
         open={rebookModalOpen}
         appt={rebookAppt}
-        onClose={() => {
-          setRebookModalOpen(false);
-          setRebookAppt(null);
-        }}
+        onClose={() => setRebookModalOpen(false)}
         onPickDate={handleRebookDatePicked}
       />
     </main>
