@@ -19,7 +19,7 @@ const parseYMD = (s) => {
   return new Date(y, m - 1, d);
 };
 
-// Time slots (15‑minute increments, 6:00–21:00)
+// Time slots (15-minute increments, 6:00–21:00)
 const START_HOUR = 6;
 const END_HOUR = 21;
 const TIME_SLOTS = [];
@@ -175,6 +175,71 @@ function getEndTime(start, durationMin) {
   return `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(
     endMin % 60
   ).padStart(2, "0")}`;
+}
+
+/** Build bullet-list HTML for services (• item<br/>) */
+function buildServicesHtml(services) {
+  const arr = Array.isArray(services)
+    ? services
+    : services
+    ? String(services)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+  if (!arr.length) return "—";
+  return arr.map((s) => `• ${s}`).join("<br/>");
+}
+
+/** Build notes_block HTML row for template or empty string */
+function buildNotesBlockHtml(notes) {
+  if (!notes || !notes.trim()) return "";
+  return `<tr><td><strong>Notes:</strong> ${notes}</td></tr>`;
+}
+
+/** Build confirm URL for email button */
+function buildConfirmUrl(appointmentId) {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}/.netlify/functions/confirmAppointment?id=${appointmentId}`;
+}
+
+/** Fire-and-forget sendEmail confirmation */
+async function sendConfirmationEmail({ appointment, groomerId }) {
+  try {
+    const pet = appointment.pets;
+    const client = pet?.clients;
+    if (!client?.email) return; // nothing to send to
+
+    const servicesHtml = buildServicesHtml(appointment.services);
+    const notesBlock = buildNotesBlockHtml(appointment.notes || "");
+    const confirmUrl = buildConfirmUrl(appointment.id);
+
+    await fetch("/.netlify/functions/sendEmail", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: client.email,
+        subject: `Appointment confirmation for ${pet.name} on ${appointment.date}`,
+        template: "confirmation",
+        data: {
+          groomer_id: groomerId,
+          pet_name: pet.name,
+          date: appointment.date,
+          time: (appointment.time || "").slice(0, 5),
+          duration_min: appointment.duration_min || 30,
+          services: servicesHtml,
+          price:
+            typeof appointment.amount === "number"
+              ? appointment.amount.toFixed(2)
+              : "",
+          notes_block: notesBlock,
+          confirm_url: confirmUrl,
+        },
+      }),
+    });
+  } catch (err) {
+    console.error("Error sending confirmation email:", err);
+  }
 }
 
 /* ---------------- Pet Select Modal ---------------- */
@@ -675,7 +740,6 @@ function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
             .single();
 
           if (!error && data) {
-            // Re-attach rabies records for this pet so icons stay accurate
             const { data: shots } = await supabase
               .from("pet_shot_records")
               .select("*")
@@ -699,7 +763,7 @@ function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
 function startOfWeek(date) {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = (day + 6) % 7; // Monday‑start
+  const diff = (day + 6) % 7; // Monday-start
   d.setDate(d.getDate() - diff);
   d.setHours(0, 0, 0, 0);
   return d;
@@ -878,6 +942,34 @@ export default function Schedule() {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
+  // Attach rabies shot records for a set of appointments
+  const attachShotRecords = async (appts) => {
+    if (!appts.length) return [];
+
+    const petIds = Array.from(
+      new Set(appts.map((a) => a.pet_id).filter(Boolean))
+    );
+
+    if (!petIds.length) return appts;
+
+    const { data: shots } = await supabase
+      .from("pet_shot_records")
+      .select("*")
+      .in("pet_id", petIds)
+      .order("date_expires", { ascending: false });
+
+    const grouped = {};
+    (shots || []).forEach((s) => {
+      if (!grouped[s.pet_id]) grouped[s.pet_id] = [];
+      grouped[s.pet_id].push(s);
+    });
+
+    return appts.map((a) => ({
+      ...a,
+      shot_records: grouped[a.pet_id] || [],
+    }));
+  };
+
   /* Load schedule data */
   useEffect(() => {
     if (!user || !selectedDate) return;
@@ -917,7 +1009,7 @@ export default function Schedule() {
             services, notes, confirmed, no_show, paid, amount, reminder_enabled,
             pets (
               id, name, tags, client_id,
-              clients ( id, full_name, phone )
+              clients ( id, full_name, phone, email )
             )
           `)
           .eq("groomer_id", user.id)
@@ -927,9 +1019,7 @@ export default function Schedule() {
 
       setCapacity(groomer?.max_parallel || 1);
 
-      // No hours configured
       if (!hours) {
-        // Attach shot records for rabies icons
         const apptsWithShots = await attachShotRecords(appts || []);
         setWorkingRange([]);
         setBreakSlots([]);
@@ -938,7 +1028,6 @@ export default function Schedule() {
         return;
       }
 
-      // Build working range
       const startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
       const endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
       const range =
@@ -947,7 +1036,6 @@ export default function Schedule() {
           : TIME_SLOTS.slice(startIdx, endIdx + 1);
       setWorkingRange(range);
 
-      // Build breaks
       const breakSet = new Set();
       (breaks || []).forEach((b) => {
         const bi = TIME_SLOTS.indexOf(b.break_start.slice(0, 5));
@@ -964,34 +1052,6 @@ export default function Schedule() {
 
     loadDay();
   }, [user, selectedDate]);
-
-  // Attach rabies shot records for a set of appointments
-  const attachShotRecords = async (appts) => {
-    if (!appts.length) return [];
-
-    const petIds = Array.from(
-      new Set(appts.map((a) => a.pet_id).filter(Boolean))
-    );
-
-    if (!petIds.length) return appts;
-
-    const { data: shots } = await supabase
-      .from("pet_shot_records")
-      .select("*")
-      .in("pet_id", petIds)
-      .order("date_expires", { ascending: false });
-
-    const grouped = {};
-    (shots || []).forEach((s) => {
-      if (!grouped[s.pet_id]) grouped[s.pet_id] = [];
-      grouped[s.pet_id].push(s);
-    });
-
-    return appts.map((a) => ({
-      ...a,
-      shot_records: grouped[a.pet_id] || [],
-    }));
-  };
 
   /* Delete appointment */
   const handleDelete = async (id) => {
@@ -1097,6 +1157,7 @@ export default function Schedule() {
         notes: newForm.notes,
         slot_weight: newPet.slot_weight || 1,
         reminder_enabled: newForm.reminder_enabled,
+        reminder_sent: false,
         amount: newForm.amount ?? null,
       })
       .select(`
@@ -1104,7 +1165,7 @@ export default function Schedule() {
         services, notes, confirmed, no_show, paid, amount, reminder_enabled,
         pets (
           id, name, tags, client_id,
-          clients ( id, full_name, phone )
+          clients ( id, full_name, phone, email )
         )
       `)
       .single();
@@ -1116,7 +1177,11 @@ export default function Schedule() {
       return;
     }
 
-    // Attach shot records back onto the new appointment
+    // fire-and-forget confirmation email if toggle on
+    if (newForm.reminder_enabled) {
+      sendConfirmationEmail({ appointment: data, groomerId: user.id });
+    }
+
     const { data: shots } = await supabase
       .from("pet_shot_records")
       .select("*")
@@ -1192,6 +1257,7 @@ export default function Schedule() {
         notes: editForm.notes,
         amount: editForm.amount ?? null,
         reminder_enabled: editForm.reminder_enabled,
+        reminder_sent: false,
         slot_weight: editAppt.slot_weight || 1,
       })
       .eq("id", editAppt.id)
@@ -1199,7 +1265,7 @@ export default function Schedule() {
       .select(`
         id, pet_id, groomer_id, date, time, duration_min, slot_weight,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled,
-        pets ( id, name, tags, client_id, clients ( id, full_name, phone ) )
+        pets ( id, name, tags, client_id, clients ( id, full_name, phone, email ) )
       `)
       .single();
 
@@ -1208,6 +1274,11 @@ export default function Schedule() {
     if (error) {
       alert(error.message);
       return;
+    }
+
+    // fire-and-forget confirmation email if toggle on
+    if (editForm.reminder_enabled) {
+      sendConfirmationEmail({ appointment: data, groomerId: user.id });
     }
 
     const { data: shots } = await supabase
@@ -1426,7 +1497,6 @@ export default function Schedule() {
                         const appt = expanded[idx] || null;
                         const clickable = !isBreak && !appt;
 
-                        // Vaccine icon logic for grid
                         let vaccineIcon = null;
                         if (appt && appt.pets?.id) {
                           const rabies = getRabiesRecord(
@@ -1434,11 +1504,11 @@ export default function Schedule() {
                           );
 
                           if (!rabies) {
-                            vaccineIcon = "⚠️"; // no record
+                            vaccineIcon = "⚠️";
                           } else if (isExpired(rabies.date_expires)) {
-                            vaccineIcon = "⛔"; // expired
+                            vaccineIcon = "⛔";
                           } else if (isExpiringSoon(rabies.date_expires)) {
-                            vaccineIcon = "⚠️"; // expiring soon
+                            vaccineIcon = "⚠️";
                           }
                         }
 
@@ -1458,7 +1528,6 @@ export default function Schedule() {
                               handleOpenEditModal(appt);
                             }}
                           >
-                            {/* BREAK */}
                             {isBreak ? (
                               idx === 0 && (
                                 <span className="text-[10px] text-gray-500">
@@ -1466,15 +1535,14 @@ export default function Schedule() {
                                 </span>
                               )
                             ) : !appt ? (
-                              /* EMPTY SLOT */
                               <span className="inline-block w-5 h-5 rounded border border-dashed border-blue-300" />
                             ) : (
-                              /* APPOINTMENT BLOCK */
                               <div
                                 className={`
                                   flex flex-col items-center text-[9px] leading-tight transition-all
                                   ${
-                                    search.trim().length > 0 && matchesSearch(appt, search)
+                                    search.trim().length > 0 &&
+                                    matchesSearch(appt, search)
                                       ? "search-match"
                                       : search.trim().length > 0
                                       ? "search-dim"
@@ -1482,7 +1550,6 @@ export default function Schedule() {
                                   }
                                 `}
                               >
-                                {/* TOP ROW: DOT + VACCINE ICON */}
                                 <div className="flex items-center gap-1">
                                   <span
                                     className={`
@@ -1504,13 +1571,11 @@ export default function Schedule() {
                                   )}
                                 </div>
 
-                                {/* CLIENT NAME */}
                                 <span className="mt-0.5 text-center text-gray-700">
                                   {appt.pets?.clients?.full_name || "Client"} (
                                   {appt.pets?.name || "Pet"})
                                 </span>
                               </div>
-
                             )}
                           </div>
                         );
@@ -1536,7 +1601,6 @@ export default function Schedule() {
             const end = getEndTime(start, appt.duration_min || 15);
             const size = sizeBadge(appt.slot_weight || 1);
 
-            // Vaccine icon for list view
             const rabies = getRabiesRecord(appt.shot_records || []);
             let vaccineIcon = null;
             if (!rabies) vaccineIcon = "⚠️";
@@ -1693,7 +1757,7 @@ export default function Schedule() {
                         setAppointments={setAppointments}
                       />
                       <ToggleCheckbox
-                        label="No‑show"
+                        label="No-show"
                         field="no_show"
                         appt={appt}
                         user={user}
