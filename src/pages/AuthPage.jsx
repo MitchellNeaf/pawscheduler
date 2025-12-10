@@ -1,16 +1,31 @@
+// src/pages/AuthPage.jsx
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 export default function AuthPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const pilot = searchParams.get("pilot"); // 🔥 detect pilot mode
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // ⭐ Automatically redirect pilot users to signup
   useEffect(() => {
-    // If already logged in, skip to home
+    if (pilot === "mobile60") {
+      // Store flag IMMEDIATELY so it's not lost
+      localStorage.setItem("pawscheduler_pilot", "mobile60");
+
+      // Redirect to signup WITH PILOT PARAM
+      navigate("/signup?pilot=mobile60", { replace: true });
+    }
+  }, [pilot, navigate]);
+
+  // If already logged in, skip to home
+  useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate("/");
     });
