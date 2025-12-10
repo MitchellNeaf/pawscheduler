@@ -37,8 +37,9 @@ import Disclaimer from "./pages/legal/Disclaimer";
 import AUP from "./pages/legal/AUP";
 import Retention from "./pages/legal/Retention";
 
+
 // =============================
-// 🔐 PROTECTED ROUTE WITH PILOT SUPPORT
+// 🔐 PROTECTED ROUTE
 // =============================
 function ProtectedRoute({ children }) {
   const navigate = useNavigate();
@@ -48,10 +49,9 @@ function ProtectedRoute({ children }) {
   const [loading, setLoading] = useState(true);
   const [showBanner, setShowBanner] = useState(false);
 
-  // Detect pilot mode (e.g., ?pilot=mobile60)
+  // Detect pilot mode on protected routes
   const pilot = searchParams.get("pilot");
 
-  // Store pilot param so Onboarding can detect it
   useEffect(() => {
     if (pilot === "mobile60") {
       localStorage.setItem("pawscheduler_pilot", "mobile60");
@@ -75,7 +75,6 @@ function ProtectedRoute({ children }) {
         .eq("id", currentUser.id)
         .maybeSingle();
 
-      // No groomer record yet → send to onboarding
       if (!groomer) {
         if (window.location.pathname !== "/onboarding") {
           navigate("/onboarding");
@@ -84,7 +83,6 @@ function ProtectedRoute({ children }) {
         return;
       }
 
-      // Check trial status
       const now = new Date();
       const trialEnd = groomer.trial_end_date
         ? new Date(groomer.trial_end_date)
@@ -133,12 +131,24 @@ function ProtectedRoute({ children }) {
   );
 }
 
+
 // =============================
-// 🧭 NAVIGATION BAR (UNCHANGED)
+// 🧭 APP SHELL WITH GLOBAL PILOT DETECTION
 // =============================
 function AppShell() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
+
+  // 🔥 GLOBAL PILOT DETECTION — THIS FIXES THE ISSUE
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const pilot = params.get("pilot");
+
+    if (pilot === "mobile60") {
+      localStorage.setItem("pawscheduler_pilot", "mobile60");
+    }
+  }, [location.search]);
+
 
   const hideNav =
     location.pathname.startsWith("/book/") ||
@@ -259,6 +269,10 @@ function AppShell() {
   );
 }
 
+
+// =============================
+// ROOT WRAPPER
+// =============================
 export default function App() {
   return (
     <Router>
