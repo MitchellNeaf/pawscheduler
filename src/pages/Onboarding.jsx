@@ -54,7 +54,7 @@ export default function Onboarding() {
     setSlugAvailable(!data);
   };
 
-  // Handle user typing slug
+  // Handle slug typing
   const handleSlugInput = (value) => {
     const cleaned = value.toLowerCase().replace(/[^a-z0-9-]/g, "");
     setSlug(cleaned);
@@ -78,6 +78,21 @@ export default function Onboarding() {
       return;
     }
 
+    // 🔥 Read the pilot flag stored by ProtectedRoute
+    const pilot = localStorage.getItem("pawscheduler_pilot");
+
+    // Trial setup
+    const trialStart = new Date();
+    const trialEnd = new Date();
+
+    let trialLength = 30; // default 30-day trial
+
+    if (pilot === "mobile60") {
+      trialLength = 60;
+    }
+
+    trialEnd.setDate(trialEnd.getDate() + trialLength);
+
     const bookingCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
     const { error } = await supabase.from("groomers").insert([
@@ -86,11 +101,20 @@ export default function Onboarding() {
         full_name: businessName,
         slug: slug,
         booking_code: bookingCode,
-        email: user.email, // 🔥 ALWAYS store email
-        // trial_start_date, trial_end_date, subscription_status
-        // are automatically set by DB defaults
+        email: user.email,
+
+        // ⭐ Trial info
+        trial_start_date: trialStart.toISOString(),
+        trial_end_date: trialEnd.toISOString(),
+        subscription_status: "trial",
+
+        // ⭐ Track signup source
+        signup_source: pilot === "mobile60" ? "mobile_pilot_60" : "standard",
       },
     ]);
+
+    // Clear pilot flag so future logins don't reuse it
+    localStorage.removeItem("pawscheduler_pilot");
 
     if (error) {
       alert("Error creating groomer profile: " + error.message);
@@ -140,7 +164,6 @@ export default function Onboarding() {
             required
           />
 
-          {/* Slug availability messaging */}
           {slug && slugAvailable === true && (
             <p className="text-green-600 text-sm mt-1">
               ✔ Available! Your booking link will be:

@@ -7,6 +7,7 @@ import {
   useLocation,
   Navigate,
   useNavigate,
+  useSearchParams
 } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
@@ -37,13 +38,25 @@ import AUP from "./pages/legal/AUP";
 import Retention from "./pages/legal/Retention";
 
 // =============================
-// 🔐 FIXED PROTECTED ROUTE
+// 🔐 PROTECTED ROUTE WITH PILOT SUPPORT
 // =============================
 function ProtectedRoute({ children }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showBanner, setShowBanner] = useState(false);
+
+  // Detect pilot mode (e.g., ?pilot=mobile60)
+  const pilot = searchParams.get("pilot");
+
+  // Store pilot param so Onboarding can detect it
+  useEffect(() => {
+    if (pilot === "mobile60") {
+      localStorage.setItem("pawscheduler_pilot", "mobile60");
+    }
+  }, [pilot]);
 
   useEffect(() => {
     const check = async () => {
@@ -62,6 +75,7 @@ function ProtectedRoute({ children }) {
         .eq("id", currentUser.id)
         .maybeSingle();
 
+      // No groomer record yet → send to onboarding
       if (!groomer) {
         if (window.location.pathname !== "/onboarding") {
           navigate("/onboarding");
@@ -70,6 +84,7 @@ function ProtectedRoute({ children }) {
         return;
       }
 
+      // Check trial status
       const now = new Date();
       const trialEnd = groomer.trial_end_date
         ? new Date(groomer.trial_end_date)
@@ -119,13 +134,12 @@ function ProtectedRoute({ children }) {
 }
 
 // =============================
-// 🧭 PROFESSIONAL NAVIGATION BAR
+// 🧭 NAVIGATION BAR (UNCHANGED)
 // =============================
 function AppShell() {
   const location = useLocation();
   const [open, setOpen] = useState(false);
 
-  // Hide nav + footer on public pages
   const hideNav =
     location.pathname.startsWith("/book/") ||
     location.pathname === "/auth" ||
@@ -146,7 +160,6 @@ function AppShell() {
 
   return (
     <>
-      {/* NAVIGATION BAR */}
       {!hideNav && (
         <nav className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 relative z-[9999]">
           <div className="flex items-center justify-between">
@@ -156,8 +169,7 @@ function AppShell() {
 
             <button
               onClick={() => setOpen(!open)}
-              className="sm:hidden p-2 rounded-lg border border-gray-300
-                         shadow-sm hover:bg-gray-100 transition"
+              className="sm:hidden p-2 rounded-lg border border-gray-300 shadow-sm hover:bg-gray-100 transition"
             >
               <div className="w-6 h-[2px] bg-gray-700 mb-1"></div>
               <div className="w-6 h-[2px] bg-gray-700 mb-1"></div>
@@ -171,7 +183,6 @@ function AppShell() {
               <Link to="/revenue" className="hover:text-emerald-600">Revenue</Link>
               <Link to="/profile" className="hover:text-emerald-600">Profile</Link>
               <Link to="/help" className="hover:text-emerald-600">Help</Link>
-
               <button
                 onClick={handleLogout}
                 className="text-xs text-gray-500 hover:text-red-600"
@@ -182,28 +193,13 @@ function AppShell() {
           </div>
 
           {open && (
-            <div
-              className="sm:hidden mt-3 bg-white border border-gray-200 rounded-xl shadow-lg
-                         p-4 space-y-4 text-sm font-medium animate-fadeDown"
-            >
-              <Link to="/schedule" className="block text-gray-700 hover:text-emerald-600">
-                Schedule
-              </Link>
-              <Link to="/" className="block text-gray-700 hover:text-emerald-600">
-                Clients
-              </Link>
-              <Link to="/unpaid" className="block text-gray-700 hover:text-emerald-600">
-                Unpaid
-              </Link>
-              <Link to="/revenue" className="block text-gray-700 hover:text-emerald-600">
-                Revenue
-              </Link>
-              <Link to="/profile" className="block text-gray-700 hover:text-emerald-600">
-                Profile
-              </Link>
-              <Link to="/help" className="block text-gray-700 hover:text-emerald-600">
-                Help
-              </Link>
+            <div className="sm:hidden mt-3 bg-white border border-gray-200 rounded-xl shadow-lg p-4 space-y-4 text-sm font-medium animate-fadeDown">
+              <Link to="/schedule" className="block text-gray-700 hover:text-emerald-600">Schedule</Link>
+              <Link to="/" className="block text-gray-700 hover:text-emerald-600">Clients</Link>
+              <Link to="/unpaid" className="block text-gray-700 hover:text-emerald-600">Unpaid</Link>
+              <Link to="/revenue" className="block text-gray-700 hover:text-emerald-600">Revenue</Link>
+              <Link to="/profile" className="block text-gray-700 hover:text-emerald-600">Profile</Link>
+              <Link to="/help" className="block text-gray-700 hover:text-emerald-600">Help</Link>
 
               <button
                 onClick={handleLogout}
@@ -218,7 +214,6 @@ function AppShell() {
 
       {/* ROUTES */}
       <Routes>
-        {/* Public legal pages */}
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/refund" element={<Refund />} />
@@ -228,7 +223,6 @@ function AppShell() {
         <Route path="/aup" element={<AUP />} />
         <Route path="/retention" element={<Retention />} />
 
-        {/* Public auth pages */}
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/upgrade" element={<Upgrade />} />
@@ -236,7 +230,6 @@ function AppShell() {
         <Route path="/book/:slug" element={<Book />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        {/* Protected pages */}
         <Route path="/" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
         <Route path="/clients/:clientId" element={<ProtectedRoute><ClientPets /></ProtectedRoute>} />
         <Route path="/pets/:petId/appointments" element={<ProtectedRoute><PetAppointments /></ProtectedRoute>} />
@@ -247,7 +240,6 @@ function AppShell() {
         <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
       </Routes>
 
-      {/* FOOTER */}
       {!hideFooter && (
         <footer className="text-center text-xs text-gray-500 py-6 mt-10">
           © {new Date().getFullYear()} PawScheduler — All rights reserved.
@@ -267,9 +259,6 @@ function AppShell() {
   );
 }
 
-// =============================
-// ROOT WRAPPER
-// =============================
 export default function App() {
   return (
     <Router>
