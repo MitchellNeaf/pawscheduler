@@ -734,7 +734,20 @@ function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
               `
               id, pet_id, groomer_id, date, time, duration_min, slot_weight,
               services, notes, confirmed, no_show, paid, amount, reminder_enabled,
-              pets (*, clients (*))
+              pets (
+                *,
+                clients (
+                  id,
+                  full_name,
+                  phone,
+                  email,
+                  street,
+                  city,
+                  state,
+                  zip
+                )
+              )
+
             `
             )
             .single();
@@ -1009,8 +1022,18 @@ export default function Schedule() {
             services, notes, confirmed, no_show, paid, amount, reminder_enabled,
             pets (
               id, name, tags, client_id,
-              clients ( id, full_name, phone, email )
+              clients (
+                id,
+                full_name,
+                phone,
+                email,
+                street,
+                city,
+                state,
+                zip
+              )
             )
+
           `)
           .eq("groomer_id", user.id)
           .eq("date", selectedDate)
@@ -1571,10 +1594,15 @@ export default function Schedule() {
                                   )}
                                 </div>
 
-                                <span className="mt-0.5 text-center text-gray-700">
+                                <Link
+                                  to={`/clients/${appt.pets?.clients?.id}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="mt-0.5 text-center text-blue-600 hover:underline font-medium"
+                                >
                                   {appt.pets?.clients?.full_name || "Client"} (
                                   {appt.pets?.name || "Pet"})
-                                </span>
+                                </Link>
+
                               </div>
                             )}
                           </div>
@@ -1693,6 +1721,7 @@ export default function Schedule() {
                           >
                             📞 Call
                           </a>
+
                           <a
                             href={`sms:${appt.pets.clients.phone}`}
                             onClick={(e) => e.stopPropagation()}
@@ -1702,7 +1731,25 @@ export default function Schedule() {
                           </a>
                         </>
                       )}
+
+                      {appt.pets?.clients?.street &&
+                        appt.pets?.clients?.city &&
+                        appt.pets?.clients?.state &&
+                        appt.pets?.clients?.zip && (
+                          <a
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                              `${appt.pets.clients.street}, ${appt.pets.clients.city}, ${appt.pets.clients.state} ${appt.pets.clients.zip}`
+                            )}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="px-2 py-1 border rounded hover:bg-gray-50 flex items-center gap-1"
+                          >
+                            📍 Navigate
+                          </a>
+                        )}
                     </div>
+
                   </div>
 
                   {/* Services & Notes */}

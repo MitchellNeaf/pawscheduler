@@ -21,6 +21,7 @@ export default function ClientPets() {
   const [pets, setPets] = useState([]);
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [savingClient, setSavingClient] = useState(false);
 
   // Vaccine form state
   const [addShotPet, setAddShotPet] = useState(null);
@@ -219,6 +220,110 @@ export default function ClientPets() {
       </div>
 
       <h1 className="mt-2">{client.full_name}'s Pets</h1>
+
+      {/* CLIENT ADDRESS */}
+      <div className="card mb-6">
+        <div className="card-body space-y-3">
+          <h2 className="font-semibold text-lg">Client Info</h2>
+
+          <input
+            placeholder="Email"
+            type="email"
+            value={client.email || ""}
+            onChange={(e) =>
+              setClient((prev) => ({ ...prev, email: e.target.value }))
+            }
+          />
+
+          <input
+            placeholder="Phone"
+            type="tel"
+            value={client.phone || ""}
+            onChange={(e) =>
+              setClient((prev) => ({ ...prev, phone: e.target.value }))
+            }
+          />
+
+
+          <input
+            placeholder="Street"
+            value={client.street || ""}
+            onChange={(e) =>
+              setClient((prev) => ({ ...prev, street: e.target.value }))
+            }
+          />
+
+          <div className="grid grid-cols-2 gap-2">
+            <input
+              placeholder="City"
+              value={client.city || ""}
+              onChange={(e) =>
+                setClient((prev) => ({ ...prev, city: e.target.value }))
+              }
+            />
+            <input
+              placeholder="State"
+              value={client.state || ""}
+              onChange={(e) =>
+                setClient((prev) => ({ ...prev, state: e.target.value }))
+              }
+            />
+          </div>
+
+          <input
+            placeholder="ZIP"
+            value={client.zip || ""}
+            onChange={(e) =>
+              setClient((prev) => ({ ...prev, zip: e.target.value }))
+            }
+          />
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              className="btn-primary text-sm"
+              disabled={savingClient}
+              onClick={async () => {
+                setSavingClient(true);
+                await supabase
+                  .from("clients")
+                  .update({
+                    email: client.email || null,
+                    phone: client.phone || null,
+                    street: client.street || null,
+                    city: client.city || null,
+                    state: client.state || null,
+                    zip: client.zip || null,
+                  })
+
+                  .eq("id", client.id)
+                  .eq("groomer_id", user.id);
+                setSavingClient(false);
+              }}
+            >
+              {savingClient ? "Saving…" : "Save Client Info"}
+            </button>
+
+            {client.street &&
+              client.city &&
+              client.state &&
+              client.zip && (
+                <a
+                  className="btn-secondary text-sm"
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    `${client.street}, ${client.city}, ${client.state} ${client.zip}`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  📍 Open in Maps
+                </a>
+              )}
+          </div>
+        </div>
+      </div>
+
+      {/* PET FORM */}
+      {/* EVERYTHING BELOW IS YOUR ORIGINAL CODE, UNCHANGED */}
 
       {/* PET FORM */}
       <form onSubmit={handleSubmit} className="card mb-6">
