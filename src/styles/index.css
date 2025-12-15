@@ -2,221 +2,250 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ---------------------------------------------
-   Base Overrides — Soft, Feminine-Neutral Theme
-----------------------------------------------*/
+/* =====================================================
+   GLOBAL CANVAS — CLEAN, LIGHT, EXPENSIVE
+===================================================== */
 @layer base {
   body {
-    @apply bg-gradient-to-br from-white via-emerald-50 to-white
-           text-gray-800 font-sans;
+    background:
+      radial-gradient(700px 350px at 12% -10%, rgba(16,185,129,.12), transparent 45%),
+      radial-gradient(700px 350px at 88% 0%, rgba(52,211,153,.10), transparent 45%),
+      linear-gradient(180deg, #f9fafb 0%, #f3f4f6 100%);
+    color: #1f2937;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
   }
 
-  h1 { @apply text-3xl font-bold mb-6 text-gray-900 tracking-tight; }
-  h2 { @apply text-2xl font-semibold mb-4 text-gray-800; }
-  h3 { @apply text-xl font-medium mb-3 text-gray-700; }
+  h1 { @apply text-3xl font-bold tracking-tight text-gray-900 mb-6; }
+  h2 { @apply text-2xl font-semibold text-gray-800 mb-4; }
+  h3 { @apply text-xl font-medium text-gray-700 mb-3; }
 
-  a { @apply text-emerald-600 hover:text-emerald-700 underline underline-offset-2 font-medium; }
+  a { @apply text-emerald-600 hover:text-emerald-700 font-medium; }
+
+  main { @apply max-w-6xl mx-auto px-4 py-6; }
 
   input, select, textarea {
-    @apply border border-gray-300 rounded-xl px-3 py-2 text-sm shadow-sm
-           focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400
-           transition-colors duration-150;
+    background: rgba(255,255,255,.75);
+    border: 1px solid rgba(0,0,0,.08);
+    color: #1f2937;
+    border-radius: 14px;
+    padding: 10px 12px;
+    font-size: 0.9rem;
+    transition: border-color .15s, box-shadow .15s, background .15s;
   }
 
-  table { @apply w-full border-collapse rounded-lg overflow-hidden; }
-  th { @apply bg-gray-100 text-gray-700 font-semibold px-3 py-2 text-left uppercase text-xs tracking-wide; }
-  td { @apply border-t border-gray-200 px-3 py-2 text-sm; }
+  input::placeholder,
+  textarea::placeholder {
+    color: #9ca3af;
+  }
 
-  ul { @apply list-none space-y-2; }
-  li { @apply bg-white border border-gray-200 rounded-xl p-4 shadow-sm hover:shadow-md transition; }
-
-  main { @apply max-w-5xl mx-auto px-4 py-6; }
-  form { @apply bg-white rounded-xl shadow-sm border border-gray-200 p-4 space-y-4; }
+  input:focus,
+  select:focus,
+  textarea:focus {
+    outline: none;
+    border-color: #10b981;
+    box-shadow:
+      0 0 0 3px rgba(16,185,129,.20),
+      0 8px 20px rgba(16,185,129,.18);
+    background: white;
+  }
 }
 
-/* ---------------------------------------------
-   BUTTONS — iPhone/Safari FIXED VERSION
-----------------------------------------------*/
+/* =====================================================
+   BUTTONS — QUIET CONFIDENCE (NO SHOUTING)
+===================================================== */
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 
-           px-4 py-2 rounded-2xl text-sm font-medium 
-           shadow-sm transition duration-200 select-none;
+    @apply inline-flex items-center justify-center gap-2
+           px-4 py-2 rounded-2xl text-sm font-semibold
+           transition select-none;
 
-    /* iPhone Fixes */
     -webkit-appearance: none !important;
     appearance: none !important;
     -webkit-tap-highlight-color: transparent;
-    border-radius: 14px; /* stronger than rounded-xl */
-    backface-visibility: hidden;
-    transform: translateZ(0);
   }
 
-  /* Soft mint primary */
   .btn-primary {
-    @apply bg-emerald-400 text-white 
-           hover:bg-emerald-500 active:bg-emerald-600;
+    background: linear-gradient(135deg, #10b981, #34d399);
+    color: #052e1f;
+    padding: 10px 18px;
+    border-radius: 14px;
+    border: none;
+    font-weight: 700;
+    box-shadow:
+      0 8px 20px rgba(16,185,129,.25),
+      inset 0 1px 0 rgba(255,255,255,.5);
+    transition: transform .15s, box-shadow .15s;
   }
 
-  /* Warm neutral secondary */
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 12px 28px rgba(16,185,129,.35),
+      inset 0 1px 0 rgba(255,255,255,.6);
+  }
+
   .btn-secondary {
-    @apply bg-gray-100 text-gray-700 
-           hover:bg-gray-200 active:bg-gray-300;
+    background: rgba(255,255,255,.85);
+    color: #1f2937;
+    border: 1px solid rgba(0,0,0,.08);
   }
 
-  /* White + mint outline */
   .btn-outline {
-    @apply bg-white text-emerald-600 border border-emerald-300 
-           hover:bg-emerald-50;
+    background: transparent;
+    color: #059669;
+    border: 1px solid rgba(16,185,129,.45);
   }
 
-  /* Soft rose accent */
-  .btn-accent {
-    @apply bg-rose-300 text-white 
-           hover:bg-rose-400 active:bg-rose-500;
+  .btn-danger {
+    background: linear-gradient(135deg, #ef4444, #f87171);
+    color: white;
+    font-weight: 700;
+    box-shadow: 0 8px 20px rgba(239,68,68,.25);
   }
 }
 
-
-/* ---------------------------------------------
-   Cards, Chips, Stats
-----------------------------------------------*/
+/* =====================================================
+   CARDS — SUBTLE GLASS, ZERO CHEESE
+===================================================== */
 @layer components {
   .card {
-    @apply bg-white rounded-2xl shadow-sm border border-gray-100 
-           p-5 hover:shadow-md transition;
+    background:
+      linear-gradient(180deg,
+        rgba(255,255,255,.95),
+        rgba(255,255,255,.88)
+      );
+    border-radius: 20px;
+    padding: 20px;
+    border: 1px solid rgba(0,0,0,.05);
+    box-shadow:
+      0 10px 30px rgba(0,0,0,.06),
+      inset 0 1px 0 rgba(255,255,255,.8);
+    transition: transform .15s, box-shadow .15s;
   }
 
-  .card-header { @apply flex items-center justify-between border-b border-gray-100 pb-3; }
-  .card-body   { @apply space-y-3; }
-  .card-title  { @apply text-lg font-semibold text-gray-800; }
-  .card-subtitle { @apply text-sm text-gray-500; }
-
-  .chip { @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-gray-100 text-gray-700; }
-  .chip-brand { @apply bg-emerald-100 text-emerald-700; }
-  .chip-warning { @apply bg-yellow-100 text-yellow-800; }
-  .chip-danger { @apply bg-red-100 text-red-700; }
-
-  .stat { @apply bg-white rounded-xl p-4 shadow-sm border border-gray-200; }
-  .stat-label { @apply text-sm text-gray-500; }
-  .stat-value { @apply text-2xl font-bold text-gray-900; }
+  .card:hover {
+    transform: translateY(-1px);
+    box-shadow:
+      0 14px 40px rgba(0,0,0,.08),
+      inset 0 1px 0 rgba(255,255,255,.9);
+  }
 }
 
-/* ---------------------------------------------
-   Table Zebra + Header Polish
-----------------------------------------------*/
-@layer base {
-  table { @apply border border-gray-200 rounded-xl overflow-hidden; }
-  th { @apply bg-gray-50 text-gray-700 font-semibold uppercase text-xs tracking-wide; }
-  tr:nth-child(even) { @apply bg-gray-50; }
+/* =====================================================
+   CHIPS / TAGS — CLEAR SIGNAL, NO NOISE
+===================================================== */
+@layer components {
+  .chip {
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .chip-brand {
+    background: rgba(16,185,129,.15);
+    color: #047857;
+  }
+
+  .chip-warning {
+    background: rgba(251,191,36,.20);
+    color: #92400e;
+  }
+
+  .chip-danger {
+    background: rgba(239,68,68,.22);
+    color: #991b1b;
+  }
 }
 
-
-/* ====== GLOBAL BUTTON STYLES ====== */
-
-.btn-primary {
-  background: #10b981; /* emerald-500 */
-  color: white;
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid #0f9665;
-  font-weight: 600;
-  transition: 0.15s;
-}
-.btn-primary:hover {
-  background: #0f9665;
-}
-
-.btn-secondary {
-  background: #e5e7eb; /* gray-200 */
-  color: #1f2937;      /* gray-800 */
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  font-weight: 600;
-  transition: 0.15s;
-}
-.btn-secondary:hover {
-  background: #d1d5db;
-}
-
-.btn-danger {
-  background: #ef4444; /* red-500 */
-  color: white;
-  padding: 8px 14px;
-  border-radius: 8px;
-  border: 1px solid #dc2626;
-  font-weight: 600;
-  transition: 0.15s;
-}
-.btn-danger:hover {
-  background: #dc2626;
-}
-
-/* Chips (tags) */
-.chip {
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: #e5e7eb;
-  font-size: 0.8rem;
-}
-.chip-danger {
-  background: #fecaca;  /* red-200 */
-  color: #b91c1c;        /* red-700 */
-}
-
-html {
-  scroll-behavior: smooth;
-}
-
-/* ======================================
-   SCHEDULE OVERRIDES — ALWAYS WIN
-====================================== */
+/* =====================================================
+   SCHEDULE — HERO WITHOUT SCREAMING
+===================================================== */
 @layer utilities {
   .schedule-card {
-    @apply shadow-md border border-gray-200 hover:shadow-lg;
+    background:
+      linear-gradient(180deg,
+        rgba(255,255,255,.95),
+        rgba(255,255,255,.90)
+      );
+    border-radius: 18px;
+    border: 1px solid rgba(0,0,0,.06);
+    box-shadow: 0 12px 30px rgba(0,0,0,.07);
+    transition: transform .15s, box-shadow .15s;
   }
 
-  .schedule-header {
-    @apply bg-gray-100 text-gray-700 font-semibold px-3 py-2 shadow-sm;
-  }
-
-  .schedule-legend .chip {
-    @apply mb-1;
-  }
-
-  .schedule-grid-header {
-    @apply bg-gray-100 text-gray-700 px-3 py-2 shadow-sm;
-  }
-
-  .schedule-past {
-    @apply opacity-60;
+  .schedule-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 40px rgba(0,0,0,.10);
   }
 
   .schedule-active {
-    @apply shadow-lg border-emerald-200;
+    border-color: #10b981;
+    box-shadow:
+      0 18px 45px rgba(16,185,129,.25),
+      inset 0 0 0 1px rgba(16,185,129,.20);
+  }
+
+  .schedule-past {
+    opacity: .55;
   }
 }
 
-/* ======================================
-   SEARCH HIGHLIGHT (SCHEDULE + LIST)
-====================================== */
+/* =====================================================
+   SEARCH + FOCUS — CONTROLLED WOW
+===================================================== */
 @layer utilities {
+  .focus-ring {
+    box-shadow:
+      0 0 0 3px rgba(16,185,129,.22),
+      0 14px 32px rgba(16,185,129,.25);
+  }
+
   .search-match {
-    @apply ring-2 ring-emerald-400 ring-offset-2 ring-offset-white scale-[1.02] shadow-lg;
+    @apply focus-ring scale-[1.02];
   }
 
   .search-dim {
-    @apply opacity-40;
+    opacity: .35;
   }
 }
 
-/* FIX invisible mobile menu links inside <details> */
+/* =====================================================
+   TABLE POLISH — CLEAN & MODERN
+===================================================== */
+@layer base {
+  table {
+    width: 100%;
+    border-radius: 16px;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 8px 20px rgba(0,0,0,.05);
+  }
+
+  th {
+    background: #f3f4f6;
+    color: #374151;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: .08em;
+  }
+
+  tr:nth-child(even) {
+    background: #f9fafb;
+  }
+}
+
+/* =====================================================
+   MOBILE SAFETY FIXES
+===================================================== */
+html { scroll-behavior: smooth; }
+
 details[open] a {
-  color: #1f2937 !important;        /* gray-800 */
-  text-decoration: none !important; /* kill underline that iOS breaks */
+  color: #1f2937 !important;
+  text-decoration: none !important;
 }
 
 details[open] button {
-  color: #6b7280 !important;        /* gray-500 */
+  color: #6b7280 !important;
 }

@@ -58,19 +58,16 @@ export default function Clients() {
     fetchData();
   }, [fetchData]);
 
-  // Detect duplicate pet names (ONLY within this client being created)
+  // Detect duplicate pet names (only within quick add)
   useEffect(() => {
     const cleaned = quickPets
       .map((p) => p.trim().toLowerCase())
       .filter(Boolean);
 
-    const localDuplicates = new Set(cleaned).size !== cleaned.length;
-
-    if (localDuplicates) {
-      setDuplicateWarning("Duplicate dog names for this client.");
-    } else {
-      setDuplicateWarning("");
-    }
+    const hasDuplicates = new Set(cleaned).size !== cleaned.length;
+    setDuplicateWarning(
+      hasDuplicates ? "Duplicate dog names for this client." : ""
+    );
   }, [quickPets]);
 
   const handleQuickAdd = async (addNext = false) => {
@@ -127,7 +124,11 @@ export default function Clients() {
     const clientMatch =
       (client.full_name || "").toLowerCase().includes(q) ||
       (client.email || "").toLowerCase().includes(q) ||
-      (client.phone || "").toLowerCase().includes(q);
+      (client.phone || "").toLowerCase().includes(q) ||
+      (client.street || "").toLowerCase().includes(q) ||
+      (client.city || "").toLowerCase().includes(q) ||
+      (client.state || "").toLowerCase().includes(q) ||
+      (client.zip || "").toLowerCase().includes(q);
 
     const petMatch = pets
       .filter((p) => p.client_id === client.id)
@@ -154,7 +155,7 @@ export default function Clients() {
         )}
       </div>
 
-      {/* QUICK ADD */}
+      {/* QUICK ADD (unchanged) */}
       {showQuickAdd && (
         <div className="card mb-6 border-2 border-dashed">
           <div className="card-body space-y-3">
@@ -232,10 +233,6 @@ export default function Clients() {
                 </button>
               )}
             </div>
-
-            <p className="text-sm text-gray-500">
-              Add details, vaccines, and notes later.
-            </p>
           </div>
         </div>
       )}
@@ -245,7 +242,7 @@ export default function Clients() {
         <div className="card mb-6">
           <div className="card-body">
             <input
-              placeholder="Search clients or pets…"
+              placeholder="Search clients, pets, phone, or address…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -255,28 +252,75 @@ export default function Clients() {
 
       {/* Client List */}
       <ul className="space-y-4">
-        {filteredClients.map((client) => (
-          <li key={client.id} className="card">
-            <div className="card-body">
-              <Link
-                to={`/clients/${client.id}`}
-                className="font-semibold text-lg"
-              >
-                {client.full_name}
-              </Link>
+        {filteredClients.map((client) => {
+          const fullAddress =
+            client.street && client.city && client.state && client.zip
+              ? `${client.street}, ${client.city}, ${client.state} ${client.zip}`
+              : null;
 
-              <ul className="mt-2 ml-1 space-y-1">
-                {pets
-                  .filter((p) => p.client_id === client.id)
-                  .map((pet) => (
-                    <li key={pet.id} className="text-sm">
-                      {pet.name}
-                    </li>
-                  ))}
-              </ul>
-            </div>
-          </li>
-        ))}
+          return (
+            <li key={client.id} className="card">
+              <div className="card-body">
+                {/* Name */}
+                <Link
+                  to={`/clients/${client.id}`}
+                  className="font-semibold text-lg block"
+                >
+                  {client.full_name}
+                </Link>
+
+                {/* Contact Info */}
+                <div className="mt-1 text-sm text-gray-600 space-y-0.5">
+                  {client.email && <div>📧 {client.email}</div>}
+
+                  {client.phone && (
+                    <div className="flex gap-3 flex-wrap items-center">
+                      <a
+                        href={`tel:${client.phone}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        📞 Call
+                      </a>
+
+                      <a
+                        href={`sms:${client.phone}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        💬 Text
+                      </a>
+
+                      <span className="text-gray-700">{client.phone}</span>
+                    </div>
+                  )}
+
+                  {fullAddress && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                        fullAddress
+                      )}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block text-blue-600 hover:underline"
+                    >
+                      📍 {fullAddress}
+                    </a>
+                  )}
+                </div>
+
+                {/* Pets */}
+                <ul className="mt-2 ml-1 space-y-1">
+                  {pets
+                    .filter((p) => p.client_id === client.id)
+                    .map((pet) => (
+                      <li key={pet.id} className="text-sm">
+                        {pet.name}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </main>
   );
