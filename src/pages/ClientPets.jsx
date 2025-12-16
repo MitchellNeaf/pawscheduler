@@ -509,11 +509,12 @@ export default function ClientPets() {
                   </button>
 
                   <button
-                    className="btn-danger"
+                    className="btn btn-danger"
                     onClick={() => handleDelete(pet.id)}
                   >
                     🗑 Delete
                   </button>
+
                 </div>
               </div>
             </li>

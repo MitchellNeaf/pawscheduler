@@ -37,19 +37,22 @@ import Disclaimer from "./pages/legal/Disclaimer";
 import AUP from "./pages/legal/AUP";
 import Retention from "./pages/legal/Retention";
 
+// 🔒 HARD GLOBAL LOCK (prevents StrictMode duplication)
+let SAMPLE_SETUP_RUNNING = false;
+
 
 // =============================
 // 🔐 PROTECTED ROUTE
 // =============================
 function ProtectedRoute({ children }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showBanner, setShowBanner] = useState(false);
 
-  // Detect pilot mode on protected routes
   const pilot = searchParams.get("pilot");
 
   useEffect(() => {
@@ -59,7 +62,7 @@ function ProtectedRoute({ children }) {
   }, [pilot]);
 
   useEffect(() => {
-    const check = async () => {
+    const run = async () => {
       const { data } = await supabase.auth.getSession();
       const currentUser = data.session?.user || null;
       setUser(currentUser);
@@ -76,13 +79,47 @@ function ProtectedRoute({ children }) {
         .maybeSingle();
 
       if (!groomer) {
-        if (window.location.pathname !== "/onboarding") {
-          navigate("/onboarding");
+        if (location.pathname !== "/onboarding") {
+          navigate("/onboarding", { replace: true });
         }
         setLoading(false);
         return;
       }
 
+      // =============================
+      // ⭐ ONE-TIME SAMPLE ACTIVATION
+      // =============================
+      const sessionKey = `ps_sample_done_${groomer.id}`;
+      const alreadyRanThisSession = sessionStorage.getItem(sessionKey) === "1";
+
+      if (
+        !groomer.has_seen_sample &&
+        !alreadyRanThisSession &&
+        !SAMPLE_SETUP_RUNNING
+      ) {
+        SAMPLE_SETUP_RUNNING = true;
+        sessionStorage.setItem(sessionKey, "1");
+
+        const hoursOk = await ensureDefaultWorkingHours(groomer.id);
+        const sampleOk = await createSampleData(groomer.id);
+
+        if (hoursOk && sampleOk) {
+          await supabase
+            .from("groomers")
+            .update({ has_seen_sample: true })
+            .eq("id", groomer.id);
+        }
+
+        if (location.pathname !== "/schedule") {
+          navigate("/schedule", { replace: true });
+          setLoading(false);
+          return;
+        }
+      }
+
+      // =============================
+      // Trial logic (unchanged)
+      // =============================
       const now = new Date();
       const trialEnd = groomer.trial_end_date
         ? new Date(groomer.trial_end_date)
@@ -90,8 +127,10 @@ function ProtectedRoute({ children }) {
 
       if (groomer.subscription_status === "trial" && trialEnd && now <= trialEnd) {
         const daysLeft = Math.ceil((trialEnd - now) / 86400000);
-        if (daysLeft <= 5 && daysLeft >= 0) setShowBanner(true);
-      } else if (
+        if (daysLeft <= 5) setShowBanner(true);
+      }
+
+      if (
         groomer.subscription_status === "trial" &&
         trialEnd &&
         now > trialEnd
@@ -99,22 +138,24 @@ function ProtectedRoute({ children }) {
         await supabase
           .from("groomers")
           .update({ subscription_status: "expired" })
-          .eq("id", currentUser.id);
-        navigate("/upgrade");
-      } else if (groomer.subscription_status === "expired") {
-        navigate("/upgrade");
+          .eq("id", groomer.id);
+
+        navigate("/upgrade", { replace: true });
+        setLoading(false);
+        return;
+      }
+
+      if (groomer.subscription_status === "expired") {
+        navigate("/upgrade", { replace: true });
+        setLoading(false);
+        return;
       }
 
       setLoading(false);
     };
 
-    check();
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_, session) => setUser(session?.user || null)
-    );
-    return () => listener.subscription.unsubscribe();
-  }, [navigate]);
+    run();
+  }, [navigate, location.pathname]);
 
   if (loading) return <p className="text-center mt-10">Loading…</p>;
   if (!user) return <Navigate to="/auth" />;
@@ -133,22 +174,106 @@ function ProtectedRoute({ children }) {
 
 
 // =============================
-// 🧭 APP SHELL WITH GLOBAL PILOT DETECTION
+// ⭐ ACTIVATION HELPERS (MATCH DB)
+// =============================
+async function ensureDefaultWorkingHours(groomerId) {
+  const { data: existing } = await supabase
+    .from("working_hours")
+    .select("id")
+    .eq("groomer_id", groomerId)
+    .limit(1);
+
+  if (existing && existing.length > 0) return true;
+
+  const rows = [];
+  for (let weekday = 0; weekday < 7; weekday++) {
+    rows.push({
+      groomer_id: groomerId,
+      weekday,
+      start_time: "08:00",
+      end_time: "17:00",
+    });
+  }
+
+  const { error } = await supabase.from("working_hours").insert(rows);
+  if (error) {
+    console.error("working_hours insert error", error);
+    return false;
+  }
+
+  return true;
+}
+
+async function createSampleData(groomerId) {
+  // Client
+  const { data: client, error: cErr } = await supabase
+    .from("clients")
+    .insert({
+      groomer_id: groomerId,
+      full_name: "Sample Client",
+      is_sample: true,
+    })
+    .select()
+    .single();
+
+  if (cErr) {
+    console.error("client insert error", cErr);
+    return false;
+  }
+
+  // Pet
+  const { data: pet, error: pErr } = await supabase
+    .from("pets")
+    .insert({
+      groomer_id: groomerId,
+      client_id: client.id,
+      name: "Bella",
+      breed: "Golden Retriever",
+      tags: ["Friendly"],
+      notes: "Sample pet — delete anytime",
+      slot_weight: 1,
+      is_sample: true,
+    })
+    .select()
+    .single();
+
+  if (pErr) {
+    console.error("pet insert error", pErr);
+    return false;
+  }
+
+  // Appointment (date + time)
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { error: aErr } = await supabase.from("appointments").insert({
+    groomer_id: groomerId,
+    pet_id: pet.id,
+    date: today,
+    time: "08:00",
+    duration_min: 60,
+    services: ["Full Groom"],
+    status: "scheduled",
+    confirmed: false,
+    no_show: false,
+    paid: false,
+    is_sample: true,
+    notes: "Sample appointment — tap to edit or delete",
+  });
+
+  if (aErr) {
+    console.error("appointment insert error", aErr);
+    return false;
+  }
+
+  return true;
+}
+
+
+// =============================
+// 🧭 APP SHELL
 // =============================
 function AppShell() {
   const location = useLocation();
-  const [open, setOpen] = useState(false);
-
-  // 🔥 GLOBAL PILOT DETECTION — THIS FIXES THE ISSUE
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const pilot = params.get("pilot");
-
-    if (pilot === "mobile60") {
-      localStorage.setItem("pawscheduler_pilot", "mobile60");
-    }
-  }, [location.search]);
-
 
   const hideNav =
     location.pathname.startsWith("/book/") ||
@@ -171,58 +296,27 @@ function AppShell() {
   return (
     <>
       {!hideNav && (
-        <nav className="bg-white shadow-sm border-b border-gray-200 px-4 py-3 relative z-[9999]">
+        <nav className="bg-white shadow-sm border-b border-gray-200 px-4 py-3">
           <div className="flex items-center justify-between">
-            <div className="text-2xl font-semibold tracking-tight text-gray-900">
+            <div className="text-xl font-semibold">
               <span className="text-emerald-600">Paw</span>Scheduler
             </div>
 
-            <button
-              onClick={() => setOpen(!open)}
-              className="sm:hidden p-2 rounded-lg border border-gray-300 shadow-sm hover:bg-gray-100 transition"
-            >
-              <div className="w-6 h-[2px] bg-gray-700 mb-1"></div>
-              <div className="w-6 h-[2px] bg-gray-700 mb-1"></div>
-              <div className="w-6 h-[2px] bg-gray-700"></div>
-            </button>
-
-            <div className="hidden sm:flex items-center gap-6 text-sm font-medium">
-              <Link to="/schedule" className="hover:text-emerald-600">Schedule</Link>
-              <Link to="/" className="hover:text-emerald-600">Clients</Link>
-              <Link to="/unpaid" className="hover:text-emerald-600">Unpaid</Link>
-              <Link to="/revenue" className="hover:text-emerald-600">Revenue</Link>
-              <Link to="/profile" className="hover:text-emerald-600">Profile</Link>
-              <Link to="/help" className="hover:text-emerald-600">Help</Link>
-              <button
-                onClick={handleLogout}
-                className="text-xs text-gray-500 hover:text-red-600"
-              >
+            <div className="hidden sm:flex gap-6 text-sm font-medium">
+              <Link to="/schedule">Schedule</Link>
+              <Link to="/">Clients</Link>
+              <Link to="/unpaid">Unpaid</Link>
+              <Link to="/revenue">Revenue</Link>
+              <Link to="/profile">Profile</Link>
+              <Link to="/help">Help</Link>
+              <button onClick={handleLogout} className="text-xs text-gray-500">
                 Logout
               </button>
             </div>
           </div>
-
-          {open && (
-            <div className="sm:hidden mt-3 bg-white border border-gray-200 rounded-xl shadow-lg p-4 space-y-4 text-sm font-medium animate-fadeDown">
-              <Link to="/schedule" className="block text-gray-700 hover:text-emerald-600">Schedule</Link>
-              <Link to="/" className="block text-gray-700 hover:text-emerald-600">Clients</Link>
-              <Link to="/unpaid" className="block text-gray-700 hover:text-emerald-600">Unpaid</Link>
-              <Link to="/revenue" className="block text-gray-700 hover:text-emerald-600">Revenue</Link>
-              <Link to="/profile" className="block text-gray-700 hover:text-emerald-600">Profile</Link>
-              <Link to="/help" className="block text-gray-700 hover:text-emerald-600">Help</Link>
-
-              <button
-                onClick={handleLogout}
-                className="text-xs text-gray-500 hover:text-red-600"
-              >
-                Logout
-              </button>
-            </div>
-          )}
         </nav>
       )}
 
-      {/* ROUTES */}
       <Routes>
         <Route path="/terms" element={<Terms />} />
         <Route path="/privacy" element={<Privacy />} />
@@ -251,28 +345,14 @@ function AppShell() {
       </Routes>
 
       {!hideFooter && (
-        <footer className="text-center text-xs text-gray-500 py-6 mt-10">
-          © {new Date().getFullYear()} PawScheduler — All rights reserved.
-          <div className="mt-2 flex justify-center flex-wrap gap-4">
-            <a href="/terms">Terms</a>
-            <a href="/privacy">Privacy</a>
-            <a href="/refund">Refund Policy</a>
-            <a href="/cookies">Cookies</a>
-            <a href="/dpa">DPA</a>
-            <a href="/disclaimer">Disclaimer</a>
-            <a href="/aup">Acceptable Use</a>
-            <a href="/retention">Data Retention</a>
-          </div>
+        <footer className="text-center text-xs text-gray-500 py-6">
+          © {new Date().getFullYear()} PawScheduler
         </footer>
       )}
     </>
   );
 }
 
-
-// =============================
-// ROOT WRAPPER
-// =============================
 export default function App() {
   return (
     <Router>
