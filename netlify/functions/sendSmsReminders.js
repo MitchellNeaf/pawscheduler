@@ -37,6 +37,7 @@ exports.handler = async (event) => {
 
     // -------------------------------------------------
     // Fetch appointments needing SMS reminders
+    // (FORCED joins so client is never null)
     // -------------------------------------------------
     const { data: appts, error } = await supabase
       .from("appointments")
@@ -46,9 +47,9 @@ exports.handler = async (event) => {
         time,
         sms_reminder_enabled,
         sms_reminder_sent_at,
-        pets (
+        pets!inner (
           name,
-          clients (
+          clients!inner (
             phone,
             sms_opt_in,
             full_name
@@ -72,14 +73,14 @@ exports.handler = async (event) => {
     // Send SMS reminders
     // -------------------------------------------------
     for (const a of appts) {
-      const client = a.pets?.clients;
+      const client = a.pets.clients;
 
-      if (!client?.phone) continue;
-      if (!client?.sms_opt_in) continue;
+      if (!client.phone) continue;
+      if (!client.sms_opt_in) continue;
 
       const message = `Hi ${client.full_name || ""}, reminder that ${
-        a.pets?.name || "your pet"
-      } has a grooming appointment tomorrow at ${a.time?.slice(
+        a.pets.name || "your pet"
+      } has a grooming appointment tomorrow at ${a.time.slice(
         0,
         5
       )}. Reply STOP to opt out.`;
