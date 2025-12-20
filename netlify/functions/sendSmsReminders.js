@@ -4,7 +4,7 @@ const { createClient } = require("@supabase/supabase-js");
 exports.handler = async (event) => {
   try {
     // -------------------------------------------------
-    // 🔐 SECURITY: protect endpoint from random hits
+    // 🔐 SECURITY — cron protection
     // -------------------------------------------------
     const secret =
       event.headers["x-cron-secret"] ||
@@ -18,7 +18,7 @@ exports.handler = async (event) => {
     }
 
     // -------------------------------------------------
-    // Supabase service client (server-side only)
+    // Supabase (service role)
     // -------------------------------------------------
     const supabase = createClient(
       process.env.SUPABASE_URL,
@@ -36,34 +36,17 @@ exports.handler = async (event) => {
     const tomorrow = estNow.toISOString().slice(0, 10);
 
     // -------------------------------------------------
-    // Fetch appointments needing SMS reminders
-    // (EXPLICIT FK JOINS — this is the key fix)
+    // 🔍 Fetch SMS candidates via RPC (FLAT DATA)
     // -------------------------------------------------
-    const { data: appts, error } = await supabase
-      .from("appointments")
-      .select(`
-        id,
-        date,
-        time,
-        sms_reminder_enabled,
-        sms_reminder_sent_at,
-        pets:appointments_pet_id_fkey!inner (
-          name,
-          clients:pets_client_id_fkey!inner (
-            phone,
-            sms_opt_in,
-            full_name
-          )
-        )
-      `)
-      .eq("date", tomorrow)
-      .eq("sms_reminder_enabled", true)
-      .is("sms_reminder_sent_at", null);
+    const { data: appts, error } = await supabase.rpc(
+      "sms_reminder_candidates",
+      { target_date: tomorrow }
+    );
 
-    if (error) throw error;
-
-    // TEMP DEBUG — remove later
-    console.log("SMS QUERY RESULT:", JSON.stringify(appts, null, 2));
+    if (error) {
+      console.error("RPC Error:", error);
+      throw error;
+    }
 
     if (!appts || appts.length === 0) {
       return {
@@ -73,17 +56,12 @@ exports.handler = async (event) => {
     }
 
     // -------------------------------------------------
-    // Send SMS reminders
+    // 📤 Send SMS reminders
     // -------------------------------------------------
     for (const a of appts) {
-      const client = a.pets.clients;
-
-      if (!client.phone) continue;
-      if (!client.sms_opt_in) continue;
-
-      const message = `Hi ${client.full_name || ""}, reminder that ${
-        a.pets.name || "your pet"
-      } has a grooming appointment tomorrow at ${a.time.slice(
+      const message = `Hi ${a.client_name}, reminder that ${
+        a.pet_name
+      } has a grooming appointment tomorrow at ${a.appt_time.slice(
         0,
         5
       )}. Reply STOP to opt out.`;
@@ -96,30 +74,25 @@ exports.handler = async (event) => {
         },
         body: JSON.stringify({
           from: process.env.TELNYX_PHONE_NUMBER,
-          to: client.phone,
+          to: a.phone,
           text: message
         })
       });
 
       if (!res.ok) {
-        console.error(
-          "Telnyx error:",
-          await res.text(),
-          "Appointment:",
-          a.id
-        );
+        console.error("Telnyx send failed:", await res.text());
         continue;
       }
 
       // -------------------------------------------------
-      // Mark reminder as sent (idempotency)
+      // Mark appointment as SMS sent (idempotent)
       // -------------------------------------------------
       await supabase
         .from("appointments")
         .update({
           sms_reminder_sent_at: new Date().toISOString()
         })
-        .eq("id", a.id);
+        .eq("id", a.appointment_id);
     }
 
     return {
@@ -128,7 +101,7 @@ exports.handler = async (event) => {
     };
 
   } catch (err) {
-    console.error("SMS Reminder Error:", err);
+    console.error("SMS Reminder Fatal Error:", err);
     return {
       statusCode: 500,
       body: err.message
