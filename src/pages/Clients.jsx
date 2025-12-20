@@ -3,6 +3,25 @@ import { Link } from "react-router-dom";
 import { supabase } from "../supabase";
 import Loader from "../components/Loader";
 
+/**
+ * Normalize US phone to E.164 for Telnyx.
+ * Examples:
+ * 814-333-4444 -> +18143334444
+ * (814)3334444 -> +18143334444
+ * 18143334444  -> +18143334444
+ */
+function normalizeUSPhoneToE164(input) {
+  const raw = (input || "").trim();
+  if (!raw) return null;
+
+  const digits = raw.replace(/\D/g, "");
+
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+
+  return "INVALID";
+}
+
 export default function Clients() {
   const [clients, setClients] = useState([]);
   const [pets, setPets] = useState([]);
@@ -16,6 +35,13 @@ export default function Clients() {
   const [quickPets, setQuickPets] = useState([""]);
   const [quickSaving, setQuickSaving] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState("");
+
+  // Inline SMS edit state
+  const [smsEditId, setSmsEditId] = useState(null);
+  const [smsPhoneDraft, setSmsPhoneDraft] = useState("");
+  const [smsOptInDraft, setSmsOptInDraft] = useState(false);
+  const [smsSaveError, setSmsSaveError] = useState("");
+  const [smsSaving, setSmsSaving] = useState(false);
 
   // Get logged-in groomer
   useEffect(() => {
@@ -73,7 +99,12 @@ export default function Clients() {
   const handleQuickAdd = async (addNext = false) => {
     const cleanedPets = quickPets.map((p) => p.trim()).filter(Boolean);
 
-    if (!quickClientName.trim() || cleanedPets.length === 0 || duplicateWarning || !user) {
+    if (
+      !quickClientName.trim() ||
+      cleanedPets.length === 0 ||
+      duplicateWarning ||
+      !user
+    ) {
       return;
     }
 
@@ -114,6 +145,69 @@ export default function Clients() {
       alert("Could not save client. Try again.");
     } finally {
       setQuickSaving(false);
+    }
+  };
+
+  const startSmsEdit = (client) => {
+    setSmsSaveError("");
+    setSmsEditId(client.id);
+    setSmsPhoneDraft(client.phone || "");
+    setSmsOptInDraft(!!client.sms_opt_in);
+  };
+
+  const cancelSmsEdit = () => {
+    setSmsSaveError("");
+    setSmsEditId(null);
+    setSmsPhoneDraft("");
+    setSmsOptInDraft(false);
+  };
+
+  const saveSmsEdit = async (clientId) => {
+    setSmsSaveError("");
+    setSmsSaving(true);
+
+    try {
+      const normalized = normalizeUSPhoneToE164(smsPhoneDraft);
+
+      // If blank/cleared: delete phone + force opt-out
+      if (normalized === null) {
+        const { error } = await supabase
+          .from("clients")
+          .update({ phone: null, sms_opt_in: false })
+          .eq("id", clientId);
+
+        if (error) throw error;
+
+        await fetchData();
+        cancelSmsEdit();
+        return;
+      }
+
+      if (normalized === "INVALID") {
+        setSmsSaveError(
+          "Invalid phone. Use a 10-digit US number (e.g. 814-333-4444)."
+        );
+        return;
+      }
+
+      // If we have a valid phone, allow opt-in toggle
+      const { error } = await supabase
+        .from("clients")
+        .update({
+          phone: normalized,
+          sms_opt_in: !!smsOptInDraft,
+        })
+        .eq("id", clientId);
+
+      if (error) throw error;
+
+      await fetchData();
+      cancelSmsEdit();
+    } catch (e) {
+      console.error(e);
+      setSmsSaveError("Could not save SMS settings. Try again.");
+    } finally {
+      setSmsSaving(false);
     }
   };
 
@@ -258,6 +352,8 @@ export default function Clients() {
               ? `${client.street}, ${client.city}, ${client.state} ${client.zip}`
               : null;
 
+          const isEditing = smsEditId === client.id;
+
           return (
             <li key={client.id} className="card">
               <div className="card-body">
@@ -290,6 +386,18 @@ export default function Clients() {
                       </a>
 
                       <span className="text-gray-700">{client.phone}</span>
+
+                      {client.sms_opt_in && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800">
+                          SMS opted-in
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {!client.phone && (
+                    <div className="text-xs text-gray-500">
+                      No phone on file (SMS disabled)
                     </div>
                   )}
 
@@ -307,8 +415,80 @@ export default function Clients() {
                   )}
                 </div>
 
+                {/* SMS Edit */}
+                <div className="mt-3">
+                  {!isEditing ? (
+                    <button
+                      type="button"
+                      className="btn-secondary text-sm"
+                      onClick={() => startSmsEdit(client)}
+                    >
+                      ✉️ Edit SMS
+                    </button>
+                  ) : (
+                    <div className="card border border-dashed mt-2">
+                      <div className="card-body space-y-2">
+                        <div className="text-sm font-medium text-gray-800">
+                          SMS Settings
+                        </div>
+
+                        <input
+                          placeholder="Phone (e.g. 814-333-4444)"
+                          value={smsPhoneDraft}
+                          onChange={(e) => setSmsPhoneDraft(e.target.value)}
+                        />
+
+                        <label className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={smsOptInDraft}
+                            disabled={!smsPhoneDraft.trim()}
+                            onChange={(e) =>
+                              setSmsOptInDraft(e.target.checked)
+                            }
+                          />
+                          Opt in to text reminders
+                        </label>
+
+                        <div className="text-xs text-gray-500">
+                          Message rates may apply. Reply STOP to opt out.
+                        </div>
+
+                        {smsSaveError && (
+                          <div className="text-sm text-red-600 font-medium">
+                            {smsSaveError}
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 flex-wrap">
+                          <button
+                            className="btn-primary text-sm"
+                            disabled={smsSaving}
+                            onClick={() => saveSmsEdit(client.id)}
+                          >
+                            {smsSaving ? "Saving..." : "Save"}
+                          </button>
+
+                          <button
+                            className="btn-secondary text-sm"
+                            disabled={smsSaving}
+                            onClick={cancelSmsEdit}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+
+                        <div className="text-xs text-gray-500">
+                          Tip: clearing the phone number will also disable SMS
+                          opt-in automatically.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Pets */}
-                <ul className="mt-2 ml-1 space-y-1">
+                <ul className="mt-3 ml-1 space-y-1">
                   {pets
                     .filter((p) => p.client_id === client.id)
                     .map((pet) => (
