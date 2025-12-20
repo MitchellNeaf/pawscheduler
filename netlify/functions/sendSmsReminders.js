@@ -37,7 +37,7 @@ exports.handler = async (event) => {
 
     // -------------------------------------------------
     // Fetch appointments needing SMS reminders
-    // (FORCED joins so client is never null)
+    // (EXPLICIT FK JOINS — this is the key fix)
     // -------------------------------------------------
     const { data: appts, error } = await supabase
       .from("appointments")
@@ -47,9 +47,9 @@ exports.handler = async (event) => {
         time,
         sms_reminder_enabled,
         sms_reminder_sent_at,
-        pets!inner (
+        pets:appointments_pet_id_fkey!inner (
           name,
-          clients!inner (
+          clients:pets_client_id_fkey!inner (
             phone,
             sms_opt_in,
             full_name
@@ -61,6 +61,9 @@ exports.handler = async (event) => {
       .is("sms_reminder_sent_at", null);
 
     if (error) throw error;
+
+    // TEMP DEBUG — remove later
+    console.log("SMS QUERY RESULT:", JSON.stringify(appts, null, 2));
 
     if (!appts || appts.length === 0) {
       return {
