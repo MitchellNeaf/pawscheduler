@@ -171,6 +171,8 @@ export default function ClientPets() {
     }
   };
 
+
+  
   // Edit pet
   const handleEdit = (pet) => {
     setForm({
@@ -221,7 +223,7 @@ export default function ClientPets() {
 
       <h1 className="mt-2">{client.full_name}'s Pets</h1>
 
-      {/* CLIENT ADDRESS */}
+      {/* CLIENT INFO */}
       <div className="card mb-6">
         <div className="card-body space-y-3">
           <h2 className="font-semibold text-lg">Client Info</h2>
@@ -235,15 +237,13 @@ export default function ClientPets() {
             }
           />
 
-          <input
-            placeholder="Phone"
-            type="tel"
-            value={client.phone || ""}
-            onChange={(e) =>
-              setClient((prev) => ({ ...prev, phone: e.target.value }))
-            }
-          />
-
+          {/* READ-ONLY PHONE */}
+          <div className="text-sm text-gray-700">
+            📞 {client.phone || "No phone on file"}
+          </div>
+          <div className="text-xs text-gray-500">
+            Phone & SMS settings are managed from the Clients page.
+          </div>
 
           <input
             placeholder="Street"
@@ -288,13 +288,11 @@ export default function ClientPets() {
                   .from("clients")
                   .update({
                     email: client.email || null,
-                    phone: client.phone || null,
                     street: client.street || null,
                     city: client.city || null,
                     state: client.state || null,
                     zip: client.zip || null,
                   })
-
                   .eq("id", client.id)
                   .eq("groomer_id", user.id);
                 setSavingClient(false);
@@ -321,9 +319,6 @@ export default function ClientPets() {
           </div>
         </div>
       </div>
-
-      {/* PET FORM */}
-      {/* EVERYTHING BELOW IS YOUR ORIGINAL CODE, UNCHANGED */}
 
       {/* PET FORM */}
       <form onSubmit={handleSubmit} className="card mb-6">
@@ -514,7 +509,6 @@ export default function ClientPets() {
                   >
                     🗑 Delete
                   </button>
-
                 </div>
               </div>
             </li>
@@ -531,7 +525,6 @@ export default function ClientPets() {
             </h3>
 
             <div className="space-y-4">
-              {/* SHOT TYPE */}
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Shot Type
@@ -550,7 +543,6 @@ export default function ClientPets() {
                 </select>
               </div>
 
-              {/* DATE GIVEN */}
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Date Given
@@ -583,7 +575,6 @@ export default function ClientPets() {
                 </label>
               </div>
 
-              {/* DATE EXPIRES */}
               <div>
                 <label className="block text-sm font-medium mb-1">
                   Date Expires
@@ -599,7 +590,6 @@ export default function ClientPets() {
                 />
               </div>
 
-              {/* NOTES */}
               <div>
                 <label className="block text-sm font-medium mb-1">Notes</label>
                 <textarea
@@ -612,7 +602,6 @@ export default function ClientPets() {
                 />
               </div>
 
-              {/* BUTTONS */}
               <div className="flex gap-3 mt-2">
                 <button
                   type="button"

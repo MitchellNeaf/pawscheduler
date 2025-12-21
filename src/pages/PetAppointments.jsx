@@ -1,11 +1,9 @@
-// src/pages/Schedule.jsx
-import React, { useEffect, useState } from "react";
+// src/pages/PetAppointments.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
-import { Link } from "react-router-dom";
+import { Link, useParams, useNavigate } from "react-router-dom";
 import Loader from "../components/Loader";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
-import { sendEmail } from "../utils/sendEmail"; // <-- REQUIRED
+import { sendEmail } from "../utils/sendEmail";
 
 const toYMD = (d) => {
   const year = d.getFullYear();
@@ -13,105 +11,6 @@ const toYMD = (d) => {
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 };
-const parseYMD = (s) => {
-  const [y, m, d] = s.split("-").map(Number);
-  return new Date(y, m - 1, d);
-};
-
-const START_HOUR = 6;
-const END_HOUR = 21;
-const TIME_SLOTS = [];
-for (let hour = START_HOUR; hour <= END_HOUR; hour++) {
-  for (let min of [0, 15, 30, 45]) {
-    TIME_SLOTS.push(
-      `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`
-    );
-  }
-}
-
-/* ---------------- Trial Banner ---------------- */
-function ScheduleTrialBanner({ userId }) {
-  const [status, setStatus] = useState(null);
-  const [daysLeft, setDaysLeft] = useState(null);
-
-  useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase
-        .from("groomers")
-        .select("subscription_status, trial_end_date")
-        .eq("id", userId)
-        .single();
-
-      if (!data) return;
-
-      setStatus(data.subscription_status);
-      const now = new Date();
-      const end = new Date(data.trial_end_date);
-      setDaysLeft(Math.ceil((end - now) / 86400000));
-    };
-    load();
-  }, [userId]);
-
-  if (!status) return null;
-
-  if (status === "trial") {
-    if (daysLeft < 0) {
-      return (
-        <div className="bg-red-100 text-red-700 p-3 rounded-md font-semibold mb-4">
-          🚫 Your free trial has ended —{" "}
-          <Link to="/upgrade" className="underline font-bold">
-            upgrade to continue
-          </Link>
-          .
-        </div>
-      );
-    }
-    return (
-      <div className="bg-yellow-100 text-yellow-800 p-3 rounded-md font-semibold mb-4">
-        ⏳ Trial ends in <strong>{daysLeft}</strong> days —
-        <Link to="/upgrade" className="underline font-bold ml-1">
-          Upgrade
-        </Link>
-      </div>
-    );
-  }
-
-  return null;
-}
-
-/* ---------------- Helpers ---------------- */
-function sizeBadge(weight) {
-  switch (weight) {
-    case 1:
-      return {
-        label: "S/M (1)",
-        bg: "bg-green-200 text-green-800",
-        bar: "bg-green-400",
-        icon: "🟩",
-      };
-    case 2:
-      return {
-        label: "Large (2)",
-        bg: "bg-orange-200 text-orange-800",
-        bar: "bg-orange-400",
-        icon: "🟧",
-      };
-    case 3:
-      return {
-        label: "XL (3)",
-        bg: "bg-red-200 text-red-800",
-        bar: "bg-red-400",
-        icon: "🟥",
-      };
-    default:
-      return {
-        label: `Size ${weight}`,
-        bg: "bg-gray-200 text-gray-800",
-        bar: "bg-gray-400",
-        icon: "⬜",
-      };
-  }
-}
 
 const SERVICE_OPTIONS = [
   "Full Groom",
@@ -125,96 +24,10 @@ const SERVICE_OPTIONS = [
 function getEndTime(start, durationMin) {
   if (!start) return "—";
   const [h, m] = start.split(":").map(Number);
-  const endMin = h * 60 + m + durationMin;
+  const endMin = h * 60 + m + (durationMin || 15);
   return `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(
     endMin % 60
   ).padStart(2, "0")}`;
-}
-
-/* ---------------- Pet Select Modal ---------------- */
-function PetSelectModal({ open, onClose, slot, date, pets, loading, onPickPet }) {
-  const [query, setQuery] = useState("");
-  if (!open) return null;
-
-  const filtered = pets.filter((p) => {
-    if (!query.trim()) return true;
-    const q = query.toLowerCase();
-    return (
-      p.name.toLowerCase().includes(q) ||
-      (p.clients?.full_name || "").toLowerCase().includes(q) ||
-      (p.tags || []).some((t) => t.toLowerCase().includes(q))
-    );
-  });
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h2 className="font-semibold text-gray-800">
-            Add appointment at {slot} on {date}
-          </h2>
-          <button onClick={onClose} className="text-gray-500 text-sm">
-            ✕
-          </button>
-        </div>
-
-        <div className="px-4 py-2 border-b bg-gray-50">
-          <input
-            type="text"
-            placeholder="Search pets or clients..."
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="w-full border rounded px-3 py-2 text-sm"
-          />
-        </div>
-
-        <div className="p-4 overflow-y-auto flex-1">
-          {loading ? (
-            <Loader />
-          ) : filtered.length === 0 ? (
-            <p className="text-sm text-gray-600">No matching pets.</p>
-          ) : (
-            <ul className="space-y-2">
-              {filtered.map((pet) => (
-                <li key={pet.id}>
-                  <button
-                    onClick={() => onPickPet(pet)}
-                    className="w-full text-left border rounded px-3 py-2 hover:bg-blue-50 flex flex-col"
-                  >
-                    <span className="font-medium">{pet.name}</span>
-                    <span className="text-xs text-gray-500">
-                      {pet.clients?.full_name}
-                    </span>
-                    {pet.tags?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {pet.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="px-2 py-0.5 text-[10px] rounded bg-gray-100 text-gray-600"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="px-4 py-3 border-t text-right">
-          <button
-            onClick={onClose}
-            className="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 /* ---------------- New Appointment Modal ---------------- */
@@ -229,10 +42,8 @@ function NewAppointmentModal({
 }) {
   const [otherService, setOtherService] = useState("");
 
-  // Only close modal when fully closed
   if (!open) return null;
 
-  // If pet hasn't hydrated yet, still show the modal shell
   if (!pet) {
     return (
       <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
@@ -266,9 +77,7 @@ function NewAppointmentModal({
             : [...prev.services, "Other"],
         };
       });
-
       if (!form.services.includes("Other")) setOtherService("");
-
       return;
     }
 
@@ -296,9 +105,7 @@ function NewAppointmentModal({
         <div className="p-4 space-y-3 overflow-y-auto flex-1">
           <div className="text-sm text-gray-700">
             <div className="font-semibold">{pet.name}</div>
-            <div className="text-xs text-gray-500">
-              {pet.clients?.full_name}
-            </div>
+            <div className="text-xs text-gray-500">{pet.clients?.full_name}</div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 text-sm">
@@ -340,9 +147,8 @@ function NewAppointmentModal({
             </select>
           </label>
 
-          {/* Amount field - always visible */}
-          <div className="mb-3">
-            <label className="form-label fw-semibold">Amount ($)</label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">Amount ($)</span>
             <input
               type="number"
               min="0"
@@ -354,11 +160,10 @@ function NewAppointmentModal({
                   amount: e.target.value,
                 }))
               }
-              className="form-control"
+              className="border rounded px-2 py-1"
               placeholder="Enter price"
             />
-          </div>
-
+          </label>
 
           <div className="text-sm">
             <div className="font-medium text-gray-700 mb-1">Services</div>
@@ -414,17 +219,13 @@ function NewAppointmentModal({
         </div>
 
         <div className="px-4 py-3 border-t flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            disabled={saving}
-            className="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50"
-          >
+          <button onClick={onClose} disabled={saving} className="btn-secondary">
             Cancel
           </button>
           <button
             onClick={() => onSave(otherService)}
             disabled={saving}
-            className="text-sm px-3 py-1 rounded bg-blue-600 text-white"
+            className="btn-primary"
           >
             {saving ? "Saving..." : "Save"}
           </button>
@@ -434,411 +235,22 @@ function NewAppointmentModal({
   );
 }
 
-/* ---------------- Edit Appointment Modal ---------------- */
-function EditAppointmentModal({
-  open,
-  onClose,
-  appt,
-  form,
-  setForm,
-  onSave,
-  onDelete,
-  saving,
-}) {
-  const [otherService, setOtherService] = useState("");
+/* ---------------- Main PetAppointments ---------------- */
+export default function PetAppointments() {
+  const { petId } = useParams();
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    if (open) setOtherService("");
-  }, [open, appt]);
-
-  if (!open || !appt) return null;
-
-  const handleChange = (field) => (e) => {
-    const raw = e.target.value;
-    const value =
-      field === "duration_min"
-        ? Number(raw || 0)
-        : field === "amount"
-        ? Number(raw)
-        : raw;
-
-    setForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const toggleService = (svc) => {
-    if (svc === "Other") {
-      setForm((prev) => {
-        const exists = prev.services.includes("Other");
-        return {
-          ...prev,
-          services: exists
-            ? prev.services.filter((s) => s !== "Other")
-            : [...prev.services, "Other"],
-        };
-      });
-      if (!form.services.includes("Other")) {
-        setOtherService("");
-      }
-      return;
-    }
-
-    setForm((prev) => {
-      const exists = prev.services.includes(svc);
-      return {
-        ...prev,
-        services: exists
-          ? prev.services.filter((s) => s !== svc)
-          : [...prev.services, svc],
-      };
-    });
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-lg max-w-md w-full max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h2 className="font-semibold text-gray-800">Edit Appointment</h2>
-          <button onClick={onClose} className="text-gray-500 text-sm">
-            ✕
-          </button>
-        </div>
-
-        <div className="p-4 space-y-3 overflow-y-auto flex-1">
-          {/* Pet + Client */}
-          <div className="text-sm text-gray-700">
-            <div className="font-semibold">{appt.pets?.name}</div>
-            <div className="text-xs text-gray-500">
-              {appt.pets?.clients?.full_name}
-            </div>
-          </div>
-
-          {/* Date + Time */}
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <label className="flex flex-col gap-1">
-              <span className="font-medium text-gray-700">Date</span>
-              <input
-                type="date"
-                value={form.date}
-                onChange={handleChange("date")}
-                className="border rounded px-2 py-1"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1">
-              <span className="font-medium text-gray-700">Time</span>
-              <input
-                type="time"
-                step={900}
-                value={form.time}
-                onChange={handleChange("time")}
-                className="border rounded px-2 py-1"
-              />
-            </label>
-          </div>
-
-          {/* Duration */}
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">Duration</span>
-            <select
-              value={form.duration_min}
-              onChange={handleChange("duration_min")}
-              className="border rounded px-2 py-1"
-            >
-              <option value={15}>15</option>
-              <option value={30}>30</option>
-              <option value={45}>45</option>
-              <option value={60}>60</option>
-              <option value={90}>90</option>
-              <option value={120}>120</option>
-            </select>
-          </label>
-
-          {/* Amount */}
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">Amount ($)</span>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={form.amount ?? ""}
-              onChange={handleChange("amount")}
-              className="border rounded px-2 py-1"
-            />
-          </label>
-
-          {/* Services */}
-          <div className="text-sm">
-            <div className="font-medium text-gray-700 mb-1">Services</div>
-            <div className="grid grid-cols-2 gap-1">
-              {SERVICE_OPTIONS.map((svc) => (
-                <label
-                  key={svc}
-                  className="flex items-center gap-2 text-xs text-gray-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.services.includes(svc)}
-                    onChange={() => toggleService(svc)}
-                  />
-                  {svc}
-                </label>
-              ))}
-            </div>
-
-            {form.services.includes("Other") && (
-              <input
-                type="text"
-                value={otherService}
-                onChange={(e) => setOtherService(e.target.value)}
-                placeholder="Enter other service…"
-                className="mt-2 border rounded px-2 py-1 w-full text-sm"
-              />
-            )}
-          </div>
-
-          {/* Notes */}
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">Notes</span>
-            <textarea
-              value={form.notes}
-              onChange={handleChange("notes")}
-              className="border rounded px-2 py-1 min-h-[60px]"
-            />
-          </label>
-
-          {/* Reminder */}
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.reminder_enabled}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  reminder_enabled: e.target.checked,
-                }))
-              }
-            />
-            Send appointment reminder?
-          </label>
-        </div>
-
-        <div className="px-4 py-3 border-t flex justify-between gap-2">
-          <button
-            onClick={onDelete}
-            className="text-sm px-3 py-1 rounded border border-red-500 text-red-600 hover:bg-red-50"
-            disabled={saving}
-          >
-            🗑 Delete
-          </button>
-
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50"
-              disabled={saving}
-            >
-              Cancel
-            </button>
-
-            <button
-              onClick={() => onSave(otherService)}
-              disabled={saving}
-              className="text-sm px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-60"
-            >
-              {saving ? "Saving..." : "Save"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- Toggle Checkbox Component ---------------- */
-function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
-  return (
-    <label className="flex items-center gap-2 text-sm">
-      <input
-        type="checkbox"
-        checked={appt[field] || false}
-        onChange={async () => {
-          const { data, error } = await supabase
-            .from("appointments")
-            .update({ [field]: !appt[field] })
-            .eq("id", appt.id)
-            .eq("groomer_id", user.id)
-            .select(
-              `
-              id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-              services, notes, confirmed, no_show, paid, amount, reminder_enabled,
-              pets (*, clients (*))
-            `
-            )
-            .single();
-
-          if (!error && data) {
-            setAppointments((prev) =>
-              prev.map((a) => (a.id === appt.id ? data : a))
-            );
-          }
-        }}
-      />
-      {label}
-    </label>
-  );
-}
-
-/* ---------------- Rebook Week Modal (6 Weeks) ---------------- */
-function startOfWeek(date) {
-  const d = new Date(date);
-  const day = d.getDay(); // 0 = Sun
-  const diff = (day + 6) % 7; // Monday start
-  d.setDate(d.getDate() - diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
-
-function addDays(date, days) {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
-}
-
-function RebookWeekModal({ open, appt, onClose, onPickDate }) {
-  const [weekStart, setWeekStart] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(null);
-
-  useEffect(() => {
-    if (!appt) return;
-    const [y, m, d] = appt.date.split("-").map(Number);
-    const original = new Date(y, m - 1, d);
-    original.setDate(original.getDate() + 42); // 6 weeks out
-    const start = startOfWeek(original);
-    setWeekStart(start);
-    setSelectedDate(toYMD(start));
-  }, [appt]);
-
-  if (!open || !appt || !weekStart) return null;
-
-  const weekDays = Array.from({ length: 7 }).map((_, i) =>
-    addDays(weekStart, i)
-  );
-
-  const weekLabel = (() => {
-    const opts = { month: "short", day: "numeric" };
-    const startStr = weekStart.toLocaleDateString("en-US", opts);
-    const endStr = addDays(weekStart, 6).toLocaleDateString("en-US", opts);
-    return `${startStr} – ${endStr}`;
-  })();
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-lg max-w-md w-full p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-gray-800">
-            Rebook {appt.pets?.name} (6 weeks out)
-          </h2>
-          <button className="text-gray-500 text-sm" onClick={onClose}>
-            ✕
-          </button>
-        </div>
-
-        <div className="text-sm text-gray-600">
-          Choose a day in the target week, then we’ll keep you on this schedule
-          view so you can pick the exact time.
-        </div>
-
-        <div className="flex items-center justify-between text-sm">
-          <button
-            className="px-2 py-1 border rounded text-xs"
-            onClick={() => {
-              setWeekStart((prev) => addDays(prev, -7));
-              setSelectedDate(null);
-            }}
-          >
-            ← Previous week
-          </button>
-          <span className="font-medium">{weekLabel}</span>
-          <button
-            className="px-2 py-1 border rounded text-xs"
-            onClick={() => {
-              setWeekStart((prev) => addDays(prev, 7));
-              setSelectedDate(null);
-            }}
-          >
-            Next week →
-          </button>
-        </div>
-
-        <div className="grid grid-cols-4 gap-2 text-xs">
-          {weekDays.map((day) => {
-            const ymd = toYMD(day);
-            const label = day.toLocaleDateString("en-US", {
-              weekday: "short",
-              month: "numeric",
-              day: "numeric",
-            });
-            const isSelected = selectedDate === ymd;
-            return (
-              <button
-                key={ymd}
-                onClick={() => setSelectedDate(ymd)}
-                className={`border rounded px-2 py-2 text-left ${
-                  isSelected ? "bg-blue-600 text-white border-blue-600" : "bg-white"
-                }`}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex justify-end gap-2 pt-2">
-          <button
-            className="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            className="text-sm px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-50"
-            disabled={!selectedDate}
-            onClick={() => {
-              if (!selectedDate) return;
-              onPickDate(selectedDate);
-            }}
-          >
-            Continue
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- Main Schedule Component ---------------- */
-export default function Schedule() {
-  const [appointments, setAppointments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const [selectedDate, setSelectedDate] = useState(() => toYMD(new Date()));
-  const [workingRange, setWorkingRange] = useState([]);
-  const [breakSlots, setBreakSlots] = useState([]);
-  const [capacity, setCapacity] = useState(1);
-
-  const [petModalOpen, setPetModalOpen] = useState(false);
-  const [modalSlot, setModalSlot] = useState(null);
-  const [pets, setPets] = useState([]);
-  const [loadingPets, setLoadingPets] = useState(false);
+  const [pet, setPet] = useState(null);
+  const [appointments, setAppointments] = useState([]);
 
   const [newModalOpen, setNewModalOpen] = useState(false);
-  const [newPet, setNewPet] = useState(null);
   const [newForm, setNewForm] = useState({
-    date: "",
+    date: toYMD(new Date()),
     time: "",
-    duration_min: 30,
+    duration_min: 60,
     services: [],
     notes: "",
     amount: "",
@@ -846,199 +258,62 @@ export default function Schedule() {
   });
   const [savingNew, setSavingNew] = useState(false);
 
-  const [editModalOpen, setEditModalOpen] = useState(false);
-  const [editAppt, setEditAppt] = useState(null);
-  const [editForm, setEditForm] = useState({
-    date: "",
-    time: "",
-    duration_min: 30,
-    services: [],
-    notes: "",
-    amount: null,
-    reminder_enabled: false,
-  });
-
-  const [savingEdit, setSavingEdit] = useState(false);
-
-  const [rebookModalOpen, setRebookModalOpen] = useState(false);
-  const [rebookAppt, setRebookAppt] = useState(null);
-
-
   // Auth user
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
-  // Groomer branding for emails (logo, business info)
+  // Load pet + appointments for THIS petId
   useEffect(() => {
-    if (!user?.id) return;
-    (async () => {
-      const { data: groomer } = await supabase
-        .from("groomers")
-        .select("logo_url, business_name, business_address, business_phone")
-        .eq("id", user.id)
-        .maybeSingle();
+    if (!user?.id || !petId) return;
 
-      if (groomer) {
-        setUser((prev) => ({ ...prev, ...groomer }));
-      }
-    })();
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!user || !selectedDate) return;
-
-    const loadDay = async () => {
+    const load = async () => {
       setLoading(true);
 
-      const [y, m, d] = selectedDate.split("-").map(Number);
-      const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-
-      const [
-        { data: groomer },
-        { data: hours },
-        { data: breaks },
-        { data: appts },
-      ] = await Promise.all([
-        supabase
-          .from("groomers")
-          .select("max_parallel")
-          .eq("id", user.id)
-          .maybeSingle(),
-        supabase
-          .from("working_hours")
-          .select("*")
-          .eq("groomer_id", user.id)
-          .eq("weekday", weekday)
-          .maybeSingle(),
-        supabase
-          .from("working_breaks")
-          .select("*")
-          .eq("groomer_id", user.id)
-          .eq("weekday", weekday),
-        supabase
-          .from("appointments")
-          .select(
+      const [{ data: petRow, error: petErr }, { data: appts, error: apptErr }] =
+        await Promise.all([
+          supabase
+            .from("pets")
+            .select(
+              `
+              id, name, breed, tags, notes, slot_weight, client_id,
+              clients ( id, full_name, phone, email )
             `
+            )
+            .eq("id", petId)
+            .eq("groomer_id", user.id)
+            .single(),
+          supabase
+            .from("appointments")
+            .select(
+              `
               id, pet_id, groomer_id, date, time, duration_min, slot_weight,
               services, notes, confirmed, no_show, paid, amount, reminder_enabled,
-              pets (
-                id, name, tags, client_id,
-                clients ( id, full_name, phone )
-              )
+              pets ( id, name, tags, client_id, clients ( id, full_name, phone, email ) )
             `
-          )
-          .eq("groomer_id", user.id)
-          .eq("date", selectedDate)
-          .order("time", { ascending: true }),
-      ]);
+            )
+            .eq("groomer_id", user.id)
+            .eq("pet_id", petId)
+            .order("date", { ascending: false })
+            .order("time", { ascending: false }),
+        ]);
 
-      setCapacity(groomer?.max_parallel || 1);
+      if (petErr) console.error(petErr);
+      if (apptErr) console.error(apptErr);
 
-      if (!hours) {
-        setWorkingRange([]);
-        setBreakSlots([]);
-        setAppointments(appts || []);
-        setLoading(false);
-        return;
-      }
-
-      const startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
-      const endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
-      const range =
-        startIdx === -1 || endIdx === -1
-          ? []
-          : TIME_SLOTS.slice(startIdx, endIdx + 1);
-      setWorkingRange(range);
-
-      const breakSet = new Set();
-      (breaks || []).forEach((b) => {
-        const bi = TIME_SLOTS.indexOf(b.break_start.slice(0, 5));
-        const ei = TIME_SLOTS.indexOf(b.break_end.slice(0, 5));
-        if (bi === -1 || ei === -1) return;
-        TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakSet.add(s));
-      });
-      setBreakSlots([...breakSet]);
-
+      setPet(petRow || null);
       setAppointments(appts || []);
       setLoading(false);
     };
 
-    loadDay();
-  }, [user, selectedDate]);
+    load();
+  }, [user?.id, petId]);
 
-  const handleDelete = async (id) => {
-    if (!user) return;
-    const ok = window.confirm("Delete this appointment?");
-    if (!ok) return;
-
-    const { error } = await supabase
-      .from("appointments")
-      .delete()
-      .eq("id", id)
-      .eq("groomer_id", user.id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    setAppointments((prev) => prev.filter((a) => a.id !== id));
-  };
-
-  const openRebookModal = (appt) => {
-    setRebookAppt(appt);
-    setRebookModalOpen(true);
-  };
-
-  const handleRebookDatePicked = (dateYMD) => {
-    if (!rebookAppt) return;
-    // Just jump to that date on the schedule; groomer will pick time from grid
-    setSelectedDate(dateYMD);
-    setRebookModalOpen(false);
-    setRebookAppt(null);
-  };
-
-  const openSlot = async (slot) => {
-    setModalSlot(slot);
-    setPetModalOpen(true);
-
-    if (!pets.length && user) {
-      setLoadingPets(true);
-      const { data } = await supabase
-        .from("pets")
-        .select(
-          `
-          id, name, tags, client_id, slot_weight,
-          clients ( id, full_name )
-        `
-        )
-        .eq("groomer_id", user.id)
-        .order("name", { ascending: true });
-
-      setPets(data || []);
-      setLoadingPets(false);
-    }
-  };
-
-  const handlePickPet = (pet) => {
-    if (!pet || !modalSlot || !selectedDate) return;
-    setPetModalOpen(false);
-    setNewPet(pet);
-    setNewForm({
-      date: selectedDate,
-      time: modalSlot,
-      duration_min: 30,
-      services: [],
-      notes: "",
-      amount: null,
-      reminder_enabled: true,
-    });
-    setNewModalOpen(true);
-  };
+  const futureAndPast = useMemo(() => appointments, [appointments]);
 
   const handleSaveNew = async (otherService) => {
-    if (!user || !newPet) return;
+    if (!user?.id || !pet?.id) return;
+
     if (!newForm.date || !newForm.time) {
       alert("Date and time are required.");
       return;
@@ -1050,17 +325,18 @@ export default function Schedule() {
       : baseServices;
 
     setSavingNew(true);
+
     const { data, error } = await supabase
       .from("appointments")
       .insert({
         groomer_id: user.id,
-        pet_id: newPet.id,
+        pet_id: pet.id,
         date: newForm.date,
         time: newForm.time,
-        duration_min: newForm.duration_min || 30,
+        duration_min: newForm.duration_min || 60,
         services: finalServices,
         notes: newForm.notes,
-        slot_weight: newPet.slot_weight || 1,
+        slot_weight: pet.slot_weight || 1,
         amount: newForm.amount ? Number(newForm.amount) : null,
         reminder_enabled: newForm.reminder_enabled,
       })
@@ -1068,10 +344,7 @@ export default function Schedule() {
         `
         id, pet_id, groomer_id, date, time, duration_min, slot_weight,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled,
-        pets (
-          id, name, tags, client_id,
-          clients ( id, full_name, phone )
-        )
+        pets ( id, name, tags, client_id, clients ( id, full_name, phone, email ) )
       `
       )
       .single();
@@ -1083,188 +356,52 @@ export default function Schedule() {
       return;
     }
 
-    setAppointments((prev) =>
-      [...prev, data].sort((a, b) => (a.time || "").localeCompare(b.time || ""))
-    );
+    setAppointments((prev) => [data, ...prev]);
+
+    // Optional: send confirmation email (same pattern you already use)
+    if (
+      newForm.reminder_enabled &&
+      data?.date &&
+      data?.time &&
+      pet?.clients?.email
+    ) {
+      await sendEmail({
+        to: pet.clients.email,
+        subject: "Your Grooming Appointment is Confirmed",
+        template: "confirmation",
+        data: {
+          groomer_id: user.id,
+          confirm_url: `https://app.pawscheduler.app/.netlify/functions/confirmAppointment?id=${data.id}`,
+          logo_url: user?.logo_url ?? "",
+          business_name: user?.business_name ?? "",
+          business_address: user?.business_address ?? "",
+          business_phone: user?.business_phone ?? "",
+          groomer_email: user?.email ?? "",
+          pet_name: pet.name,
+          date: data.date,
+          time: data.time?.slice(0, 5),
+          duration_min: data.duration_min,
+          services: Array.isArray(data.services)
+            ? data.services.join(", ")
+            : data.services,
+          price: data.amount ?? "",
+          notes_block: data.notes
+            ? `<tr><td><strong>Notes:</strong> ${data.notes}</td></tr>`
+            : "",
+        },
+      });
+    }
 
     setNewModalOpen(false);
-    setNewPet(null);
-    setModalSlot(null);
-
-    // ---------------------- SEND EMAIL (same as PetAppointments) ----------------------
-    if (newForm.reminder_enabled && data?.date && data?.time) {
-      // Fetch pet details for client id
-      const { data: petRow } = await supabase
-        .from("pets")
-        .select("client_id, name")
-        .eq("id", data.pet_id)
-        .single();
-
-      if (petRow?.client_id) {
-        // Fetch client email
-        const { data: clientRow } = await supabase
-          .from("clients")
-          .select("email")
-          .eq("id", petRow.client_id)
-          .single();
-
-        const clientEmail = clientRow?.email;
-
-        if (clientEmail) {
-          await sendEmail({
-            to: clientEmail,
-            subject: "Your Grooming Appointment is Confirmed",
-            template: "confirmation",
-            data: {
-              groomer_id: user.id,
-              confirm_url: `https://app.pawscheduler.app/.netlify/functions/confirmAppointment?id=${data.id}`,
-              logo_url: user?.logo_url ?? "",
-              business_name: user?.business_name ?? "",
-              business_address: user?.business_address ?? "",
-              business_phone: user?.business_phone ?? "",
-              groomer_email: user?.email ?? "",
-              pet_name: petRow.name,
-              date: data.date,
-              time: data.time?.slice(0, 5),
-              duration_min: data.duration_min,
-              services: Array.isArray(data.services)
-                ? data.services.join(", ")
-                : data.services,
-              price: data.amount ?? "",
-              notes_block: data.notes
-                ? `<tr><td><strong>Notes:</strong> ${data.notes}</td></tr>`
-                : "",
-            },
-          });
-        }
-      }
-    }
-    // ---------------------- END EMAIL ----------------------
-  };
-
-  const handleOpenEditModal = (appt) => {
-    const servicesArray = Array.isArray(appt.services)
-      ? appt.services
-      : appt.services
-      ? String(appt.services)
-          .split(",")
-          .map((s) => s.trim())
-      : [];
-
-    setEditAppt(appt);
-    setEditForm({
-      date: appt.date,
-      time: (appt.time || "00:00").slice(0, 5),
-      duration_min: appt.duration_min || 30,
-      services: servicesArray,
-      notes: appt.notes || "",
-      amount: appt.amount ?? null,
-      reminder_enabled: appt.reminder_enabled ?? false,
+    setNewForm({
+      date: toYMD(new Date()),
+      time: "",
+      duration_min: 60,
+      services: [],
+      notes: "",
+      amount: "",
+      reminder_enabled: true,
     });
-
-    setEditModalOpen(true);
-  };
-
-  const handleSaveEdit = async (otherService) => {
-    if (!user || !editAppt) return;
-    if (!editForm.date || !editForm.time) {
-      alert("Date and time are required.");
-      return;
-    }
-
-    const baseServices = editForm.services.filter((s) => s !== "Other");
-    const finalServices = otherService
-      ? [...baseServices, otherService]
-      : baseServices;
-
-    setSavingEdit(true);
-
-    const { data, error } = await supabase
-      .from("appointments")
-      .update({
-        date: editForm.date,
-        time: editForm.time,
-        duration_min: editForm.duration_min || 30,
-        services: finalServices,
-        notes: editForm.notes,
-        amount: editForm.amount ?? null,
-        reminder_enabled: editForm.reminder_enabled,
-        slot_weight: editAppt.slot_weight || 1,
-      })
-      .eq("id", editAppt.id)
-      .eq("groomer_id", user.id)
-      .select(
-        `
-      id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-      services, notes, confirmed, no_show, paid, amount, reminder_enabled,
-      pets ( id, name, tags, client_id, clients ( id, full_name, phone ) )
-    `
-      )
-      .single();
-
-    setSavingEdit(false);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    setAppointments((prev) =>
-      prev
-        .map((a) => (a.id === editAppt.id ? data : a))
-        .sort((a, b) => (a.time || "").localeCompare(b.time || ""))
-    );
-
-    // ---------------------- SEND EMAIL (same as PetAppointments) ----------------------
-    if (editForm.reminder_enabled && data?.date && data?.time) {
-      const { data: petRow } = await supabase
-        .from("pets")
-        .select("client_id, name")
-        .eq("id", data.pet_id)
-        .single();
-
-      if (petRow?.client_id) {
-        const { data: clientRow } = await supabase
-          .from("clients")
-          .select("email")
-          .eq("id", petRow.client_id)
-          .single();
-
-        const clientEmail = clientRow?.email;
-
-        if (clientEmail) {
-          await sendEmail({
-            to: clientEmail,
-            subject: "Your Grooming Appointment is Confirmed",
-            template: "confirmation",
-            data: {
-              groomer_id: user.id,
-              confirm_url: `https://app.pawscheduler.app/.netlify/functions/confirmAppointment?id=${data.id}`,
-              logo_url: user?.logo_url ?? "",
-              business_name: user?.business_name ?? "",
-              business_address: user?.business_address ?? "",
-              business_phone: user?.business_phone ?? "",
-              groomer_email: user?.email ?? "",
-              pet_name: petRow.name,
-              date: data.date,
-              time: data.time?.slice(0, 5),
-              duration_min: data.duration_min,
-              services: Array.isArray(data.services)
-                ? data.services.join(", ")
-                : data.services,
-              price: data.amount ?? "",
-              notes_block: data.notes
-                ? `<tr><td><strong>Notes:</strong> ${data.notes}</td></tr>`
-                : "",
-            },
-          });
-        }
-      }
-    }
-    // ---------------------- END EMAIL ----------------------
-
-    setEditModalOpen(false);
-    setEditAppt(null);
   };
 
   if (loading) {
@@ -1276,364 +413,81 @@ export default function Schedule() {
     );
   }
 
-  const today = new Date();
-  const todayStr = toYMD(today);
-
-  const filteredAppointments = appointments.filter((appt) => {
-    const q = search.toLowerCase();
-    if (!q) return true;
-
+  if (!pet) {
     return (
-      appt.pets?.name?.toLowerCase().includes(q) ||
-      appt.pets?.clients?.full_name?.toLowerCase().includes(q) ||
-      appt.pets?.tags?.some((t) => t.toLowerCase().includes(q))
+      <main className="px-4 py-6 space-y-4">
+        {/* keep simple safe link here */}
+        <Link to="/" className="text-sm">
+          ← Back to Clients
+        </Link>
+
+        <div className="card">
+          <div className="text-gray-700 font-semibold">Pet not found</div>
+          <div className="text-sm text-gray-600">
+            This pet may have been deleted or doesn’t belong to this groomer.
+          </div>
+        </div>
+      </main>
     );
-  });
-
-  const unpaidToday =
-    selectedDate === todayStr
-      ? appointments.filter((appt) => {
-          const [y, m, d] = appt.date.split("-").map(Number);
-          const [H, M] = (appt.time || "00:00").split(":").map(Number);
-          const start = new Date(y, m - 1, d, H, M);
-          const end = new Date(
-            start.getTime() + (appt.duration_min || 15) * 60000
-          );
-          return !appt.paid && !appt.no_show && end <= new Date();
-        })
-      : [];
-
-  const totalUnpaidToday = unpaidToday.length;
-  const totalUnpaidAmount = unpaidToday.reduce(
-    (sum, a) => sum + (a.amount || 0),
-    0
-  );
-
-  const appointmentsCoveringSlot = (slot) => {
-    const [sh, sm] = slot.split(":").map(Number);
-    const slotMinutes = sh * 60 + sm;
-
-    return appointments.filter((appt) => {
-      if (!appt.time) return false;
-      const startStr = appt.time.slice(0, 5);
-      const [ah, am] = startStr.split(":").map(Number);
-      const startMin = ah * 60 + am;
-      const endMin = startMin + (appt.duration_min || 15);
-      return slotMinutes >= startMin && slotMinutes < endMin;
-    });
-  };
-
-  const expandedSlotAppointments = (slot) => {
-    const appts = appointmentsCoveringSlot(slot);
-    const expanded = [];
-    appts.forEach((a) => {
-      const weight = a.slot_weight || 1;
-      for (let i = 0; i < weight; i++) {
-        expanded.push(a);
-      }
-    });
-    return expanded.slice(0, capacity);
-  };
-
-  const slotsWithInfo = workingRange.map((slot) => {
-    const slotAppts = appointmentsCoveringSlot(slot);
-    const usedWeight = slotAppts.reduce(
-      (sum, a) => sum + (a.slot_weight || 1),
-      0
-    );
-    return { slot, usedWeight };
-  });
+  }
 
   return (
     <main className="px-4 py-6 space-y-4">
-      <Link to="/" className="text-sm text-blue-600 hover:underline">
-        ← Back to Home
-      </Link>
+      {/* ✅ FIX: history-aware back button (prevents empty Clients) */}
+      <button
+        type="button"
+        onClick={() => {
+          if (window.history.length > 1) navigate(-1);
+          else navigate("/");
+        }}
+        className="text-sm"
+      >
+        ← Back to Client
+      </button>
 
-      <h1 className="text-2xl font-bold text-gray-900">Schedule</h1>
-
-      {user && <ScheduleTrialBanner userId={user.id} />}
-
-      {totalUnpaidToday > 0 && (
-        <div className="stat mb-4">
-          <div className="stat-label">Unpaid Today</div>
-          <div className="stat-value text-red-700">
-            {totalUnpaidToday} appt
-            {totalUnpaidToday > 1 ? "s" : ""} • $
-            {totalUnpaidAmount.toFixed(2)}
-          </div>
-        </div>
-      )}
-
-      <div className="card mb-4">
-        <div className="card-body flex flex-col md:flex-row gap-4">
-          <div className="relative overflow-visible z-20">
-            <DatePicker
-              selected={parseYMD(selectedDate)}
-              onChange={(d) => d && setSelectedDate(toYMD(d))}
-              dateFormat="yyyy-MM-dd"
-              className="border p-2 rounded w-full"
-              inline={window.innerWidth < 500}
-              id="schedule-date-input"
-            />
-          </div>
-
-          <div className="flex-1 flex flex-col gap-3">
-            <input
-              type="text"
-              placeholder="Search pet, client, or tag"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full md:w-72 border rounded px-3 py-2 text-sm"
-            />
-
+      <div className="card">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">
+              Appointments — {pet.name}
+            </h1>
             <div className="text-sm text-gray-600">
-              {workingRange.length ? (
-                <>
-                  Working hours:{" "}
-                  <strong>
-                    {workingRange[0]} – {workingRange[workingRange.length - 1]}
-                  </strong>
-                  <span className="ml-2 text-xs text-gray-500">
-                    Capacity: {capacity} dog{capacity > 1 ? "s" : ""} per slot
-                  </span>
-                </>
-              ) : (
-                "No working hours set for this weekday — update your profile schedule."
-              )}
-            </div>
-
-            <div className="flex flex-wrap gap-2 text-xs text-gray-500">
-              <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded bg-green-200" />
-                Lightly booked
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded bg-orange-200" />
-                Busy
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded bg-red-200" />
-                Full
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded border border-dashed border-blue-300" />
-                Open slot (tap to add)
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded bg-gray-200" />
-                Break / blocked
-              </span>
+              Client:{" "}
+              <span className="font-medium">{pet.clients?.full_name}</span>
+              {pet.clients?.phone ? (
+                <span className="ml-2 text-xs text-gray-500">
+                  • {pet.clients.phone}
+                </span>
+              ) : null}
             </div>
           </div>
+
+          <button className="btn-primary" onClick={() => setNewModalOpen(true)}>
+            ➕ Add Appointment
+          </button>
         </div>
       </div>
 
-      {workingRange.length > 0 && (
-        <div className="card mb-6">
-          <div className="card-body">
-            <div className="overflow-x-auto">
-              <div
-                className="grid border rounded text-xs"
-                style={{
-                  gridTemplateColumns: `80px repeat(${capacity}, minmax(0, 1fr))`,
-                }}
-              >
-                <div className="border-b bg-gray-50 px-2 py-1 font-semibold">
-                  Time
-                </div>
-                {Array.from({ length: capacity }).map((_, idx) => (
-                  <div
-                    key={idx}
-                    className="border-b bg-gray-50 px-2 py-1 text-center font-semibold"
-                  >
-                    Slot {idx + 1}
-                  </div>
-                ))}
-
-                {slotsWithInfo.map(({ slot, usedWeight }) => {
-                  const isBreak = breakSlots.includes(slot);
-                  const expanded = expandedSlotAppointments(slot);
-
-                  return (
-                    <React.Fragment key={slot}>
-                      <div className="border-t px-2 py-1 text-gray-700 font-medium">
-                        {slot}
-                      </div>
-
-                      {Array.from({ length: capacity }).map((_, idx) => {
-                        const baseClasses =
-                          "border-t px-2 py-2 flex items-center justify-center";
-                        const cellAppt = expanded[idx] || null;
-                        const clickable = !isBreak && !cellAppt;
-                        const clickClasses = clickable
-                          ? "cursor-pointer hover:bg-blue-50"
-                          : cellAppt
-                          ? "cursor-pointer"
-                          : "cursor-not-allowed";
-
-                        return (
-                          <div
-                            key={`${slot}-c${idx}`}
-                            className={`${baseClasses} ${clickClasses} ${
-                              isBreak ? "bg-gray-100" : ""
-                            }`}
-                            onClick={() => {
-                              if (isBreak) return;
-
-                              if (!cellAppt) {
-                                openSlot(slot);
-                                return;
-                              }
-
-                              handleOpenEditModal(cellAppt);
-                            }}
-                          >
-                            {isBreak ? (
-                              idx === 0 && (
-                                <span className="text-[10px] text-gray-500">
-                                  Break
-                                </span>
-                              )
-                            ) : usedWeight === 0 ? (
-                              <span className="inline-block w-5 h-5 rounded border border-dashed border-blue-300" />
-                            ) : idx < usedWeight ? (
-                              <div className="flex flex-col items-center text-[9px] leading-tight">
-                                <span
-                                  className={`
-                                    inline-block w-5 h-5 rounded
-                                    ${
-                                      usedWeight === 1
-                                        ? "bg-green-300"
-                                        : usedWeight < capacity
-                                        ? "bg-orange-300"
-                                        : "bg-red-300"
-                                    }
-                                  `}
-                                ></span>
-
-                                {cellAppt && (
-                                  <span className="mt-0.5 text-center text-gray-700">
-                                    {cellAppt.pets?.clients?.full_name ||
-                                      "Client"}{" "}
-                                    ({cellAppt.pets?.name || "Pet"})
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="inline-block w-5 h-5 rounded border border-gray-200" />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </React.Fragment>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {filteredAppointments.length === 0 ? (
-        <p className="text-gray-600 italic">
-          No appointments for this day (or search filter).
-        </p>
+      {futureAndPast.length === 0 ? (
+        <p className="text-gray-600 italic">No appointments for this pet yet.</p>
       ) : (
         <div className="grid gap-4">
-          {filteredAppointments.map((appt) => {
+          {futureAndPast.map((appt) => {
             const start = (appt.time || "00:00").slice(0, 5);
             const end = getEndTime(start, appt.duration_min || 15);
-            const size = sizeBadge(appt.slot_weight || 1);
-
-            const [y, m, d] = appt.date.split("-").map(Number);
-            const [H, M] = start.split(":").map(Number);
-            const localStart = new Date(y, m - 1, d, H, M);
-            const isPast = localStart < new Date();
 
             return (
-              <div
-                key={appt.id}
-                className={`card relative pt-2 transition-all ${
-                  isPast ? "opacity-60" : "opacity-100"
-                }`}
-              >
-                <div
-                  className={`absolute left-0 top-0 h-full w-2 ${size.bar} rounded-l`}
-                />
-
-                <div className="card-body space-y-2">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <div className="text-sm text-gray-500">{appt.date}</div>
-                      <div className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                        {start} – {end}
-                        <span title="Capacity weight">{size.icon}</span>
-                      </div>
+              <div key={appt.id} className="card">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <div className="text-sm text-gray-500">{appt.date}</div>
+                    <div className="text-lg font-semibold text-gray-900">
+                      {start} – {end}
                     </div>
-
-                    <div className="text-sm text-gray-500">
+                    <div className="text-sm text-gray-600">
                       {appt.duration_min} min
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2 text-xl font-bold text-gray-800">
-                    {appt.pets?.name}
-                    <span className={`chip ${size.bg}`}>{size.label}</span>
-                  </div>
-
-                  {appt.pets?.tags?.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {appt.pets.tags.map((tag) =>
-                        ["Bites", "Anxious", "Aggressive", "Matting"].includes(
-                          tag
-                        ) ? (
-                          <span key={tag} className="chip chip-danger">
-                            ⚠ {tag}
-                          </span>
-                        ) : (
-                          <span key={tag} className="chip">
-                            {tag}
-                          </span>
-                        )
-                      )}
-                    </div>
-                  )}
-
-                  <div className="text-sm text-gray-600 flex flex-wrap gap-3 items-center">
-                    <span>{appt.pets?.clients?.full_name}</span>
-                    {appt.pets?.clients?.phone && (
-                      <>
-                        <a
-                          href={`tel:${appt.pets.clients.phone}`}
-                          className="text-blue-600 text-xs"
-                        >
-                          📞 Call
-                        </a>
-                        <a
-                          href={`sms:${appt.pets.clients.phone}`}
-                          className="text-blue-600 text-xs"
-                        >
-                          ✉️ Text
-                        </a>
-                      </>
-                    )}
-                  </div>
-
-                  {appt.services?.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {(Array.isArray(appt.services)
-                        ? appt.services
-                        : String(appt.services)
-                            .split(",")
-                            .map((s) => s.trim())
-                      ).map((svc) => (
-                        <span key={svc} className="chip chip-brand">
-                          {svc}
-                        </span>
-                      ))}
-                    </div>
-                  )}
 
                   {typeof appt.amount === "number" && (
                     <div
@@ -1645,59 +499,39 @@ export default function Schedule() {
                       {appt.paid ? "(Paid)" : "(Unpaid)"}
                     </div>
                   )}
+                </div>
 
-                  {appt.notes && (
-                    <div className="text-sm italic text-gray-500">
-                      {appt.notes}
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap gap-3 pt-2">
-                    <button
-                      className="btn-secondary"
-                      onClick={() => openRebookModal(appt)}
-                    >
-                      🔁 Rebook (6 Weeks)
-                    </button>
-
-                    <button
-                      className="btn-secondary"
-                      onClick={() => handleOpenEditModal(appt)}
-                    >
-                      ✏️ Edit
-                    </button>
-
-                    <button
-                      className="btn-danger"
-                      onClick={() => handleDelete(appt.id)}
-                    >
-                      🗑 Delete
-                    </button>
-
-                    <ToggleCheckbox
-                      label="Confirmed"
-                      field="confirmed"
-                      appt={appt}
-                      user={user}
-                      setAppointments={setAppointments}
-                    />
-
-                    <ToggleCheckbox
-                      label="No-Show"
-                      field="no_show"
-                      appt={appt}
-                      user={user}
-                      setAppointments={setAppointments}
-                    />
-
-                    <ToggleCheckbox
-                      label="Paid"
-                      field="paid"
-                      appt={appt}
-                      user={user}
-                      setAppointments={setAppointments}
-                    />
+                {appt.services?.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {(Array.isArray(appt.services)
+                      ? appt.services
+                      : String(appt.services)
+                          .split(",")
+                          .map((s) => s.trim())
+                    ).map((svc) => (
+                      <span key={svc} className="chip chip-brand">
+                        {svc}
+                      </span>
+                    ))}
                   </div>
+                )}
+
+                {appt.notes && (
+                  <div className="text-sm italic text-gray-500 mt-2">
+                    {appt.notes}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-3 pt-3">
+                  <span className="chip chip-warning">
+                    Confirmed: {appt.confirmed ? "Yes" : "No"}
+                  </span>
+                  <span className="chip chip-warning">
+                    No-show: {appt.no_show ? "Yes" : "No"}
+                  </span>
+                  <span className="chip chip-warning">
+                    Paid: {appt.paid ? "Yes" : "No"}
+                  </span>
                 </div>
               </div>
             );
@@ -1705,61 +539,16 @@ export default function Schedule() {
         </div>
       )}
 
-      <PetSelectModal
-        open={petModalOpen}
-        onClose={() => setPetModalOpen(false)}
-        slot={modalSlot}
-        date={selectedDate}
-        pets={pets}
-        loading={loadingPets}
-        onPickPet={handlePickPet}
-      />
-
       <NewAppointmentModal
         open={newModalOpen}
         onClose={() => {
-          if (!savingNew) {
-            setNewModalOpen(false);
-            setNewPet(null);
-          }
+          if (!savingNew) setNewModalOpen(false);
         }}
-        pet={newPet}
+        pet={pet}
         form={newForm}
         setForm={setNewForm}
         onSave={handleSaveNew}
         saving={savingNew}
-      />
-
-      <EditAppointmentModal
-        open={editModalOpen}
-        onClose={() => {
-          if (!savingEdit) {
-            setEditModalOpen(false);
-            setEditAppt(null);
-          }
-        }}
-        appt={editAppt}
-        form={editForm}
-        setForm={setEditForm}
-        onSave={handleSaveEdit}
-        onDelete={() => {
-          if (editAppt) {
-            handleDelete(editAppt.id);
-            setEditModalOpen(false);
-            setEditAppt(null);
-          }
-        }}
-        saving={savingEdit}
-      />
-
-      <RebookWeekModal
-        open={rebookModalOpen}
-        appt={rebookAppt}
-        onClose={() => {
-          setRebookModalOpen(false);
-          setRebookAppt(null);
-        }}
-        onPickDate={handleRebookDatePicked}
       />
     </main>
   );
