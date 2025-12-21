@@ -6,25 +6,22 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 export default function AuthPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const pilot = searchParams.get("pilot"); // 🔥 detect pilot mode
+  const pilot = searchParams.get("pilot");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // ⭐ Automatically redirect pilot users to signup
+  // Pilot redirect
   useEffect(() => {
     if (pilot === "mobile60") {
-      // Store flag IMMEDIATELY so it's not lost
       localStorage.setItem("pawscheduler_pilot", "mobile60");
-
-      // Redirect to signup WITH PILOT PARAM
       navigate("/signup?pilot=mobile60", { replace: true });
     }
   }, [pilot, navigate]);
 
-  // If already logged in, skip to home
+  // Skip if already logged in
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate("/");
@@ -36,10 +33,11 @@ export default function AuthPage() {
     setLoading(true);
     setError("");
 
-    const { data, error: loginError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error: loginError } =
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
     if (loginError) {
       setError(loginError.message);
@@ -49,109 +47,122 @@ export default function AuthPage() {
 
     const user = data?.user;
     if (!user) {
-      setError("Login failed — no user returned.");
+      setError("Login failed.");
       setLoading(false);
       return;
     }
 
-    // 🔍 Check if groomer profile exists
-    const { data: existing, error: queryError } = await supabase
+    const { data: existing } = await supabase
       .from("groomers")
       .select("id")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (queryError) {
-      console.error("Error checking groomer record:", queryError.message);
-      setError("Error checking groomer record.");
-      setLoading(false);
-      return;
-    }
-
-    // 🧭 Redirect logic
-    if (!existing) {
-      navigate("/onboarding");
-    } else {
-      navigate("/");
-    }
-
+    navigate(existing ? "/" : "/onboarding");
     setLoading(false);
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <form
-        onSubmit={handleLogin}
-        className="bg-white shadow-md rounded px-8 py-6 w-full max-w-sm"
-      >
-        <h2 className="text-2xl font-bold mb-4 text-center">Login</h2>
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-4xl grid md:grid-cols-2 gap-10 items-center">
+        {/* LEFT — CONTEXT */}
+        <div className="hidden md:block">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+            Simple scheduling for solo & mobile groomers
+          </h1>
 
-        {error && (
-          <p className="text-red-500 text-sm mb-3 text-center">{error}</p>
-        )}
+          <p className="text-gray-700 mb-6">
+            PawScheduler helps you book clients, manage pets, and send reminders
+            — without staff, clutter, or complicated software.
+          </p>
 
-        <input
-          type="email"
-          placeholder="Email"
-          className="border rounded w-full p-2 mb-3"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-        />
+          <ul className="space-y-3 text-sm text-gray-700">
+            <li>📅 Clean, mobile-first schedule</li>
+            <li>🐾 Clients & pets in one place</li>
+            <li>🔔 Email & SMS reminders (opt-in)</li>
+            <li>⚡ Built for one-person businesses</li>
+          </ul>
 
-        <input
-          type="password"
-          placeholder="Password"
-          className="border rounded w-full p-2 mb-2"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-        />
+          <p className="mt-6 text-xs text-gray-500">
+            No contracts. Cancel anytime.
+          </p>
+        </div>
 
-        {/* 🔵 Forgot Password Button */}
-        <button
-          type="button"
-          className="text-sm text-blue-600 underline mb-4"
-          onClick={async () => {
-            if (!email) {
-              setError("Enter your email above first.");
-              return;
-            }
-
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-              redirectTo: `${window.location.origin}/reset-password`,
-            });
-
-            if (error) {
-              setError(error.message);
-            } else {
-              setError("");
-              alert("Password reset email sent. Check your inbox.");
-            }
-          }}
+        {/* RIGHT — LOGIN */}
+        <form
+          onSubmit={handleLogin}
+          className="card w-full max-w-sm mx-auto"
         >
-          Forgot Password?
-        </button>
+          <h2 className="text-2xl font-bold mb-2 text-center">
+            Welcome back
+          </h2>
+          <p className="text-sm text-gray-600 text-center mb-4">
+            Log in to manage your schedule
+          </p>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition"
-        >
-          {loading ? "Loading..." : "Login"}
-        </button>
+          {error && (
+            <p className="text-red-500 text-sm mb-3 text-center">{error}</p>
+          )}
 
-        <p className="text-center mt-4 text-sm">
-          Don’t have an account?{" "}
+          <input
+            type="email"
+            placeholder="Email"
+            className="w-full mb-3"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+
+          <input
+            type="password"
+            placeholder="Password"
+            className="w-full mb-2"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+
           <button
             type="button"
-            onClick={() => navigate("/signup")}
-            className="text-blue-600 underline"
+            className="text-xs text-emerald-600 underline mb-4"
+            onClick={async () => {
+              if (!email) {
+                setError("Enter your email above first.");
+                return;
+              }
+
+              const { error } =
+                await supabase.auth.resetPasswordForEmail(email, {
+                  redirectTo: `${window.location.origin}/reset-password`,
+                });
+
+              if (error) setError(error.message);
+              else alert("Password reset email sent.");
+            }}
           >
-            Sign up
+            Forgot password?
           </button>
-        </p>
-      </form>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary w-full"
+          >
+            {loading ? "Signing in…" : "Log in"}
+          </button>
+
+          <p className="text-center mt-4 text-sm">
+            New here?{" "}
+            <button
+              type="button"
+              onClick={() => navigate("/signup")}
+              className="text-emerald-600 underline"
+            >
+              Create an account
+            </button>
+          </p>
+        </form>
+      </div>
     </div>
   );
 }
