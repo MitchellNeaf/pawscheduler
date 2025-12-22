@@ -30,7 +30,50 @@ function getEndTime(start, durationMin) {
   ).padStart(2, "0")}`;
 }
 
-/* ---------------- New Appointment Modal ---------------- */
+/* =========================
+   Working-hours helpers
+   Uses Profile tables: working_hours (weekday, start_time, end_time)
+========================= */
+const toMinutes = (t) => {
+  const [h, m] = String(t || "00:00")
+    .slice(0, 5)
+    .split(":")
+    .map(Number);
+  return h * 60 + m;
+};
+
+async function isWithinWorkingHours({ groomerId, date, time, durationMin }) {
+  const weekday = new Date(date).getDay();
+
+  const { data: hours, error } = await supabase
+    .from("working_hours")
+    .select("start_time, end_time")
+    .eq("groomer_id", groomerId)
+    .eq("weekday", weekday)
+    .single();
+
+  // No row = closed day (or not configured)
+  if (error || !hours) return false;
+
+  const openMin = toMinutes(hours.start_time);
+  const closeMin = toMinutes(hours.end_time);
+
+  const startMin = toMinutes(time);
+  const endMin = startMin + (durationMin || 60);
+
+  return startMin >= openMin && endMin <= closeMin;
+}
+
+// Edit allowed only for future appointments
+function isFutureAppointment(appt) {
+  const date = appt?.date;
+  const time = String(appt?.time || "00:00").slice(0, 5);
+  if (!date) return false;
+  const ms = new Date(`${date}T${time}`).getTime();
+  return Number.isFinite(ms) && ms > Date.now();
+}
+
+/* ---------------- New/Edit Appointment Modal ---------------- */
 function NewAppointmentModal({
   open,
   onClose,
@@ -39,8 +82,16 @@ function NewAppointmentModal({
   setForm,
   onSave,
   saving,
+  editing, // appointment object or null
+  initialOtherService,
 }) {
   const [otherService, setOtherService] = useState("");
+
+  // When modal opens (or edit target changes), seed Other service input
+  useEffect(() => {
+    if (!open) return;
+    setOtherService(initialOtherService || "");
+  }, [open, initialOtherService]);
 
   if (!open) return null;
 
@@ -77,7 +128,8 @@ function NewAppointmentModal({
             : [...prev.services, "Other"],
         };
       });
-      if (!form.services.includes("Other")) setOtherService("");
+      // If unchecking Other, clear the input
+      if (form.services.includes("Other")) setOtherService("");
       return;
     }
 
@@ -96,7 +148,9 @@ function NewAppointmentModal({
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-lg max-w-md w-full max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h2 className="font-semibold text-gray-800">New Appointment</h2>
+          <h2 className="font-semibold text-gray-800">
+            {editing ? "Edit Appointment" : "New Appointment"}
+          </h2>
           <button onClick={onClose} className="text-gray-500 text-sm">
             ✕
           </button>
@@ -258,6 +312,10 @@ export default function PetAppointments() {
   });
   const [savingNew, setSavingNew] = useState(false);
 
+  // NEW: edit state
+  const [editingAppt, setEditingAppt] = useState(null);
+  const [editOtherService, setEditOtherService] = useState("");
+
   // Auth user
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
@@ -311,11 +369,72 @@ export default function PetAppointments() {
 
   const futureAndPast = useMemo(() => appointments, [appointments]);
 
+  const resetFormToNew = () => {
+    setNewForm({
+      date: toYMD(new Date()),
+      time: "",
+      duration_min: 60,
+      services: [],
+      notes: "",
+      amount: "",
+      reminder_enabled: true,
+    });
+    setEditingAppt(null);
+    setEditOtherService("");
+  };
+
+  const closeModal = () => {
+    if (savingNew) return;
+    setNewModalOpen(false);
+    resetFormToNew();
+  };
+
+  const handleDeleteAppointment = async (appt) => {
+    if (!user?.id || !appt?.id) return;
+
+    const ok = window.confirm(
+      "Delete this appointment? This cannot be undone."
+    );
+    if (!ok) return;
+
+    const { error } = await supabase
+      .from("appointments")
+      .delete()
+      .eq("id", appt.id)
+      .eq("groomer_id", user.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setAppointments((prev) => prev.filter((a) => a.id !== appt.id));
+  };
+
   const handleSaveNew = async (otherService) => {
     if (!user?.id || !pet?.id) return;
 
     if (!newForm.date || !newForm.time) {
       alert("Date and time are required.");
+      return;
+    }
+
+    // Edit is only allowed for future appointments
+    if (editingAppt && !isFutureAppointment(editingAppt)) {
+      alert("Only future appointments can be edited.");
+      return;
+    }
+
+    // Enforce Profile working hours (working_hours table) for both create + edit
+    const allowed = await isWithinWorkingHours({
+      groomerId: user.id,
+      date: newForm.date,
+      time: newForm.time,
+      durationMin: newForm.duration_min || 60,
+    });
+
+    if (!allowed) {
+      alert("That time is outside your working hours.");
       return;
     }
 
@@ -326,20 +445,36 @@ export default function PetAppointments() {
 
     setSavingNew(true);
 
-    const { data, error } = await supabase
-      .from("appointments")
-      .insert({
-        groomer_id: user.id,
-        pet_id: pet.id,
-        date: newForm.date,
-        time: newForm.time,
-        duration_min: newForm.duration_min || 60,
-        services: finalServices,
-        notes: newForm.notes,
-        slot_weight: pet.slot_weight || 1,
-        amount: newForm.amount ? Number(newForm.amount) : null,
-        reminder_enabled: newForm.reminder_enabled,
-      })
+    const isEdit = Boolean(editingAppt?.id);
+
+    const query = isEdit
+      ? supabase
+          .from("appointments")
+          .update({
+            date: newForm.date,
+            time: newForm.time,
+            duration_min: newForm.duration_min || 60,
+            services: finalServices,
+            notes: newForm.notes,
+            amount: newForm.amount ? Number(newForm.amount) : null,
+            reminder_enabled: newForm.reminder_enabled,
+          })
+          .eq("id", editingAppt.id)
+          .eq("groomer_id", user.id)
+      : supabase.from("appointments").insert({
+          groomer_id: user.id,
+          pet_id: pet.id,
+          date: newForm.date,
+          time: newForm.time,
+          duration_min: newForm.duration_min || 60,
+          services: finalServices,
+          notes: newForm.notes,
+          slot_weight: pet.slot_weight || 1,
+          amount: newForm.amount ? Number(newForm.amount) : null,
+          reminder_enabled: newForm.reminder_enabled,
+        });
+
+    const { data, error } = await query
       .select(
         `
         id, pet_id, groomer_id, date, time, duration_min, slot_weight,
@@ -356,10 +491,15 @@ export default function PetAppointments() {
       return;
     }
 
-    setAppointments((prev) => [data, ...prev]);
+    setAppointments((prev) =>
+      isEdit
+        ? prev.map((a) => (a.id === data.id ? data : a))
+        : [data, ...prev]
+    );
 
-    // Optional: send confirmation email (same pattern you already use)
+    // Send confirmation email ONLY on create (preserves original behavior)
     if (
+      !isEdit &&
       newForm.reminder_enabled &&
       data?.date &&
       data?.time &&
@@ -393,15 +533,34 @@ export default function PetAppointments() {
     }
 
     setNewModalOpen(false);
+    resetFormToNew();
+  };
+
+  const openEditModal = (appt) => {
+    const rawServices = Array.isArray(appt.services)
+      ? appt.services
+      : String(appt.services || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+
+    const known = rawServices.filter((s) => SERVICE_OPTIONS.includes(s));
+    const other = rawServices.find((s) => !SERVICE_OPTIONS.includes(s)) || "";
+
+    setEditingAppt(appt);
+    setEditOtherService(other);
+
     setNewForm({
-      date: toYMD(new Date()),
-      time: "",
-      duration_min: 60,
-      services: [],
-      notes: "",
-      amount: "",
-      reminder_enabled: true,
+      date: appt.date,
+      time: (appt.time || "00:00").slice(0, 5),
+      duration_min: appt.duration_min || 60,
+      services: other ? [...known, "Other"] : known,
+      notes: appt.notes || "",
+      amount: appt.amount ?? "",
+      reminder_enabled: appt.reminder_enabled ?? true,
     });
+
+    setNewModalOpen(true);
   };
 
   if (loading) {
@@ -416,7 +575,6 @@ export default function PetAppointments() {
   if (!pet) {
     return (
       <main className="px-4 py-6 space-y-4">
-        {/* keep simple safe link here */}
         <Link to="/" className="text-sm">
           ← Back to Clients
         </Link>
@@ -462,7 +620,13 @@ export default function PetAppointments() {
             </div>
           </div>
 
-          <button className="btn-primary" onClick={() => setNewModalOpen(true)}>
+          <button
+            className="btn-primary"
+            onClick={() => {
+              resetFormToNew();
+              setNewModalOpen(true);
+            }}
+          >
             ➕ Add Appointment
           </button>
         </div>
@@ -475,6 +639,7 @@ export default function PetAppointments() {
           {futureAndPast.map((appt) => {
             const start = (appt.time || "00:00").slice(0, 5);
             const end = getEndTime(start, appt.duration_min || 15);
+            const canEdit = isFutureAppointment(appt);
 
             return (
               <div key={appt.id} className="card">
@@ -489,16 +654,38 @@ export default function PetAppointments() {
                     </div>
                   </div>
 
-                  {typeof appt.amount === "number" && (
-                    <div
-                      className={`text-sm font-medium ${
-                        appt.paid ? "text-gray-600" : "text-red-600"
-                      }`}
-                    >
-                      💲 {appt.amount.toFixed(2)}{" "}
-                      {appt.paid ? "(Paid)" : "(Unpaid)"}
+                  <div className="flex flex-col items-end gap-2">
+                    {typeof appt.amount === "number" && (
+                      <div
+                        className={`text-sm font-medium ${
+                          appt.paid ? "text-gray-600" : "text-red-600"
+                        }`}
+                      >
+                        💲 {appt.amount.toFixed(2)}{" "}
+                        {appt.paid ? "(Paid)" : "(Unpaid)"}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      {canEdit && (
+                        <button
+                          className="btn-secondary text-xs"
+                          onClick={() => openEditModal(appt)}
+                          type="button"
+                        >
+                          ✏️ Edit
+                        </button>
+                      )}
+
+                      <button
+                        className="btn-danger text-xs"
+                        onClick={() => handleDeleteAppointment(appt)}
+                        type="button"
+                      >
+                        🗑 Delete
+                      </button>
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {appt.services?.length > 0 && (
@@ -541,14 +728,14 @@ export default function PetAppointments() {
 
       <NewAppointmentModal
         open={newModalOpen}
-        onClose={() => {
-          if (!savingNew) setNewModalOpen(false);
-        }}
+        onClose={closeModal}
         pet={pet}
         form={newForm}
         setForm={setNewForm}
         onSave={handleSaveNew}
         saving={savingNew}
+        editing={editingAppt}
+        initialOtherService={editOtherService}
       />
     </main>
   );
