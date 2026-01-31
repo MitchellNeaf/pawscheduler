@@ -290,3 +290,6 @@ details[open] a {
 details[open] button {
   color: #6b7280 !important;
 }
+
+html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+* { min-width: 0; }

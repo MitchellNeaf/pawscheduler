@@ -9,7 +9,7 @@ import {
   useNavigate,
   useSearchParams
 } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
 
 import ResetPassword from "./pages/ResetPassword";
@@ -39,7 +39,6 @@ import Retention from "./pages/legal/Retention";
 
 // 🔒 HARD GLOBAL LOCK (prevents StrictMode duplication)
 let SAMPLE_SETUP_RUNNING = false;
-
 
 // =============================
 // 🔐 PROTECTED ROUTE
@@ -125,16 +124,16 @@ function ProtectedRoute({ children }) {
         ? new Date(groomer.trial_end_date)
         : null;
 
-      if (groomer.subscription_status === "trial" && trialEnd && now <= trialEnd) {
+      if (
+        groomer.subscription_status === "trial" &&
+        trialEnd &&
+        now <= trialEnd
+      ) {
         const daysLeft = Math.ceil((trialEnd - now) / 86400000);
         if (daysLeft <= 5) setShowBanner(true);
       }
 
-      if (
-        groomer.subscription_status === "trial" &&
-        trialEnd &&
-        now > trialEnd
-      ) {
+      if (groomer.subscription_status === "trial" && trialEnd && now > trialEnd) {
         await supabase
           .from("groomers")
           .update({ subscription_status: "expired" })
@@ -172,7 +171,6 @@ function ProtectedRoute({ children }) {
   );
 }
 
-
 // =============================
 // ⭐ ACTIVATION HELPERS (MATCH DB)
 // =============================
@@ -191,7 +189,7 @@ async function ensureDefaultWorkingHours(groomerId) {
       groomer_id: groomerId,
       weekday,
       start_time: "08:00",
-      end_time: "17:00",
+      end_time: "17:00"
     });
   }
 
@@ -200,18 +198,16 @@ async function ensureDefaultWorkingHours(groomerId) {
     console.error("working_hours insert error", error);
     return false;
   }
-
   return true;
 }
 
 async function createSampleData(groomerId) {
-  // Client
   const { data: client, error: cErr } = await supabase
     .from("clients")
     .insert({
       groomer_id: groomerId,
       full_name: "Sample Client",
-      is_sample: true,
+      is_sample: true
     })
     .select()
     .single();
@@ -221,7 +217,6 @@ async function createSampleData(groomerId) {
     return false;
   }
 
-  // Pet
   const { data: pet, error: pErr } = await supabase
     .from("pets")
     .insert({
@@ -232,7 +227,7 @@ async function createSampleData(groomerId) {
       tags: ["Friendly"],
       notes: "Sample pet — delete anytime",
       slot_weight: 1,
-      is_sample: true,
+      is_sample: true
     })
     .select()
     .single();
@@ -242,7 +237,6 @@ async function createSampleData(groomerId) {
     return false;
   }
 
-  // Appointment (date + time)
   const today = new Date().toISOString().slice(0, 10);
 
   const { error: aErr } = await supabase.from("appointments").insert({
@@ -257,7 +251,7 @@ async function createSampleData(groomerId) {
     no_show: false,
     paid: false,
     is_sample: true,
-    notes: "Sample appointment — tap to edit or delete",
+    notes: "Sample appointment — tap to edit or delete"
   });
 
   if (aErr) {
@@ -267,7 +261,6 @@ async function createSampleData(groomerId) {
 
   return true;
 }
-
 
 // =============================
 // 🧭 APP SHELL
@@ -293,25 +286,124 @@ function AppShell() {
     window.location.href = "/auth";
   };
 
+  // ✅ Hamburger dropdown state
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  const navItems = useMemo(
+    () => [
+      { to: "/schedule", label: "Schedule" },
+      { to: "/", label: "Clients" },
+      { to: "/unpaid", label: "Unpaid" },
+      { to: "/revenue", label: "Revenue" },
+      { to: "/profile", label: "Profile" },
+      { to: "/help", label: "Help" }
+    ],
+    []
+  );
+
+  // Close dropdown on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!mobileOpen) return;
+
+    const onDown = (e) => {
+      if (!menuRef.current) return;
+      if (!menuRef.current.contains(e.target)) setMobileOpen(false);
+    };
+
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown, { passive: true });
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+    };
+  }, [mobileOpen]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setMobileOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
+
   return (
     <>
       {!hideNav && (
         <nav className="bg-white shadow-sm border-b border-gray-200 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="text-xl font-semibold">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-xl font-semibold shrink-0">
               <span className="text-emerald-600">Paw</span>Scheduler
             </div>
 
-            <div className="hidden sm:flex gap-6 text-sm font-medium">
-              <Link to="/schedule">Schedule</Link>
-              <Link to="/">Clients</Link>
-              <Link to="/unpaid">Unpaid</Link>
-              <Link to="/revenue">Revenue</Link>
-              <Link to="/profile">Profile</Link>
-              <Link to="/help">Help</Link>
+            {/* DESKTOP LINKS */}
+            <div className="hidden sm:flex gap-6 text-sm font-medium items-center">
+              {navItems.map((item) => (
+                <Link key={item.to} to={item.to}>
+                  {item.label}
+                </Link>
+              ))}
               <button onClick={handleLogout} className="text-xs text-gray-500">
                 Logout
               </button>
+            </div>
+
+            {/* MOBILE HAMBURGER */}
+            <div className="sm:hidden relative" ref={menuRef}>
+              <button
+                type="button"
+                aria-label="Open menu"
+                aria-expanded={mobileOpen}
+                onClick={() => setMobileOpen((v) => !v)}
+                className="btn-secondary px-3 py-2 rounded-xl"
+              >
+                {/* Hamburger icon */}
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M4 7H20M4 12H20M4 17H20"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </button>
+
+              {/* Dropdown */}
+              {mobileOpen && (
+                <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden z-50">
+                  <div className="py-2">
+                    {navItems.map((item) => (
+                      <Link
+                        key={item.to}
+                        to={item.to}
+                        className="block px-4 py-3 text-sm text-gray-800 hover:bg-emerald-50 hover:text-emerald-700"
+                      >
+                        {item.label}
+                      </Link>
+                    ))}
+                    <div className="my-2 border-t border-gray-100" />
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-3 text-sm text-gray-600 hover:bg-gray-50"
+                    >
+                      Logout
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </nav>
@@ -334,14 +426,70 @@ function AppShell() {
         <Route path="/book/:slug" element={<Book />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
-        <Route path="/" element={<ProtectedRoute><Clients /></ProtectedRoute>} />
-        <Route path="/clients/:clientId" element={<ProtectedRoute><ClientPets /></ProtectedRoute>} />
-        <Route path="/pets/:petId/appointments" element={<ProtectedRoute><PetAppointments /></ProtectedRoute>} />
-        <Route path="/schedule" element={<ProtectedRoute><Schedule /></ProtectedRoute>} />
-        <Route path="/unpaid" element={<ProtectedRoute><UnpaidAppointments /></ProtectedRoute>} />
-        <Route path="/revenue" element={<ProtectedRoute><Revenue /></ProtectedRoute>} />
-        <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
-        <Route path="/help" element={<ProtectedRoute><Help /></ProtectedRoute>} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Clients />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/clients/:clientId"
+          element={
+            <ProtectedRoute>
+              <ClientPets />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/pets/:petId/appointments"
+          element={
+            <ProtectedRoute>
+              <PetAppointments />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/schedule"
+          element={
+            <ProtectedRoute>
+              <Schedule />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/unpaid"
+          element={
+            <ProtectedRoute>
+              <UnpaidAppointments />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/revenue"
+          element={
+            <ProtectedRoute>
+              <Revenue />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/help"
+          element={
+            <ProtectedRoute>
+              <Help />
+            </ProtectedRoute>
+          }
+        />
       </Routes>
 
       {!hideFooter && (
