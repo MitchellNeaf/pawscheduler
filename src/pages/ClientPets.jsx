@@ -227,6 +227,13 @@ export default function ClientPets() {
       <div className="card mb-6">
         <div className="card-body space-y-3">
           <h2 className="font-semibold text-lg">Client Info</h2>
+          <input
+            placeholder="Client Name"
+            value={client.full_name || ""}
+            onChange={(e) =>
+              setClient((prev) => ({ ...prev, full_name: e.target.value }))
+            }
+          />
 
           <input
             placeholder="Email"
@@ -287,6 +294,7 @@ export default function ClientPets() {
                 await supabase
                   .from("clients")
                   .update({
+                    full_name: client.full_name || null,
                     email: client.email || null,
                     street: client.street || null,
                     city: client.city || null,
