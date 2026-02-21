@@ -7,14 +7,9 @@ exports.handler = async (event) => {
     // 🔐 SECURITY — cron protection
     // -------------------------------------------------
     const secret =
-      event.headers["x-cron-secret"] ||
-      event.headers["X-Cron-Secret"];
-
+      event.headers["x-cron-secret"] || event.headers["X-Cron-Secret"];
     if (secret !== process.env.CRON_SECRET) {
-      return {
-        statusCode: 401,
-        body: "Unauthorized"
-      };
+      return { statusCode: 401, body: "Unauthorized" };
     }
 
     // -------------------------------------------------
@@ -26,22 +21,16 @@ exports.handler = async (event) => {
     );
 
     // -------------------------------------------------
-    // 📅 Calculate TOMORROW in America/New_York
+    // ✅ Optional DRY RUN (prevents real SMS sends)
+    // Set Netlify env var: DRY_RUN_SMS=true
     // -------------------------------------------------
-    const now = new Date();
-    const estNow = new Date(
-      now.toLocaleString("en-US", { timeZone: "America/New_York" })
-    );
-    estNow.setDate(estNow.getDate() + 1);
-    const tomorrow = estNow.toISOString().slice(0, 10);
+    const DRY_RUN = process.env.DRY_RUN_SMS === "true";
 
     // -------------------------------------------------
-    // 🔍 Fetch SMS candidates via RPC (FLAT DATA)
+    // ✅ Fetch SMS candidates via RPC
+    // RPC computes "tomorrow" per groomer using groomers.time_zone
     // -------------------------------------------------
-    const { data: appts, error } = await supabase.rpc(
-      "sms_reminder_candidates",
-      { target_date: tomorrow }
-    );
+    const { data: appts, error } = await supabase.rpc("sms_reminder_candidates");
 
     if (error) {
       console.error("RPC Error:", error);
@@ -49,62 +38,84 @@ exports.handler = async (event) => {
     }
 
     if (!appts || appts.length === 0) {
-      return {
-        statusCode: 200,
-        body: "No SMS reminders to send."
-      };
+      return { statusCode: 200, body: "No SMS reminders to send." };
     }
+
+    let sentCount = 0;
+    let dryRunCount = 0;
+    let failCount = 0;
 
     // -------------------------------------------------
     // 📤 Send SMS reminders
     // -------------------------------------------------
     for (const a of appts) {
-      const message = `Hi ${a.client_name}, reminder that ${
-        a.pet_name
-      } has a grooming appointment tomorrow at ${a.appt_time.slice(
-        0,
-        5
-      )}. Reply STOP to opt out.`;
+      // Safety guard (RPC should already filter this, but keep it defensive)
+      if (!a.phone) continue;
+
+      const timeStr = (a.appt_time || "").slice(0, 5); // "HH:MM"
+      const message = `Hi ${a.client_name}, reminder that ${a.pet_name} has a grooming appointment tomorrow at ${timeStr}. Reply STOP to opt out.`;
+
+      if (DRY_RUN) {
+        console.log("DRY RUN SMS:", {
+          appointment_id: a.appointment_id,
+          to: a.phone,
+          message,
+        });
+        dryRunCount += 1;
+        continue;
+      }
 
       const res = await fetch("https://api.telnyx.com/v2/messages", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${process.env.TELNYX_API_KEY}`,
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           from: process.env.TELNYX_PHONE_NUMBER,
           to: a.phone,
-          text: message
-        })
+          text: message,
+        }),
       });
 
       if (!res.ok) {
-        console.error("Telnyx send failed:", await res.text());
+        failCount += 1;
+        console.error("Telnyx send failed:", {
+          appointment_id: a.appointment_id,
+          status: res.status,
+          body: await res.text(),
+        });
         continue;
       }
 
       // -------------------------------------------------
-      // Mark appointment as SMS sent (idempotent)
+      // Mark appointment as SMS sent (idempotent-ish)
+      // If this fails, you may resend next run — log loudly.
       // -------------------------------------------------
-      await supabase
+      const { error: markErr } = await supabase
         .from("appointments")
-        .update({
-          sms_reminder_sent_at: new Date().toISOString()
-        })
+        .update({ sms_reminder_sent_at: new Date().toISOString() })
         .eq("id", a.appointment_id);
+
+      if (markErr) {
+        failCount += 1;
+        console.error("Failed to mark sms_reminder_sent_at:", {
+          appointment_id: a.appointment_id,
+          error: markErr,
+        });
+        continue;
+      }
+
+      sentCount += 1;
     }
 
-    return {
-      statusCode: 200,
-      body: "SMS reminders sent successfully."
-    };
+    const summary = DRY_RUN
+      ? `DRY RUN complete. Would send ${dryRunCount} SMS.`
+      : `SMS reminders complete. Sent ${sentCount}. Failed ${failCount}.`;
 
+    return { statusCode: 200, body: summary };
   } catch (err) {
     console.error("SMS Reminder Fatal Error:", err);
-    return {
-      statusCode: 500,
-      body: err.message
-    };
+    return { statusCode: 500, body: err.message };
   }
 };

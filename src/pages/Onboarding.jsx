@@ -12,22 +12,52 @@ export default function Onboarding() {
 
   const navigate = useNavigate();
 
+  // Detect timezone (IANA)
+  const detectTimeZone = () => {
+    try {
+      return (
+        Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York"
+      );
+    } catch {
+      return "America/New_York";
+    }
+  };
+
   // Fetch user and check if groomer profile already exists
   useEffect(() => {
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) {
         navigate("/auth");
         return;
       }
 
-      const { data: existing } = await supabase
+      // If profile exists, make sure time_zone is set (one-time backfill) then continue
+      const { data: existing, error: existingErr } = await supabase
         .from("groomers")
-        .select("id")
+        .select("id, time_zone")
         .eq("id", user.id)
         .maybeSingle();
 
+      if (existingErr) {
+        console.error(existingErr);
+        setCheckingProfile(false);
+        return;
+      }
+
       if (existing) {
+        if (!existing.time_zone) {
+          const tz = detectTimeZone();
+          await supabase
+            .from("groomers")
+            .update({ time_zone: tz })
+            .eq("id", user.id)
+            .is("time_zone", null);
+        }
+
         navigate("/");
         return;
       }
@@ -45,11 +75,17 @@ export default function Onboarding() {
       return;
     }
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("groomers")
       .select("id")
       .eq("slug", cleaned)
       .maybeSingle();
+
+    if (error) {
+      console.error(error);
+      setSlugAvailable(null);
+      return;
+    }
 
     setSlugAvailable(!data);
   };
@@ -71,7 +107,10 @@ export default function Onboarding() {
 
     setLoading(true);
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
     if (!user) {
       alert("You are not logged in.");
       navigate("/auth");
@@ -86,14 +125,14 @@ export default function Onboarding() {
     const trialEnd = new Date();
 
     let trialLength = 30; // default 30-day trial
-
-    if (pilot === "mobile60") {
-      trialLength = 60;
-    }
+    if (pilot === "mobile60") trialLength = 60;
 
     trialEnd.setDate(trialEnd.getDate() + trialLength);
 
     const bookingCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+    // ✅ Timezone capture (IANA)
+    const detectedTz = detectTimeZone();
 
     const { error } = await supabase.from("groomers").insert([
       {
@@ -102,6 +141,9 @@ export default function Onboarding() {
         slug: slug,
         booking_code: bookingCode,
         email: user.email,
+
+        // ✅ NEW: store groomer timezone
+        time_zone: detectedTz,
 
         // ⭐ Trial info
         trial_start_date: trialStart.toISOString(),
@@ -168,16 +210,12 @@ export default function Onboarding() {
             <p className="text-green-600 text-sm mt-1">
               ✔ Available! Your booking link will be:
               <br />
-              <span className="font-semibold">
-                pawscheduler.com/book/{slug}
-              </span>
+              <span className="font-semibold">pawscheduler.com/book/{slug}</span>
             </p>
           )}
 
           {slug && slugAvailable === false && (
-            <p className="text-red-600 text-sm mt-1">
-              ✖ This slug is already taken.
-            </p>
+            <p className="text-red-600 text-sm mt-1">✖ This slug is already taken.</p>
           )}
         </div>
 
