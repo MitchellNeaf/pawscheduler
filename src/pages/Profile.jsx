@@ -13,6 +13,17 @@ const WEEKDAYS = [
   "Saturday",
 ];
 
+// Keep it simple + safe (covers almost all US groomers)
+const TIMEZONE_OPTIONS = [
+  { value: "America/New_York", label: "Eastern (ET) — America/New_York" },
+  { value: "America/Chicago", label: "Central (CT) — America/Chicago" },
+  { value: "America/Denver", label: "Mountain (MT) — America/Denver" },
+  { value: "America/Phoenix", label: "Arizona (MST) — America/Phoenix" },
+  { value: "America/Los_Angeles", label: "Pacific (PT) — America/Los_Angeles" },
+  { value: "America/Anchorage", label: "Alaska — America/Anchorage" },
+  { value: "Pacific/Honolulu", label: "Hawaii — Pacific/Honolulu" },
+];
+
 export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -22,6 +33,9 @@ export default function Profile() {
   const [logoUrl, setLogoUrl] = useState(null);
   const [user, setUser] = useState(null);
   const [maxParallel, setMaxParallel] = useState(1);
+
+  // ✅ Timezone
+  const [timeZone, setTimeZone] = useState("America/New_York");
 
   const [hours, setHours] = useState({});
   const [breaks, setBreaks] = useState({});
@@ -50,6 +64,22 @@ export default function Profile() {
         setLogoUrl(data.logo_url || null);
         setMaxParallel(data.max_parallel ?? 1);
 
+        // ✅ Load timezone; if missing, auto-detect and save once
+        if (data.time_zone) {
+          setTimeZone(data.time_zone);
+        } else {
+          const detected =
+            Intl.DateTimeFormat().resolvedOptions().timeZone ||
+            "America/New_York";
+          setTimeZone(detected);
+
+          // best-effort backfill (ignore errors)
+          await supabase
+            .from("groomers")
+            .update({ time_zone: detected })
+            .eq("id", user.id)
+            .is("time_zone", null);
+        }
       }
 
       setLoading(false);
@@ -165,10 +195,7 @@ export default function Profile() {
 
     const publicUrl = publicData.publicUrl + "?v=" + Date.now();
 
-    await supabase
-      .from("groomers")
-      .update({ logo_url: publicUrl })
-      .eq("id", user.id);
+    await supabase.from("groomers").update({ logo_url: publicUrl }).eq("id", user.id);
 
     setLogoUrl(publicUrl);
     setSaving(false);
@@ -181,15 +208,17 @@ export default function Profile() {
 
     const cleanSlug = slug.toLowerCase().replace(/\s+/g, "");
 
-    await supabase
+    const { error } = await supabase
       .from("groomers")
       .update({
         full_name: fullName,
         slug: cleanSlug,
         max_parallel: maxParallel,
+        time_zone: timeZone, // ✅ Save timezone
       })
       .eq("id", user.id);
 
+    if (error) alert("Failed to save profile: " + error.message);
 
     setSaving(false);
   };
@@ -239,7 +268,9 @@ export default function Profile() {
 
   // ---------------- BILLING PORTAL ----------------
   const handleManageBilling = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return;
 
     const resp = await fetch("/.netlify/functions/billingPortal", {
@@ -266,10 +297,7 @@ export default function Profile() {
       <TrialBanner userId={user?.id} />
 
       {/* SUBSCRIPTION STATUS BOX */}
-      <SubscriptionStatus
-        userId={user?.id}
-        onManageBilling={handleManageBilling}
-      />
+      <SubscriptionStatus userId={user?.id} onManageBilling={handleManageBilling} />
 
       {logoUrl ? (
         <img
@@ -293,6 +321,23 @@ export default function Profile() {
         className="border rounded w-full p-2"
       />
 
+      {/* ✅ TIME ZONE DROPDOWN */}
+      <label className="block mt-4 font-medium">Time Zone</label>
+      <select
+        value={timeZone}
+        onChange={(e) => setTimeZone(e.target.value)}
+        className="border rounded w-full p-2"
+      >
+        {TIMEZONE_OPTIONS.map((tz) => (
+          <option key={tz.value} value={tz.value}>
+            {tz.label}
+          </option>
+        ))}
+      </select>
+      <div className="text-xs text-gray-500 mt-1">
+        This controls your booking times and “tomorrow” SMS reminders.
+      </div>
+
       <label className="block mt-4 font-medium">Public Booking Slug</label>
       <label className="block mt-4 font-medium">Max Dogs at Same Time</label>
       <div className="flex items-center gap-3">
@@ -301,8 +346,10 @@ export default function Profile() {
           onChange={(e) => setMaxParallel(Number(e.target.value))}
           className="border rounded p-2 w-32"
         >
-          {[1,2,3,4,5].map((n) => (
-            <option key={n} value={n}>{n}</option>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
           ))}
         </select>
         <span className="text-sm text-gray-600">
@@ -312,22 +359,13 @@ export default function Profile() {
 
       <input
         value={slug}
-        onChange={(e) =>
-          setSlug(e.target.value.toLowerCase().replace(/\s+/g, ""))
-        }
+        onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, ""))}
         className="border rounded w-full p-2"
       />
 
-      <button
-        onClick={saveProfile}
-        disabled={saving}
-        className="btn-primary w-full mt-4"
-      >
+      <button onClick={saveProfile} disabled={saving} className="btn-primary w-full mt-4">
         {saving ? "Saving…" : "Save Changes"}
       </button>
-
-      {/* Manage Billing (hidden for trial users) */}
-      {/* This button is now moved inside SubscriptionStatus */}
 
       <section className="mt-10 border-t pt-8">
         <h2 className="text-xl font-bold mb-4">Working Hours</h2>
@@ -402,10 +440,7 @@ export default function Profile() {
                     <h4 className="text-sm font-medium">Breaks</h4>
 
                     {breaks[dayIndex].map((b, idx) => (
-                      <div
-                        key={idx}
-                        className="grid grid-cols-3 gap-3 mt-2 items-center"
-                      >
+                      <div key={idx} className="grid grid-cols-3 gap-3 mt-2 items-center">
                         <input
                           type="time"
                           value={b.start}
@@ -437,9 +472,7 @@ export default function Profile() {
                           onClick={() =>
                             setBreaks((prev) => {
                               const copy = { ...prev };
-                              copy[dayIndex] = copy[dayIndex].filter(
-                                (_, i) => i !== idx
-                              );
+                              copy[dayIndex] = copy[dayIndex].filter((_, i) => i !== idx);
                               return copy;
                             })
                           }
@@ -454,10 +487,7 @@ export default function Profile() {
                       onClick={() =>
                         setBreaks((prev) => ({
                           ...prev,
-                          [dayIndex]: [
-                            ...prev[dayIndex],
-                            { start: "12:00", end: "12:30" },
-                          ],
+                          [dayIndex]: [...prev[dayIndex], { start: "12:00", end: "12:30" }],
                         }))
                       }
                     >
@@ -513,7 +543,6 @@ function TrialBanner({ userId }) {
 
   if (!status) return null;
 
-  // Trial expired
   if (status === "trial" && daysLeft < 0) {
     return (
       <div className="bg-red-100 text-red-700 p-3 rounded-md mb-4 font-semibold">
@@ -526,7 +555,6 @@ function TrialBanner({ userId }) {
     );
   }
 
-  // Trial active
   if (status === "trial" && daysLeft >= 0) {
     return (
       <div className="bg-yellow-100 text-yellow-800 p-3 rounded-md mb-4 font-semibold">
@@ -569,39 +597,26 @@ function SubscriptionStatus({ userId, onManageBilling }) {
     <div className="p-4 bg-white border rounded-xl shadow-sm mt-6">
       <h3 className="text-lg font-semibold mb-2">Subscription</h3>
 
-      {/* Softer green badge for Active */}
       {sub === "active" && (
         <div className="bg-emerald-50 text-emerald-700 px-3 py-2 rounded-md font-semibold inline-block mb-3">
           ✔ Active Subscription
         </div>
       )}
 
-      {/* --- Manage Billing (only active users) --- */}
       {sub === "active" && (
-        <button
-          onClick={onManageBilling}
-          className="btn-primary w-full mt-3"
-        >
+        <button onClick={onManageBilling} className="btn-primary w-full mt-3">
           Manage Billing
         </button>
       )}
 
-      {/* --- Trial Users See Upgrade --- */}
       {sub === "trial" && (
-        <a
-          href="/upgrade"
-          className="btn-primary w-full mt-3 text-center block"
-        >
+        <a href="/upgrade" className="btn-primary w-full mt-3 text-center block">
           Upgrade Now
         </a>
       )}
 
-      {/* --- Expired Users --- */}
       {sub === "expired" && (
-        <a
-          href="/upgrade"
-          className="btn-primary w-full mt-3 text-center block"
-        >
+        <a href="/upgrade" className="btn-primary w-full mt-3 text-center block">
           Renew Subscription
         </a>
       )}
