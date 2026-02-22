@@ -8,16 +8,6 @@ import Loader from "../components/Loader";
  * ============================================================
  *  PHONE NORMALIZATION
  * ============================================================
- * Normalize US phone to E.164 for Telnyx.
- * Examples:
- * 814-333-4444 -> +18143334444
- * (814)3334444 -> +18143334444
- * 18143334444  -> +18143334444
- *
- * Returns:
- * - null     => no phone provided / cleared
- * - "INVALID"=> invalid phone format
- * - "+1..."  => normalized E.164
  */
 function normalizeUSPhoneToE164(input) {
   const raw = (input || "").trim();
@@ -37,10 +27,6 @@ function normalizeUSPhoneToE164(input) {
  * ============================================================
  */
 
-/**
- * Returns YYYY-MM-DD in local time.
- * (Appointments.date is stored as YYYY-MM-DD, so we use same.)
- */
 function getTodayYMD() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -49,10 +35,6 @@ function getTodayYMD() {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-/**
- * Gets all pet ids for a given client from the in-memory pets list.
- * This avoids extra round trips to Supabase.
- */
 function getPetIdsForClient(clientId, pets) {
   return (pets || [])
     .filter((p) => p.client_id === clientId)
@@ -60,23 +42,6 @@ function getPetIdsForClient(clientId, pets) {
     .filter(Boolean);
 }
 
-/**
- * Propagate a client's SMS preference to FUTURE appointments for that client.
- *
- * Rules:
- * - Only future appointments:
- *    - We use date >= today (simple and correct for your existing schema),
- *      because appointment "date" is a date-only column.
- * - Update:
- *    - sms_reminder_enabled: boolean
- * - If enabling:
- *    - sms_reminder_sent_at => null (so reminders can send again)
- * - If disabling:
- *    - we do NOT need to touch sms_reminder_sent_at; leaving it as-is is fine
- *
- * NOTE:
- * - Uses pet_id IN (...) because appointments reference pet_id, not client_id.
- */
 async function propagateSmsPreferenceToFutureAppointments({
   clientId,
   pets,
@@ -84,22 +49,18 @@ async function propagateSmsPreferenceToFutureAppointments({
 }) {
   const petIds = getPetIdsForClient(clientId, pets);
 
-  // If client has no pets, there can be no appointments to update.
   if (!petIds.length) return;
 
   const today = getTodayYMD();
 
-  // Build update payload safely (avoid setting undefined into Supabase update).
   const updatePayload = {
     sms_reminder_enabled: !!enabled,
   };
 
-  // If they are opting IN, reset sent_at so the next reminder job can send.
   if (enabled) {
     updatePayload.sms_reminder_sent_at = null;
   }
 
-  // Update future appointments for this client's pets
   const { error } = await supabase
     .from("appointments")
     .update(updatePayload)
@@ -107,6 +68,129 @@ async function propagateSmsPreferenceToFutureAppointments({
     .gte("date", today);
 
   if (error) throw error;
+}
+
+/**
+ * ============================================================
+ *  QUICK ADD MODAL (UI ONLY CHANGE)
+ * ============================================================
+ */
+function QuickAddModal({
+  open,
+  onClose,
+  clientsCount,
+  quickClientName,
+  setQuickClientName,
+  quickPets,
+  setQuickPets,
+  duplicateWarning,
+  quickSaving,
+  onSaveClient,
+  onSaveAndAddNext,
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-3">
+      <div className="bg-white rounded-xl shadow-lg max-w-lg w-full max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <h2 className="font-semibold text-gray-900 text-lg">
+            ⚡ Quick Add Client
+          </h2>
+
+          {/* Only allow close if they already have clients */}
+          {clientsCount > 0 ? (
+            <button
+              onClick={onClose}
+              className="text-gray-500 text-sm px-2 py-1 rounded hover:bg-gray-100"
+            >
+              ✕
+            </button>
+          ) : (
+            <span className="text-xs text-gray-500">Required first setup</span>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="p-4 space-y-3 overflow-y-auto">
+          <div className="text-sm text-gray-600">
+            Add a client and at least one dog. (You can always edit details
+            later.)
+          </div>
+
+          <input
+            placeholder="Client name (e.g. Richard)"
+            value={quickClientName}
+            onChange={(e) => setQuickClientName(e.target.value)}
+          />
+
+          {quickPets.map((pet, idx) => (
+            <div key={idx} className="flex gap-2">
+              <input
+                placeholder={`Dog ${idx + 1} name`}
+                value={pet}
+                onChange={(e) => {
+                  const copy = [...quickPets];
+                  copy[idx] = e.target.value;
+                  setQuickPets(copy);
+                }}
+              />
+
+              {quickPets.length > 1 && (
+                <button
+                  type="button"
+                  className="btn-danger text-sm"
+                  onClick={() => setQuickPets((p) => p.filter((_, i) => i !== idx))}
+                >
+                  ❌
+                </button>
+              )}
+            </div>
+          ))}
+
+          <button
+            type="button"
+            className="btn-secondary text-sm"
+            onClick={() => setQuickPets((p) => [...p, ""])}
+          >
+            ➕ Add another dog
+          </button>
+
+          {duplicateWarning && (
+            <div className="text-sm text-red-600 font-medium">
+              {duplicateWarning}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t flex gap-3 flex-wrap justify-end">
+          <button
+            className="btn-primary"
+            disabled={quickSaving || !!duplicateWarning}
+            onClick={onSaveClient}
+          >
+            {quickSaving ? "Saving..." : "Save Client"}
+          </button>
+
+          <button
+            className="btn-secondary"
+            disabled={quickSaving || !!duplicateWarning}
+            onClick={onSaveAndAddNext}
+          >
+            Save & Add Next Client
+          </button>
+
+          {clientsCount > 0 && (
+            <button className="btn-secondary" onClick={onClose} disabled={quickSaving}>
+              Cancel
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function Clients() {
@@ -130,12 +214,10 @@ export default function Clients() {
   const [smsSaveError, setSmsSaveError] = useState("");
   const [smsSaving, setSmsSaving] = useState(false);
 
-  // Get logged-in groomer
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
-  // Fetch data
   const fetchData = useCallback(async () => {
     try {
       const {
@@ -172,16 +254,13 @@ export default function Clients() {
     fetchData();
   }, [fetchData]);
 
-  // Detect duplicate pet names (only within quick add)
   useEffect(() => {
     const cleaned = quickPets
       .map((p) => p.trim().toLowerCase())
       .filter(Boolean);
 
     const hasDuplicates = new Set(cleaned).size !== cleaned.length;
-    setDuplicateWarning(
-      hasDuplicates ? "Duplicate dog names for this client." : ""
-    );
+    setDuplicateWarning(hasDuplicates ? "Duplicate dog names for this client." : "");
   }, [quickPets]);
 
   const handleQuickAdd = async (addNext = false) => {
@@ -250,14 +329,6 @@ export default function Clients() {
     setSmsOptInDraft(false);
   };
 
-  /**
-   * ============================================================
-   *  SAVE SMS SETTINGS (UPDATED)
-   * ============================================================
-   * This now ALSO updates FUTURE appointments:
-   * - appointments.sms_reminder_enabled
-   * - appointments.sms_reminder_sent_at (reset to null when enabling)
-   */
   const saveSmsEdit = async (clientId) => {
     setSmsSaveError("");
     setSmsSaving(true);
@@ -265,11 +336,6 @@ export default function Clients() {
     try {
       const normalized = normalizeUSPhoneToE164(smsPhoneDraft);
 
-      /**
-       * ------------------------------------------------------------
-       * Case A: Phone cleared => force opt-out + propagate disable
-       * ------------------------------------------------------------
-       */
       if (normalized === null) {
         const { error } = await supabase
           .from("clients")
@@ -278,7 +344,6 @@ export default function Clients() {
 
         if (error) throw error;
 
-        // ✅ Propagate disable to future appointments for that client
         await propagateSmsPreferenceToFutureAppointments({
           clientId,
           pets,
@@ -290,11 +355,6 @@ export default function Clients() {
         return;
       }
 
-      /**
-       * ------------------------------------------------------------
-       * Case B: Invalid phone => show error and stop
-       * ------------------------------------------------------------
-       */
       if (normalized === "INVALID") {
         setSmsSaveError(
           "Invalid phone. Use a 10-digit US number (e.g. 814-333-4444)."
@@ -302,11 +362,6 @@ export default function Clients() {
         return;
       }
 
-      /**
-       * ------------------------------------------------------------
-       * Case C: Valid phone => allow opt-in toggle
-       * ------------------------------------------------------------
-       */
       const enabled = !!smsOptInDraft;
 
       const { error } = await supabase
@@ -319,7 +374,6 @@ export default function Clients() {
 
       if (error) throw error;
 
-      // ✅ Propagate preference to future appointments for that client
       await propagateSmsPreferenceToFutureAppointments({
         clientId,
         pets,
@@ -336,7 +390,6 @@ export default function Clients() {
     }
   };
 
-  // Combined search
   const filteredClients = clients.filter((client) => {
     const q = search.toLowerCase();
 
@@ -367,94 +420,27 @@ export default function Clients() {
         {clients.length > 0 && (
           <button
             className="btn-primary text-sm"
-            onClick={() => setShowQuickAdd((v) => !v)}
+            onClick={() => setShowQuickAdd(true)}
           >
             ⚡ Quick Add
           </button>
         )}
       </div>
 
-      {/* QUICK ADD (unchanged) */}
-      {showQuickAdd && (
-        <div className="card mb-6 border-2 border-dashed">
-          <div className="card-body space-y-3">
-            <h2 className="font-semibold text-lg">Quick Add Client</h2>
-
-            <input
-              placeholder="Client name (e.g. Richard)"
-              value={quickClientName}
-              onChange={(e) => setQuickClientName(e.target.value)}
-            />
-
-            {quickPets.map((pet, idx) => (
-              <div key={idx} className="flex gap-2">
-                <input
-                  placeholder={`Dog ${idx + 1} name`}
-                  value={pet}
-                  onChange={(e) => {
-                    const copy = [...quickPets];
-                    copy[idx] = e.target.value;
-                    setQuickPets(copy);
-                  }}
-                />
-
-                {quickPets.length > 1 && (
-                  <button
-                    type="button"
-                    className="btn-danger text-sm"
-                    onClick={() =>
-                      setQuickPets((p) => p.filter((_, i) => i !== idx))
-                    }
-                  >
-                    ❌
-                  </button>
-                )}
-              </div>
-            ))}
-
-            <button
-              type="button"
-              className="btn-secondary text-sm"
-              onClick={() => setQuickPets((p) => [...p, ""])}
-            >
-              ➕ Add another dog
-            </button>
-
-            {duplicateWarning && (
-              <div className="text-sm text-red-600 font-medium">
-                {duplicateWarning}
-              </div>
-            )}
-
-            <div className="flex gap-3 flex-wrap">
-              <button
-                className="btn-primary"
-                disabled={quickSaving || !!duplicateWarning}
-                onClick={() => handleQuickAdd(false)}
-              >
-                {quickSaving ? "Saving..." : "Save Client"}
-              </button>
-
-              <button
-                className="btn-secondary"
-                disabled={quickSaving || !!duplicateWarning}
-                onClick={() => handleQuickAdd(true)}
-              >
-                Save & Add Next Client
-              </button>
-
-              {clients.length > 0 && (
-                <button
-                  className="btn-secondary"
-                  onClick={() => setShowQuickAdd(false)}
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* QUICK ADD MODAL (UI ONLY CHANGE) */}
+      <QuickAddModal
+        open={showQuickAdd}
+        onClose={() => setShowQuickAdd(false)}
+        clientsCount={clients.length}
+        quickClientName={quickClientName}
+        setQuickClientName={setQuickClientName}
+        quickPets={quickPets}
+        setQuickPets={setQuickPets}
+        duplicateWarning={duplicateWarning}
+        quickSaving={quickSaving}
+        onSaveClient={() => handleQuickAdd(false)}
+        onSaveAndAddNext={() => handleQuickAdd(true)}
+      />
 
       {/* Search */}
       {clients.length > 0 && (
@@ -482,7 +468,6 @@ export default function Clients() {
           return (
             <li key={client.id} className="card">
               <div className="card-body">
-                {/* Name */}
                 <Link
                   to={`/clients/${client.id}`}
                   className="font-semibold text-lg block"
@@ -490,7 +475,6 @@ export default function Clients() {
                   {client.full_name}
                 </Link>
 
-                {/* Contact Info */}
                 <div className="mt-1 text-sm text-gray-600 space-y-0.5">
                   {client.email && <div>📧 {client.email}</div>}
 

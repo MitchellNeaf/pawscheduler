@@ -15,6 +15,230 @@ const TAG_OPTIONS = [
   "Other",
 ];
 
+function PetEditModal({
+  open,
+  onClose,
+  editingId,
+  form,
+  setForm,
+  otherTag,
+  setOtherTag,
+  toggleTag,
+  onSubmit,
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-3">
+      <div className="bg-white rounded-xl shadow-lg max-w-lg w-full max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <h2 className="font-semibold text-gray-900 text-lg">
+            ✏️ Edit Pet Details
+          </h2>
+          <button
+            onClick={onClose}
+            className="text-gray-500 text-sm px-2 py-1 rounded hover:bg-gray-100"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="p-4 space-y-3 overflow-y-auto">
+          <input
+            name="name"
+            value={form.name}
+            onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
+            placeholder="Pet name"
+            required
+          />
+
+          <input
+            name="breed"
+            value={form.breed}
+            onChange={(e) => setForm((prev) => ({ ...prev, breed: e.target.value }))}
+            placeholder="Breed"
+          />
+
+          {/* TAGS */}
+          <div>
+            <label className="font-medium block mb-1">
+              Tags (behavior, medical, etc.)
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {TAG_OPTIONS.map((tag) => (
+                <label key={tag} className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={form.tags.includes(tag)}
+                    onChange={() => toggleTag(tag)}
+                  />
+                  {tag}
+                </label>
+              ))}
+            </div>
+
+            {form.tags.includes("Other") && (
+              <input
+                type="text"
+                value={otherTag}
+                onChange={(e) => setOtherTag(e.target.value)}
+                placeholder="Enter custom tag..."
+                className="mt-2"
+              />
+            )}
+          </div>
+
+          <textarea
+            name="notes"
+            value={form.notes}
+            onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
+            placeholder="Notes"
+          />
+
+          {/* SIZE */}
+          <label className="font-medium block mt-4">Size / Difficulty</label>
+          <select
+            name="slot_weight"
+            value={form.slot_weight}
+            onChange={(e) =>
+              setForm((prev) => ({
+                ...prev,
+                slot_weight: Number(e.target.value),
+              }))
+            }
+            className="border rounded w-full p-2"
+          >
+            <option value={1}>Small / Easy (1)</option>
+            <option value={1}>Medium (1)</option>
+            <option value={2}>Large (2)</option>
+            <option value={3}>XL / Special Care (3)</option>
+          </select>
+
+          <div className="flex gap-3 pt-2 justify-end">
+            <button type="button" className="btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn-primary">
+              Update Pet
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ShotModal({
+  open,
+  onClose,
+  pet,
+  shotForm,
+  setShotForm,
+  onSave,
+}) {
+  if (!open || !pet) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-3">
+      <div className="bg-white rounded-xl shadow-lg max-w-lg w-full max-h-[90vh] flex flex-col">
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <h3 className="font-semibold text-gray-900 text-lg">
+            💉 Add Shot Record for {pet.name}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-gray-500 text-sm px-2 py-1 rounded hover:bg-gray-100"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="p-4 space-y-4 overflow-y-auto">
+          <div>
+            <label className="block text-sm font-medium mb-1">Shot Type</label>
+            <select
+              value={shotForm.shot_type}
+              onChange={(e) =>
+                setShotForm({ ...shotForm, shot_type: e.target.value })
+              }
+              className="border p-2 rounded w-full"
+            >
+              <option>Rabies</option>
+              <option>Bordetella</option>
+              <option>DHPP</option>
+              <option>Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Date Given</label>
+
+            <input
+              type="date"
+              value={shotForm.date_given}
+              onChange={(e) =>
+                setShotForm({ ...shotForm, date_given: e.target.value })
+              }
+              className="border p-2 rounded w-full"
+              disabled={shotForm.date_unknown}
+            />
+
+            <label className="flex items-center gap-2 mt-1 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={shotForm.date_unknown}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setShotForm((prev) => ({
+                    ...prev,
+                    date_unknown: checked,
+                    date_given: checked ? "" : prev.date_given,
+                  }));
+                }}
+              />
+              Date given unknown
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Date Expires</label>
+            <input
+              type="date"
+              value={shotForm.date_expires}
+              onChange={(e) =>
+                setShotForm({ ...shotForm, date_expires: e.target.value })
+              }
+              className="border p-2 rounded w-full"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Notes</label>
+            <textarea
+              value={shotForm.notes}
+              onChange={(e) =>
+                setShotForm({ ...shotForm, notes: e.target.value })
+              }
+              className="border p-2 rounded w-full"
+              placeholder="Optional notes…"
+            />
+          </div>
+        </div>
+
+        <div className="px-4 py-3 border-t flex gap-3 justify-end">
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="btn-primary" onClick={onSave}>
+            Save Shot
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ClientPets() {
   const { clientId } = useParams();
   const [client, setClient] = useState(null);
@@ -33,7 +257,7 @@ export default function ClientPets() {
     notes: "",
   });
 
-  // Pet form (includes slot_weight)
+  // Pet form
   const [form, setForm] = useState({
     name: "",
     breed: "",
@@ -45,12 +269,14 @@ export default function ClientPets() {
   const [otherTag, setOtherTag] = useState("");
   const [editingId, setEditingId] = useState(null);
 
-  // Load logged-in user
+  // Modal state (UI only)
+  const [petEditOpen, setPetEditOpen] = useState(false);
+  const [shotModalOpen, setShotModalOpen] = useState(false);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
-  // Load client + pets (with shot records)
   useEffect(() => {
     const loadData = async () => {
       const {
@@ -95,9 +321,6 @@ export default function ClientPets() {
     setPets(petData || []);
   };
 
-  const handleFormChange = (e) =>
-    setForm({ ...form, [e.target.name]: e.target.value });
-
   const toggleTag = (tag) => {
     setForm((prev) => ({
       ...prev,
@@ -117,9 +340,10 @@ export default function ClientPets() {
     });
     setOtherTag("");
     setEditingId(null);
+    setPetEditOpen(false);
   };
 
-  // Add or update pet
+  // Add or update pet (same logic; just no scrolling)
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!user) return;
@@ -171,9 +395,7 @@ export default function ClientPets() {
     }
   };
 
-
-  
-  // Edit pet
+  // Edit pet (open modal instead of scroll)
   const handleEdit = (pet) => {
     setForm({
       name: pet.name || "",
@@ -192,7 +414,12 @@ export default function ClientPets() {
     }
 
     setEditingId(pet.id);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setPetEditOpen(true);
+  };
+
+  const closePetEdit = () => {
+    setPetEditOpen(false);
+    // keep data in form until they cancel explicitly
   };
 
   // Delete pet
@@ -244,7 +471,6 @@ export default function ClientPets() {
             }
           />
 
-          {/* READ-ONLY PHONE */}
           <div className="text-sm text-gray-700">
             📞 {client.phone || "No phone on file"}
           </div>
@@ -309,114 +535,21 @@ export default function ClientPets() {
               {savingClient ? "Saving…" : "Save Client Info"}
             </button>
 
-            {client.street &&
-              client.city &&
-              client.state &&
-              client.zip && (
-                <a
-                  className="btn-secondary text-sm"
-                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-                    `${client.street}, ${client.city}, ${client.state} ${client.zip}`
-                  )}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  📍 Open in Maps
-                </a>
-              )}
+            {client.street && client.city && client.state && client.zip && (
+              <a
+                className="btn-secondary text-sm"
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                  `${client.street}, ${client.city}, ${client.state} ${client.zip}`
+                )}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                📍 Open in Maps
+              </a>
+            )}
           </div>
         </div>
       </div>
-
-      {/* PET FORM */}
-      <form onSubmit={handleSubmit} className="card mb-6">
-        <div className="card-body space-y-3">
-          <input
-            name="name"
-            value={form.name}
-            onChange={handleFormChange}
-            placeholder="Pet name"
-            required
-          />
-          <input
-            name="breed"
-            value={form.breed}
-            onChange={handleFormChange}
-            placeholder="Breed"
-          />
-
-          {/* TAGS */}
-          <div>
-            <label className="font-medium block mb-1">
-              Tags (behavior, medical, etc.)
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {TAG_OPTIONS.map((tag) => (
-                <label key={tag} className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={form.tags.includes(tag)}
-                    onChange={() => toggleTag(tag)}
-                  />
-                  {tag}
-                </label>
-              ))}
-            </div>
-
-            {form.tags.includes("Other") && (
-              <input
-                type="text"
-                value={otherTag}
-                onChange={(e) => setOtherTag(e.target.value)}
-                placeholder="Enter custom tag..."
-                className="mt-2"
-              />
-            )}
-          </div>
-
-          <textarea
-            name="notes"
-            value={form.notes}
-            onChange={handleFormChange}
-            placeholder="Notes"
-          />
-
-          {/* SIZE */}
-          <label className="font-medium block mt-4">Size / Difficulty</label>
-          <select
-            name="slot_weight"
-            value={form.slot_weight}
-            onChange={(e) =>
-              setForm((prev) => ({
-                ...prev,
-                slot_weight: Number(e.target.value),
-              }))
-            }
-            className="border rounded w-full p-2"
-          >
-            <option value={1}>Small / Easy (1)</option>
-            <option value={1}>Medium (1)</option>
-            <option value={2}>Large (2)</option>
-            <option value={3}>XL / Special Care (3)</option>
-          </select>
-
-          <div className="flex flex-wrap gap-3 mt-3">
-            <button type="submit" className="btn-primary">
-              {editingId ? "Update Pet" : "Add Pet"}
-            </button>
-
-            {editingId && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="btn-secondary"
-              >
-                Cancel Edit
-              </button>
-            )}
-          </div>
-        </div>
-      </form>
 
       {/* PET LIST */}
       <ul className="space-y-3">
@@ -429,16 +562,13 @@ export default function ClientPets() {
                 <div className="font-semibold text-lg">{pet.name}</div>
                 <div className="text-gray-600">{pet.breed}</div>
 
-                {/* TAGS */}
                 {pet.tags?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {pet.tags.map((tag, i) => (
                       <span
                         key={`${pet.id}-${tag}-${i}`}
                         className={`chip ${
-                          ["Bites", "Anxious", "Aggressive", "Matting"].includes(
-                            tag
-                          )
+                          ["Bites", "Anxious", "Aggressive", "Matting"].includes(tag)
                             ? "chip-danger"
                             : ""
                         }`}
@@ -449,12 +579,10 @@ export default function ClientPets() {
                   </div>
                 )}
 
-                {/* NOTES */}
                 {pet.notes && (
                   <div className="text-sm text-gray-700 mt-2">{pet.notes}</div>
                 )}
 
-                {/* SIZE */}
                 <div className="text-sm text-gray-600 mt-2">
                   Difficulty / Size:{" "}
                   <strong>
@@ -468,16 +596,13 @@ export default function ClientPets() {
 
                 {/* SHOT RECORDS */}
                 <div className="mt-4">
-                  <div className="font-medium text-gray-800 mb-1">
-                    Shot Records
-                  </div>
+                  <div className="font-medium text-gray-800 mb-1">Shot Records</div>
 
                   {pet.pet_shot_records?.length > 0 ? (
                     <ul className="ml-3 list-disc text-sm text-gray-700">
                       {pet.pet_shot_records.map((rec) => (
                         <li key={rec.id}>
-                          <strong>{rec.shot_type}</strong> — expires{" "}
-                          {rec.date_expires}
+                          <strong>{rec.shot_type}</strong> — expires {rec.date_expires}
                         </li>
                       ))}
                     </ul>
@@ -488,7 +613,10 @@ export default function ClientPets() {
                   )}
 
                   <button
-                    onClick={() => setAddShotPet(pet)}
+                    onClick={() => {
+                      setAddShotPet(pet);
+                      setShotModalOpen(true);
+                    }}
                     className="btn-secondary text-sm mt-2"
                   >
                     + Add Shot Record
@@ -497,24 +625,15 @@ export default function ClientPets() {
 
                 {/* BUTTONS */}
                 <div className="mt-4 flex flex-wrap gap-3 text-sm">
-                  <Link
-                    to={`/pets/${pet.id}/appointments`}
-                    className="btn-secondary"
-                  >
+                  <Link to={`/pets/${pet.id}/appointments`} className="btn-secondary">
                     View Appointments
                   </Link>
 
-                  <button
-                    className="btn-primary"
-                    onClick={() => handleEdit(pet)}
-                  >
+                  <button className="btn-primary" onClick={() => handleEdit(pet)}>
                     ✏️ Edit
                   </button>
 
-                  <button
-                    className="btn btn-danger"
-                    onClick={() => handleDelete(pet.id)}
-                  >
+                  <button className="btn btn-danger" onClick={() => handleDelete(pet.id)}>
                     🗑 Delete
                   </button>
                 </div>
@@ -524,134 +643,53 @@ export default function ClientPets() {
         )}
       </ul>
 
-      {/* ADD SHOT RECORD FORM */}
-      {addShotPet && (
-        <div className="card mt-6">
-          <div className="card-body">
-            <h3 className="font-semibold mb-4">
-              Add Shot Record for {addShotPet.name}
-            </h3>
+      {/* PET EDIT MODAL */}
+      <PetEditModal
+        open={petEditOpen}
+        onClose={closePetEdit}
+        editingId={editingId}
+        form={form}
+        setForm={setForm}
+        otherTag={otherTag}
+        setOtherTag={setOtherTag}
+        toggleTag={toggleTag}
+        onSubmit={handleSubmit}
+      />
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Shot Type
-                </label>
-                <select
-                  value={shotForm.shot_type}
-                  onChange={(e) =>
-                    setShotForm({ ...shotForm, shot_type: e.target.value })
-                  }
-                  className="border p-2 rounded w-full"
-                >
-                  <option>Rabies</option>
-                  <option>Bordetella</option>
-                  <option>DHPP</option>
-                  <option>Other</option>
-                </select>
-              </div>
+      {/* SHOT MODAL */}
+      <ShotModal
+        open={shotModalOpen}
+        onClose={() => {
+          setShotModalOpen(false);
+          setAddShotPet(null);
+        }}
+        pet={addShotPet}
+        shotForm={shotForm}
+        setShotForm={setShotForm}
+        onSave={async () => {
+          if (!addShotPet) return;
 
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Date Given
-                </label>
+          await supabase.from("pet_shot_records").insert({
+            pet_id: addShotPet.id,
+            shot_type: shotForm.shot_type,
+            date_given: shotForm.date_unknown ? null : shotForm.date_given || null,
+            date_expires: shotForm.date_expires,
+            notes: shotForm.notes || "",
+          });
 
-                <input
-                  type="date"
-                  value={shotForm.date_given}
-                  onChange={(e) =>
-                    setShotForm({ ...shotForm, date_given: e.target.value })
-                  }
-                  className="border p-2 rounded w-full"
-                  disabled={shotForm.date_unknown}
-                />
+          setShotForm({
+            shot_type: "Rabies",
+            date_given: "",
+            date_unknown: false,
+            date_expires: "",
+            notes: "",
+          });
 
-                <label className="flex items-center gap-2 mt-1 text-xs text-gray-600">
-                  <input
-                    type="checkbox"
-                    checked={shotForm.date_unknown}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setShotForm((prev) => ({
-                        ...prev,
-                        date_unknown: checked,
-                        date_given: checked ? "" : prev.date_given,
-                      }));
-                    }}
-                  />
-                  Date given unknown
-                </label>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Date Expires
-                </label>
-                <input
-                  type="date"
-                  value={shotForm.date_expires}
-                  onChange={(e) =>
-                    setShotForm({ ...shotForm, date_expires: e.target.value })
-                  }
-                  className="border p-2 rounded w-full"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Notes</label>
-                <textarea
-                  value={shotForm.notes}
-                  onChange={(e) =>
-                    setShotForm({ ...shotForm, notes: e.target.value })
-                  }
-                  className="border p-2 rounded w-full"
-                  placeholder="Optional notes…"
-                />
-              </div>
-
-              <div className="flex gap-3 mt-2">
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={async () => {
-                    await supabase.from("pet_shot_records").insert({
-                      pet_id: addShotPet.id,
-                      shot_type: shotForm.shot_type,
-                      date_given: shotForm.date_unknown
-                        ? null
-                        : shotForm.date_given || null,
-                      date_expires: shotForm.date_expires,
-                      notes: shotForm.notes || "",
-                    });
-
-                    setShotForm({
-                      shot_type: "Rabies",
-                      date_given: "",
-                      date_unknown: false,
-                      date_expires: "",
-                      notes: "",
-                    });
-
-                    setAddShotPet(null);
-                    await reloadPets();
-                  }}
-                >
-                  Save Shot
-                </button>
-
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setAddShotPet(null)}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+          setShotModalOpen(false);
+          setAddShotPet(null);
+          await reloadPets();
+        }}
+      />
     </main>
   );
 }

@@ -286,32 +286,48 @@ function PetSelectModal({ open, onClose, slot, date, pets, loading, onPickPet })
             <p className="text-sm text-gray-600">No matching pets.</p>
           ) : (
             <ul className="space-y-2">
-              {filtered.map((pet) => (
-                <li key={pet.id}>
-                  <button
-                    onClick={() => onPickPet(pet)}
-                    className="w-full text-left border rounded px-3 py-2 hover:bg-blue-50 flex flex-col"
-                  >
-                    <span className="font-medium">{pet.name}</span>
-                    <span className="text-xs text-gray-500">
-                      {pet.clients?.full_name}
-                    </span>
+              {filtered.map((pet) => {
+                const sz = sizeBadge(pet.slot_weight || 1);
 
-                    {pet.tags?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {pet.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="px-2 py-0.5 text-[10px] rounded bg-gray-100 text-gray-600"
-                          >
-                            {tag}
-                          </span>
-                        ))}
+                return (
+                  <li key={pet.id}>
+                    <button
+                      onClick={() => onPickPet(pet)}
+                      className="w-full text-left border rounded px-3 py-2 hover:bg-blue-50 flex flex-col"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{pet.name}</div>
+                          <div className="text-xs text-gray-500 truncate">
+                            {pet.clients?.full_name}
+                          </div>
+                        </div>
+
+                        {/* Size pill */}
+                        <span
+                          className={`shrink-0 px-2 py-1 rounded text-[11px] font-semibold ${sz.bg}`}
+                          title="Capacity weight"
+                        >
+                          {sz.icon} {sz.label}
+                        </span>
                       </div>
-                    )}
-                  </button>
-                </li>
-              ))}
+
+                      {pet.tags?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {pet.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="px-2 py-0.5 text-[10px] rounded bg-gray-100 text-gray-600"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -328,6 +344,7 @@ function PetSelectModal({ open, onClose, slot, date, pets, loading, onPickPet })
     </div>
   );
 }
+
 
 /* ---------------- New Appointment Modal ---------------- */
 function NewAppointmentModal({ open, onClose, pet, form, setForm, onSave, saving }) {
