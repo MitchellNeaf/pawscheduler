@@ -19,21 +19,22 @@ export default function Help() {
   const filteredSections = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return SECTIONS;
-    return SECTIONS.filter((s) => s.label.toLowerCase().includes(q));
+    // improvement: search both label + id for better matches
+    return SECTIONS.filter(
+      (s) =>
+        s.label.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)
+    );
   }, [query]);
 
   // Track active section on scroll (nice UX + highlights left nav)
   useEffect(() => {
     const ids = SECTIONS.map((s) => s.id);
-    const els = ids
-      .map((id) => document.getElementById(id))
-      .filter(Boolean);
+    const els = ids.map((id) => document.getElementById(id)).filter(Boolean);
 
     if (!els.length) return;
 
     const obs = new IntersectionObserver(
       (entries) => {
-        // pick the most visible intersecting entry
         const visible = entries
           .filter((e) => e.isIntersecting)
           .sort((a, b) => (b.intersectionRatio ?? 0) - (a.intersectionRatio ?? 0))[0];
@@ -42,7 +43,6 @@ export default function Help() {
       },
       {
         root: null,
-        // pushes detection slightly earlier so nav updates before you're fully inside a section
         rootMargin: "-20% 0px -70% 0px",
         threshold: [0.05, 0.1, 0.2, 0.35, 0.5, 0.75],
       }
@@ -76,7 +76,7 @@ export default function Help() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search help…"
+              placeholder="Search help… (ex: booking, hours, slug)"
               className="w-full border rounded-lg px-3 py-2 text-sm"
             />
           </div>
@@ -119,7 +119,7 @@ export default function Help() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search…"
+              placeholder="Search… (booking, hours, slug)"
               className="w-full border rounded-lg px-3 py-2 text-sm mb-4"
             />
 
@@ -142,14 +142,15 @@ export default function Help() {
             </nav>
 
             <div className="mt-6 rounded-xl border bg-gray-50 p-4">
-              <div className="text-sm font-semibold text-gray-800">
-                Quick Start
-              </div>
+              <div className="text-sm font-semibold text-gray-800">Quick Start</div>
               <ol className="mt-2 text-sm text-gray-700 space-y-1 list-decimal ml-4">
                 <li>Set profile + timezone</li>
                 <li>Set working hours</li>
                 <li>Share booking link</li>
               </ol>
+              <div className="mt-3 text-xs text-gray-500">
+                Tip: If clients self-book, make sure their phone number is saved correctly.
+              </div>
             </div>
           </div>
         </aside>
@@ -184,7 +185,7 @@ export default function Help() {
               {
                 title: "Time zone",
                 text:
-                  "Make this correct first. Wrong timezone = wrong appointment times.",
+                  "Set this first. Wrong timezone = wrong appointment times.",
                 tone: "warn",
               },
               {
@@ -204,18 +205,15 @@ export default function Help() {
               { title: "Set weekly availability", text: "Choose days and start/end times." },
               {
                 title: "Breaks",
-                text:
-                  "Add lunch/buffers so clients can’t book over them.",
+                text: "Add lunch/buffers so clients can’t book over them.",
               },
               {
                 title: "Stress reducer",
-                text:
-                  "Add a 15–30 min buffer at the start/end of day to stay on schedule.",
+                text: "Add a 15–30 min buffer at the start/end of day to stay on schedule.",
               },
               {
                 title: "Common mistake",
-                text:
-                  "Forgetting to adjust for holiday weeks. Update hours anytime.",
+                text: "Forgetting to adjust for holiday weeks. Update hours anytime.",
                 tone: "warn",
               },
             ]}
@@ -231,8 +229,7 @@ export default function Help() {
               { title: "Edit anytime", text: "Delete or change blocked days whenever needed." },
               {
                 title: "Pro tip",
-                text:
-                  "Block a “prep day” after holidays if you tend to get slammed.",
+                text: "Block a “prep day” after holidays if you tend to get slammed.",
               },
             ]}
           />
@@ -245,12 +242,14 @@ export default function Help() {
             custom={
               <div className="space-y-3">
                 <p className="text-sm text-gray-700">
-                  Example: slug <code className="px-1 py-0.5 rounded bg-gray-100">sally</code>
+                  Example: slug{" "}
+                  <code className="px-1 py-0.5 rounded bg-gray-100">sally</code>
                   {" "}→{" "}
                   <code className="px-1 py-0.5 rounded bg-gray-100">
                     https://app.pawscheduler.app/book/sally
                   </code>
                 </p>
+
                 <div className="rounded-xl border bg-gray-50 p-4 text-sm text-gray-700">
                   <div className="font-semibold text-gray-900 mb-1">Where to share it</div>
                   <div className="flex flex-wrap gap-2">
@@ -260,8 +259,15 @@ export default function Help() {
                     <span className="pill">Printed card</span>
                   </div>
                 </div>
+
+                <div className="rounded-xl border bg-amber-50 border-amber-200 p-4 text-sm text-amber-900/90">
+                  <div className="font-semibold text-amber-900 mb-1">Important</div>
+                  Your booking link is public. For self-booking, clients must still “check in” using{" "}
+                  <strong>their name + last 4 digits of their phone number</strong>.
+                </div>
+
                 <p className="text-sm text-gray-700">
-                  <strong>Pro tip:</strong> Keep it short and memorable.
+                  <strong>Pro tip:</strong> Keep your slug short and memorable.
                 </p>
               </div>
             }
@@ -275,7 +281,8 @@ export default function Help() {
             custom={
               <div className="space-y-3 text-sm text-gray-700">
                 <p>
-                  Assign pets a size. PawScheduler converts size to <strong>capacity units</strong>.
+                  Assign pets a size. PawScheduler converts size to{" "}
+                  <strong>capacity units</strong>.
                 </p>
 
                 <div className="grid md:grid-cols-2 gap-3">
@@ -312,29 +319,84 @@ export default function Help() {
           <Section
             id="scheduling"
             title="Scheduling Clients"
-            subtitle="Add appointments fast from wherever you are in the app."
-            bullets={[
-              {
-                title: "Create appointments from anywhere",
-                text:
-                  "Clients, Pets, or the Schedule page — whichever is fastest.",
-              },
-              {
-                title: "Set the essentials",
-                text:
-                  "Pet, services, start time, duration, and notes.",
-              },
-              {
-                title: "Quick rebook",
-                text:
-                  "Rebook in one tap after checkout (helps repeat business).",
-              },
-              {
-                title: "Smart alerts",
-                text:
-                  "Use tags like “Bites” or “Anxious” so you see warnings when rebooking.",
-              },
-            ]}
+            subtitle="Schedule it yourself — or let clients self-book using their name + last 4."
+            custom={
+              <div className="space-y-4 text-sm text-gray-700">
+                <div>
+                  <div className="font-semibold text-gray-900 mb-1">
+                    Option A: You schedule it (fastest)
+                  </div>
+                  <ul className="list-disc ml-5 space-y-1">
+                    <li>Create appointments from <strong>Clients</strong>, <strong>Pets</strong>, or the <strong>Schedule</strong> page.</li>
+                    <li>Set: <strong>pet</strong>, <strong>services</strong>, <strong>start time</strong>, <strong>duration</strong>, and <strong>notes</strong>.</li>
+                    <li>
+                      <strong>Quick rebook:</strong> rebook right after checkout to keep clients on a routine.
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="rounded-2xl border bg-emerald-50 p-4">
+                  <div className="font-semibold text-emerald-900 mb-1">
+                    Option B: Clients self-book (Name + last 4 digits)
+                  </div>
+                  <p className="text-emerald-900/90">
+                    When a client opens your booking link, they’ll be asked for:
+                    <strong> their name</strong> + <strong>the last 4 digits of their phone number</strong>.
+                    This acts like a simple check-in code so random people can’t book on your calendar.
+                  </p>
+
+                  <div className="mt-3 grid md:grid-cols-2 gap-3">
+                    <div className="rounded-xl border bg-white p-3">
+                      <div className="font-semibold text-gray-900 mb-1">✅ What to type</div>
+                      <ul className="space-y-1">
+                        <li>
+                          <strong>Name:</strong> exactly how you saved them (example:{" "}
+                          <code className="px-1 py-0.5 rounded bg-gray-100">Sarah Miller</code>)
+                        </li>
+                        <li>
+                          <strong>Last 4:</strong> only 4 numbers (example:{" "}
+                          <code className="px-1 py-0.5 rounded bg-gray-100">4421</code>)
+                        </li>
+                      </ul>
+                    </div>
+
+                    <div className="rounded-xl border bg-white p-3">
+                      <div className="font-semibold text-gray-900 mb-1">🚫 Common mistakes</div>
+                      <ul className="list-disc ml-5 space-y-1">
+                        <li>Typing the full phone number instead of the last 4</li>
+                        <li>Using a nickname (e.g., “Mike”) when you saved “Michael”</li>
+                        <li>Entering dashes/spaces (last 4 should be numbers only)</li>
+                        <li>Using a different phone than the one you have on file</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div className="font-semibold text-amber-900 mb-1">If it says “Not found”</div>
+                    <ol className="list-decimal ml-5 space-y-1 text-amber-900/90">
+                      <li>Double-check spelling (try first + last).</li>
+                      <li>Make sure they’re using the same phone number you saved.</li>
+                      <li>If they changed phones, update their phone number in the Client profile.</li>
+                      <li>Still stuck? Schedule it for them manually in the app.</li>
+                    </ol>
+                  </div>
+
+                  <div className="mt-3 rounded-xl border bg-white p-3">
+                    <div className="font-semibold text-gray-900 mb-1">Script you can text clients</div>
+                    <p className="text-gray-700">
+                      “Use this link to book: <strong>[your link]</strong>. When it asks, type your full name and the last 4 digits of your phone number (numbers only).”
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="font-semibold text-gray-900 mb-1">Smart alerts</div>
+                  <p>
+                    Use tags like <strong>“Bites”</strong>, <strong>“Anxious”</strong>, or <strong>“Matting”</strong> so you see warnings when rebooking.
+                  </p>
+                </div>
+              </div>
+            }
           />
 
           {/* CONFIRMATIONS */}
@@ -345,23 +407,19 @@ export default function Help() {
             bullets={[
               {
                 title: "Confirmations",
-                text:
-                  "Mark confirmed manually (and later via client email confirmations).",
+                text: "Mark confirmed manually (and later via client email confirmations).",
               },
               {
                 title: "Reminders",
-                text:
-                  "Emails include time, details, and your branding.",
+                text: "Emails include time, details, and your branding.",
               },
               {
                 title: "No-shows",
-                text:
-                  "Tracked separately for reporting and revenue tracking.",
+                text: "Tracked separately for reporting and revenue tracking.",
               },
               {
                 title: "Best practice",
-                text:
-                  "After 2 no-shows, many groomers require deposits.",
+                text: "After 2 no-shows, many groomers require deposits.",
                 tone: "warn",
               },
             ]}
