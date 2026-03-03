@@ -430,7 +430,7 @@ function AppShell() {
           path="/"
           element={
             <ProtectedRoute>
-              <Clients />
+              <Navigate to="/schedule" replace />
             </ProtectedRoute>
           }
         />
