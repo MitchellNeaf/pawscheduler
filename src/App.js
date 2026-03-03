@@ -293,7 +293,7 @@ function AppShell() {
   const navItems = useMemo(
     () => [
       { to: "/schedule", label: "Schedule" },
-      { to: "/", label: "Clients" },
+      { to: "/clients", label: "Clients" },
       { to: "/unpaid", label: "Unpaid" },
       { to: "/revenue", label: "Revenue" },
       { to: "/profile", label: "Profile" },
@@ -431,6 +431,14 @@ function AppShell() {
           element={
             <ProtectedRoute>
               <Navigate to="/schedule" replace />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/clients"
+          element={
+            <ProtectedRoute>
+              <Clients />
             </ProtectedRoute>
           }
         />
