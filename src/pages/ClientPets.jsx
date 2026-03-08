@@ -33,7 +33,7 @@ function PetEditModal({
       <div className="bg-white rounded-xl shadow-lg max-w-lg w-full max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-4 py-3 border-b">
           <h2 className="font-semibold text-gray-900 text-lg">
-            ✏️ Edit Pet Details
+            {editingId ? "✏️ Edit Pet Details" : "➕ Add Pet"}
           </h2>
           <button
             onClick={onClose}
@@ -119,7 +119,7 @@ function PetEditModal({
               Cancel
             </button>
             <button type="submit" className="btn-primary">
-              Update Pet
+              {editingId ? "Update Pet" : "Add Pet"}
             </button>
           </div>
         </form>
@@ -343,6 +343,18 @@ export default function ClientPets() {
     setPetEditOpen(false);
   };
 
+  const handleAddPet = () => {
+    setForm({
+      name: "",
+      breed: "",
+      notes: "",
+      tags: [],
+      slot_weight: 1,
+    });
+    setOtherTag("");
+    setEditingId(null);
+    setPetEditOpen(true);
+  };
   // Add or update pet (same logic; just no scrolling)
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -448,7 +460,7 @@ export default function ClientPets() {
         <Link to="/">&larr; Back to Clients</Link>
       </div>
 
-      <h1 className="mt-2">{client.full_name}'s Pets</h1>
+      <h1 className="mt-2 mb-4">{client.full_name}'s Pets</h1>
 
       {/* CLIENT INFO */}
       <div className="card mb-6">
@@ -535,6 +547,14 @@ export default function ClientPets() {
               {savingClient ? "Saving…" : "Save Client Info"}
             </button>
 
+            <button
+              type="button"
+              className="btn-secondary text-sm"
+              onClick={handleAddPet}
+            >
+              ➕ Add Pet
+            </button>
+
             {client.street && client.city && client.state && client.zip && (
               <a
                 className="btn-secondary text-sm"
@@ -554,7 +574,18 @@ export default function ClientPets() {
       {/* PET LIST */}
       <ul className="space-y-3">
         {pets.length === 0 ? (
-          <p className="text-gray-600">No pets added yet.</p>
+          <div className="card">
+            <div className="card-body">
+              <p className="text-gray-600 mb-3">No pets added yet.</p>
+              <button
+                type="button"
+                className="btn-primary text-sm"
+                onClick={handleAddPet}
+              >
+                ➕ Add First Pet
+              </button>
+            </div>
+          </div>
         ) : (
           pets.map((pet) => (
             <li key={pet.id} className="card">

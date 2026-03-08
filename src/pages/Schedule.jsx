@@ -1419,18 +1419,52 @@ export default function Schedule() {
 
       {user && <ScheduleTrialBanner userId={user.id} />}
 
-      {totalUnpaidToday > 0 && (
-        <div className="stat flex items-center justify-between mb-4 bg-red-50 border-red-200">
-          <div>
-            <div className="stat-label text-red-700">Unpaid Today</div>
-            <div className="stat-value text-red-700">
-              {totalUnpaidToday} appt{totalUnpaidToday > 1 ? "s" : ""} • $
-              {totalUnpaidAmount.toFixed(2)}
+      {/* ── DAY-AT-A-GLANCE SUMMARY BAR ── */}
+      {appointments.length > 0 && (() => {
+        const totalAppts    = appointments.length;
+        const confirmed     = appointments.filter(a => a.confirmed).length;
+        const totalRevenue  = appointments.reduce((s, a) => s + (a.amount || 0), 0);
+        const hasWarnings   = appointments.some(a => {
+          const r = getRabiesRecord(a.shot_records || []);
+          return !r || isExpired(r.date_expires) || isExpiringSoon(r.date_expires);
+        });
+
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
+            {/* Total appointments */}
+            <div className="stat">
+              <div className="stat-label">Appointments</div>
+              <div className="stat-value">{totalAppts}</div>
+            </div>
+
+            {/* Confirmed */}
+            <div className="stat">
+              <div className="stat-label">Confirmed</div>
+              <div className={`stat-value ${confirmed < totalAppts ? "text-amber-600" : "text-emerald-600"}`}>
+                {confirmed} / {totalAppts}
+              </div>
+            </div>
+
+            {/* Revenue */}
+            <div className="stat">
+              <div className="stat-label">Revenue</div>
+              <div className="stat-value text-emerald-700">${totalRevenue.toFixed(2)}</div>
+            </div>
+
+            {/* Unpaid / Warnings */}
+            <div className={`stat ${totalUnpaidToday > 0 ? "bg-red-50 border-red-200" : hasWarnings ? "bg-amber-50 border-amber-200" : ""}`}>
+              <div className="stat-label">
+                {totalUnpaidToday > 0 ? "Unpaid" : "Alerts"}
+              </div>
+              <div className={`stat-value ${totalUnpaidToday > 0 ? "text-red-600" : hasWarnings ? "text-amber-600" : "text-emerald-600"}`}>
+                {totalUnpaidToday > 0
+                  ? `${totalUnpaidToday} • $${totalUnpaidAmount.toFixed(2)}`
+                  : hasWarnings ? "Vaccine ⚠️" : "All clear ✓"}
+              </div>
             </div>
           </div>
-          <span className="chip chip-danger">Action Needed</span>
-        </div>
-      )}
+        );
+      })()}
 
       <div className="card mb-6 shadow-md border border-gray-200">
         <div className="card-body flex flex-col md:flex-row gap-6">
@@ -1577,49 +1611,64 @@ export default function Schedule() {
                             ) : !appt ? (
                               <span className="inline-block w-5 h-5 rounded border border-dashed border-blue-300" />
                             ) : (
+                              /* ── MINI APPOINTMENT CARD ── */
                               <div
                                 className={`
-                                  flex flex-col items-center text-[9px] leading-tight transition-all
-                                  ${
-                                    search.trim().length > 0 &&
-                                    matchesSearch(appt, search)
-                                      ? "search-match"
-                                      : search.trim().length > 0
-                                      ? "search-dim"
-                                      : ""
-                                  }
+                                  w-full rounded-xl px-2 py-1.5 text-left transition-all
+                                  border-l-4
+                                  ${appt.no_show
+                                    ? "bg-gray-100 border-gray-400"
+                                    : appt.confirmed
+                                    ? "bg-emerald-50 border-emerald-400"
+                                    : "bg-amber-50 border-amber-400"}
+                                  ${search.trim().length > 0 && matchesSearch(appt, search)
+                                    ? "search-match"
+                                    : search.trim().length > 0
+                                    ? "search-dim"
+                                    : ""}
                                 `}
                               >
-                                <div className="flex items-center gap-1">
-                                  <span
-                                    className={`
-                                      inline-block w-5 h-5 rounded
-                                      ${
-                                        usedWeight === 1
-                                          ? "bg-green-300"
-                                          : usedWeight < capacity
-                                          ? "bg-orange-300"
-                                          : "bg-red-300"
-                                      }
-                                    `}
-                                  ></span>
-
+                                {/* Pet name + vaccine icon */}
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-semibold text-[11px] text-gray-900 truncate leading-tight">
+                                    {appt.pets?.name || "Pet"}
+                                  </span>
                                   {vaccineIcon && (
-                                    <span className="text-[12px]">
-                                      {vaccineIcon}
-                                    </span>
+                                    <span className="text-[11px] flex-shrink-0">{vaccineIcon}</span>
                                   )}
                                 </div>
 
+                                {/* Client name — tappable, stops propagation */}
                                 <Link
                                   to={`/clients/${appt.pets?.clients?.id}`}
                                   onClick={(e) => e.stopPropagation()}
-                                  className="mt-0.5 text-center text-blue-600 hover:underline font-medium"
+                                  className="block text-[10px] text-emerald-700 hover:underline truncate leading-tight mt-0.5"
                                 >
-                                  {appt.pets?.clients?.full_name || "Client"} (
-                                  {appt.pets?.name || "Pet"})
+                                  {appt.pets?.clients?.full_name || "Client"}
                                 </Link>
 
+                                {/* Time range + size dot */}
+                                <div className="flex items-center gap-1 mt-1">
+                                  <span className={`inline-block w-2 h-2 rounded-full flex-shrink-0 ${
+                                    appt.slot_weight === 3 ? "bg-red-400"
+                                    : appt.slot_weight === 2 ? "bg-orange-400"
+                                    : "bg-green-400"
+                                  }`} />
+                                  <span className="text-[9px] text-gray-500 leading-none">
+                                    {(appt.time || "").slice(0,5)}–{getEndTime((appt.time||"").slice(0,5), appt.duration_min||15)}
+                                  </span>
+                                </div>
+
+                                {/* Status badge */}
+                                <div className="mt-1">
+                                  {appt.no_show ? (
+                                    <span className="text-[9px] font-bold text-gray-500 uppercase tracking-wide">No-show</span>
+                                  ) : appt.confirmed ? (
+                                    <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wide">✓ Confirmed</span>
+                                  ) : (
+                                    <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wide">Unconfirmed</span>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </div>

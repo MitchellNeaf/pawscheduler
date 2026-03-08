@@ -3,6 +3,28 @@ import { supabase } from "../supabase";
 import { Link } from "react-router-dom";
 import Loader from "../components/Loader";
 
+function getDaysOverdue(dateStr) {
+  if (!dateStr) return 0;
+
+  const today = new Date();
+  const todayStart = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+
+  const [yy, mm, dd] = dateStr.split("-").map(Number);
+  const apptDate = new Date(yy, mm - 1, dd);
+
+  const diffMs = todayStart - apptDate;
+  return Math.max(0, Math.floor(diffMs / 86400000));
+}
+
+function getAmountNumber(amount) {
+  const raw = typeof amount === "string" ? parseFloat(amount) : amount;
+  return Number.isFinite(raw) ? raw : 0;
+}
+
 export default function UnpaidAppointments() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -37,7 +59,7 @@ export default function UnpaidAppointments() {
             name,
             tags,
             client_id,
-            clients ( id, full_name, phone )
+            clients ( id, full_name, phone, email )
           )
         `)
         .eq("groomer_id", user.id)
@@ -68,11 +90,7 @@ export default function UnpaidAppointments() {
       setAppointments(filtered);
 
       const total = filtered.reduce((sum, appt) => {
-        const raw =
-          typeof appt.amount === "string"
-            ? parseFloat(appt.amount)
-            : appt.amount;
-        return sum + (Number.isFinite(raw) ? raw : 0);
+        return sum + getAmountNumber(appt.amount);
       }, 0);
 
       setTotalUnpaidAmount(total);
@@ -99,8 +117,7 @@ export default function UnpaidAppointments() {
     // Remove from list visually
     setAppointments((prev) => {
       const updated = prev.filter((appt) => appt.id !== id);
-      const raw = typeof amount === "string" ? parseFloat(amount) : amount;
-      const amt = Number.isFinite(raw) ? raw : 0;
+      const amt = getAmountNumber(amount);
 
       setTotalUnpaidAmount((prevAmount) => prevAmount - amt);
 
@@ -148,6 +165,8 @@ export default function UnpaidAppointments() {
           {appointments.map((appt) => {
             const start = (appt.time || "").slice(0, 5);
             const services = appt.services || [];
+            const amountNum = getAmountNumber(appt.amount);
+            const daysOverdue = getDaysOverdue(appt.date);
 
             return (
               <div
@@ -156,7 +175,7 @@ export default function UnpaidAppointments() {
               >
                 <div className="card-body space-y-3">
                   {/* HEADER SECTION */}
-                  <div className="flex items-start justify-between">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-lg font-semibold text-gray-900">
                         {appt.pets?.name}
@@ -165,11 +184,29 @@ export default function UnpaidAppointments() {
                           — {appt.pets?.clients?.full_name}
                         </span>
                       </div>
+
                       <div className="text-sm text-gray-500">
                         {appt.date} at {start} • {appt.duration_min} min
                       </div>
+
+                      <div className="text-xs text-red-600 font-medium mt-1">
+                        {daysOverdue} day{daysOverdue === 1 ? "" : "s"} overdue
+                      </div>
                     </div>
-                    <div className="chip chip-warning">Unpaid</div>
+
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="chip chip-warning">Unpaid</div>
+
+                      <div
+                        className={`text-xs px-2 py-1 rounded-full ${
+                          appt.confirmed
+                            ? "bg-green-100 text-green-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        {appt.confirmed ? "Confirmed" : "Unconfirmed"}
+                      </div>
+                    </div>
                   </div>
 
                   {/* SERVICES */}
@@ -192,9 +229,9 @@ export default function UnpaidAppointments() {
 
                   {/* CLIENT CONTACT & AMOUNT */}
                   <div className="flex flex-wrap items-center gap-4 text-sm">
-                    {typeof appt.amount === "number" && (
+                    {amountNum > 0 && (
                       <span className="font-semibold text-gray-800">
-                        💲{appt.amount.toFixed(2)}
+                        💲{amountNum.toFixed(2)}
                       </span>
                     )}
 
@@ -202,22 +239,36 @@ export default function UnpaidAppointments() {
                       <>
                         <a
                           href={`tel:${appt.pets.clients.phone}`}
-                          className="text-xs text-blue-600"
+                          className="text-xs text-blue-600 hover:underline"
                         >
                           📞 Call
                         </a>
                         <a
                           href={`sms:${appt.pets.clients.phone}`}
-                          className="text-xs text-blue-600"
+                          className="text-xs text-blue-600 hover:underline"
                         >
-                          ✉️ Text
+                          ✉️ Text Client
                         </a>
                       </>
                     )}
 
-                    <button className="btn-secondary text-xs">
-                      📤 Send Reminder
-                    </button>
+                    {appt.pets?.clients?.email && (
+                      <a
+                        href={`mailto:${appt.pets.clients.email}`}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        📧 {appt.pets.clients.email}
+                      </a>
+                    )}
+
+                    {appt.pets?.client_id && (
+                      <Link
+                        to={`/clients/${appt.pets.client_id}`}
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        👤 View Client
+                      </Link>
+                    )}
                   </div>
 
                   {/* ACTION BUTTON */}

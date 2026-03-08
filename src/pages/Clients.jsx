@@ -595,6 +595,22 @@ export default function Clients() {
                 </div>
 
                 {/* Pets */}
+                <div className="mt-3 flex gap-2 flex-wrap">
+                  <Link
+                    to={`/clients/${client.id}`}
+                    className="btn-secondary text-sm"
+                  >
+                    View Client
+                  </Link>
+
+                  <Link
+                    to={`/clients/${client.id}`}
+                    className="btn-primary text-sm"
+                  >
+                    ➕ Add Pet
+                  </Link>
+                </div>
+
                 <ul className="mt-3 ml-1 space-y-1">
                   {pets
                     .filter((p) => p.client_id === client.id)
