@@ -1466,9 +1466,9 @@ export default function Schedule() {
         );
       })()}
 
-      <div className="card mb-6 shadow-md border border-gray-200">
+      <div className="card mb-6 shadow-md border border-gray-200" style={{position:"relative", zIndex:10}}>
         <div className="card-body flex flex-col md:flex-row gap-6">
-          <div className="relative overflow-visible z-20">
+          <div className="relative overflow-visible" style={{zIndex:50}}>
             <DatePicker
               selected={parseYMD(selectedDate)}
               onChange={(d) => d && setSelectedDate(toYMD(d))}
@@ -1531,7 +1531,7 @@ export default function Schedule() {
       </div>
 
       {workingRange.length > 0 && (
-        <div className="card mb-6">
+        <div className="card mb-6" style={{position:"relative", zIndex:1}}>
           <div className="card-body">
             <div className="overflow-x-auto">
               <div

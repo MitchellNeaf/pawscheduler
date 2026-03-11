@@ -846,3 +846,19 @@ input[type="checkbox"]:focus {
   transform: none !important;
   box-shadow: 0 0 0 2px rgba(16,185,129,.25) !important;
 }
+
+/* Fix DatePicker showing behind schedule cards */
+.react-datepicker-popper {
+  z-index: 9999 !important;
+}
+/* =====================================================
+   DATEPICKER — always on top of grid/cards
+===================================================== */
+.react-datepicker-popper {
+  z-index: 9999 !important;
+}
+
+.react-datepicker {
+  z-index: 9999 !important;
+  position: relative;
+}
