@@ -6,6 +6,7 @@ const SECTIONS = [
   { id: "vacation", label: "Vacation & Closed Days", icon: "🏖️" },
   { id: "slug", label: "Your Booking Link (Slug)", icon: "🔗" },
   { id: "dog-sizing", label: "Dog Sizes & Capacity", icon: "🐶" },
+  { id: "pricing", label: "Service Pricing", icon: "💲" },
   { id: "scheduling", label: "Scheduling Clients", icon: "📆" },
   { id: "confirmation", label: "Confirmations & No-Shows", icon: "✅" },
   { id: "contact", label: "Contact Support", icon: "💬" },
@@ -146,6 +147,7 @@ export default function Help() {
               <ol className="mt-2 text-sm text-gray-700 space-y-1 list-decimal ml-4">
                 <li>Set profile + timezone</li>
                 <li>Set working hours</li>
+                <li>Set service pricing</li>
                 <li>Share booking link</li>
               </ol>
               <div className="mt-3 text-xs text-gray-500">
@@ -187,6 +189,11 @@ export default function Help() {
                 text:
                   "Set this first. Wrong timezone = wrong appointment times.",
                 tone: "warn",
+              },
+              {
+                title: "Service pricing",
+                text:
+                  "Set your prices by service and dog size once — amounts auto-fill every time you create an appointment.",
               },
               {
                 title: "Pro tip",
@@ -311,6 +318,126 @@ export default function Help() {
                 <p>
                   <strong>Pro tip:</strong> Great for multi-dog households — capacity is checked automatically.
                 </p>
+              </div>
+            }
+          />
+
+          {/* SERVICE PRICING */}
+          <Section
+            id="pricing"
+            title="Service Pricing"
+            subtitle="Set your rates once — they auto-fill every time you create an appointment."
+            custom={
+              <div className="space-y-4 text-sm text-gray-700">
+                <p>
+                  Go to <strong>Profile → Service Pricing</strong> to set your default prices by service and dog size.
+                  PawScheduler uses the pet's assigned size (S/M, Large, XL) to look up the right price automatically.
+                </p>
+
+                <div className="rounded-xl border bg-gray-50 p-4">
+                  <div className="font-semibold text-gray-900 mb-2">How it works</div>
+                  <ol className="list-decimal ml-5 space-y-2">
+                    <li>
+                      <strong>Set your prices once</strong> in Profile — one price per service per size (S/M, Large, XL).
+                    </li>
+                    <li>
+                      <strong>Every pet already has a size</strong> assigned (set on the pet's profile under Difficulty / Size).
+                    </li>
+                    <li>
+                      <strong>When you create an appointment</strong> and check services, the amount field fills in automatically by summing the prices for each selected service at that pet's size.
+                    </li>
+                    <li>
+                      <strong>Override anytime</strong> — just type a different number in the amount field. The auto-fill is a starting point, not a lock.
+                    </li>
+                  </ol>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-3">
+                  <div className="rounded-xl border bg-emerald-50 p-4">
+                    <div className="font-semibold text-emerald-900 mb-2">Example</div>
+                    <ul className="space-y-1 text-emerald-900/90">
+                      <li>Full Groom (Large) = $65</li>
+                      <li>Nails (Large) = $15</li>
+                      <li>Teeth (Large) = $15</li>
+                      <li className="font-semibold border-t border-emerald-200 pt-1 mt-1">Auto-total: $95</li>
+                    </ul>
+                  </div>
+
+                  <div className="rounded-xl border bg-white p-4">
+                    <div className="font-semibold text-gray-900 mb-2">Default prices</div>
+                    <p className="text-gray-600">
+                      PawScheduler ships with industry-average defaults so pricing works on day one — even before you customize anything.
+                      Update them to match your actual rates whenever you're ready.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="font-semibold text-emerald-900 mb-1">✅ Consistent across the app</div>
+                  <p className="text-emerald-900/90">
+                    Service names are the same on the Schedule page, Pet Appointments page, and the pricing grid —
+                    so the prices you set always match up correctly no matter where you create the appointment.
+                  </p>
+                </div>
+              </div>
+            }
+          />
+
+          {/* PRICING */}
+          <Section
+            id="pricing"
+            title="Service Pricing"
+            subtitle="Set your rates once in Profile — they auto-fill every time you create an appointment."
+            custom={
+              <div className="space-y-4 text-sm text-gray-700">
+                <p>
+                  Go to <strong>Profile → Service Pricing</strong> to set your rates. Prices are organized
+                  by service and dog size (S/M, Large, XL).
+                </p>
+
+                <div className="rounded-xl border bg-gray-50 p-4">
+                  <div className="font-semibold text-gray-900 mb-2">How auto-fill works</div>
+                  <ol className="list-decimal ml-5 space-y-1">
+                    <li>Each pet has a size (slot weight) saved on their profile.</li>
+                    <li>When you create or edit an appointment and check services, the amount field fills automatically.</li>
+                    <li>Prices are summed across all selected services.</li>
+                    <li>You can always override the amount manually for any appointment.</li>
+                  </ol>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-3">
+                  <div className="rounded-xl border bg-emerald-50 p-4">
+                    <div className="font-semibold text-emerald-900 mb-2">Example</div>
+                    <p className="text-emerald-900/90">
+                      A <strong>Large dog</strong> gets a <strong>Full Groom + Nails</strong>.<br />
+                      Full Groom (Large) = $65<br />
+                      Nails (Large) = $15<br />
+                      <strong>Auto-filled total: $80</strong>
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border bg-white p-4">
+                    <div className="font-semibold text-gray-900 mb-2">Default prices</div>
+                    <p className="text-gray-600 text-xs">
+                      If you haven’t set pricing yet, sensible industry defaults are used.
+                      Update them anytime in <strong>Profile → Service Pricing</strong>.
+                    </p>
+                    <ul className="list-disc ml-4 mt-2 space-y-0.5 text-xs text-gray-600">
+                      <li>Bath: $25 / $40 / $60</li>
+                      <li>Full Groom: $45 / $65 / $90</li>
+                      <li>Nails: $15 / $15 / $20</li>
+                      <li>Deshed: $35 / $55 / $75</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <div className="font-semibold text-amber-900 mb-1">Important</div>
+                  <p className="text-amber-900/90">
+                    The auto-calculated amount uses the pet’s saved size. If a pet’s size
+                    is wrong, fix it on their pet profile first, then the pricing will be correct.
+                  </p>
+                </div>
               </div>
             }
           />

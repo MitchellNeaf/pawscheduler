@@ -52,10 +52,26 @@ exports.handler = async function(event) {
     // ----------------------------------
     const templatesDir = path.join(__dirname, "..", "email_templates");
 
-    const fileName =
-      template === "reminder" ? "reminder.html" : "confirmation.html";
+    let fileName;
+    if (template === "reminder") {
+      fileName = "reminder.html";
+    } else if (template === "groomer_notification") {
+      fileName = "groomer_notification.html";
+    } else if (template === "groomer_cancellation") {
+      fileName = "groomer_cancellation.html";
+    } else {
+      fileName = "confirmation.html";
+    }
 
     const htmlPath = path.join(templatesDir, fileName);
+
+    // Pre-process template-specific fields
+    if (template === "groomer_notification" || template === "groomer_cancellation") {
+      data.notes_row = data.notes
+        ? `<tr><td style="padding:12px 16px;color:#6b7280;font-weight:600;">Notes</td>
+           <td style="padding:12px 16px;color:#111827;">${data.notes}</td></tr>`
+        : "";
+    }
 
     const rawHtml = fs.readFileSync(htmlPath, "utf8");
 

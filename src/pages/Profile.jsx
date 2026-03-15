@@ -3,6 +3,30 @@ import { supabase } from "../supabase";
 import Loader from "../components/Loader";
 import VacationSection from "../components/VacationSection";
 
+const SERVICE_OPTIONS = [
+  "Bath",
+  "Full Groom",
+  "Nails",
+  "Teeth",
+  "Deshed",
+  "Anal Glands",
+  "Puppy Trim",
+  "Other",
+];
+
+const SIZE_LABELS = { 1: "S/M", 2: "Large", 3: "XL" };
+
+const DEFAULT_PRICING = {
+  "Bath":        { 1: 25, 2: 40, 3: 60 },
+  "Full Groom":  { 1: 45, 2: 65, 3: 90 },
+  "Nails":       { 1: 15, 2: 15, 3: 20 },
+  "Teeth":       { 1: 15, 2: 15, 3: 20 },
+  "Deshed":      { 1: 35, 2: 55, 3: 75 },
+  "Anal Glands": { 1: 15, 2: 15, 3: 20 },
+  "Puppy Trim":  { 1: 40, 2: 55, 3: 75 },
+  "Other":       { 1: 0,  2: 0,  3: 0  },
+};
+
 const WEEKDAYS = [
   "Sunday",
   "Monday",
@@ -42,6 +66,10 @@ export default function Profile() {
   const [hoursLoading, setHoursLoading] = useState(true);
   const [hoursSaving, setHoursSaving] = useState(false);
 
+  // ---------------- PRICING ----------------
+  const [pricing, setPricing] = useState(DEFAULT_PRICING);
+  const [pricingSaving, setPricingSaving] = useState(false);
+
   // ---------------- LOAD USER ----------------
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
@@ -63,6 +91,15 @@ export default function Profile() {
         setSlug(data.slug || "");
         setLogoUrl(data.logo_url || null);
         setMaxParallel(data.max_parallel ?? 1);
+
+        // Load service pricing — merge with defaults so new services always have a price
+        if (data.service_pricing) {
+          const merged = { ...DEFAULT_PRICING };
+          Object.keys(data.service_pricing).forEach((svc) => {
+            merged[svc] = { ...DEFAULT_PRICING[svc], ...data.service_pricing[svc] };
+          });
+          setPricing(merged);
+        }
 
         // ✅ Load timezone; if missing, auto-detect and save once
         if (data.time_zone) {
@@ -264,6 +301,18 @@ export default function Profile() {
 
     setHoursSaving(false);
     alert("Schedule saved!");
+  };
+
+  // ---------------- SAVE PRICING ----------------
+  const savePricing = async () => {
+    if (!user) return;
+    setPricingSaving(true);
+    const { error } = await supabase
+      .from("groomers")
+      .update({ service_pricing: pricing })
+      .eq("id", user.id);
+    if (error) alert("Failed to save pricing: " + error.message);
+    setPricingSaving(false);
   };
 
   // ---------------- BILLING PORTAL ----------------
@@ -510,7 +559,188 @@ export default function Profile() {
 
         <VacationSection userId={user.id} />
       </section>
+
+      {/* ===== SERVICE PRICING ===== */}
+      <section className="border-t pt-8">
+        <h2 className="text-xl font-bold mb-1">Service Pricing</h2>
+        <p className="text-sm text-gray-500 mb-5">
+          Set your default prices by service and dog size. These auto-fill the
+          amount when you create an appointment.
+        </p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr>
+                <th className="text-left py-2 pr-4 font-semibold text-gray-700 w-32">
+                  Service
+                </th>
+                {[1, 2, 3].map((size) => (
+                  <th key={size} className="text-center py-2 px-2 font-semibold text-gray-700">
+                    {SIZE_LABELS[size]}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {SERVICE_OPTIONS.map((svc) => (
+                <tr key={svc} className="border-t border-gray-100">
+                  <td className="py-2 pr-4 font-medium text-gray-800">{svc}</td>
+                  {[1, 2, 3].map((size) => (
+                    <td key={size} className="py-2 px-2">
+                      <div className="relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                          $
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={pricing[svc]?.[size] ?? 0}
+                          onChange={(e) =>
+                            setPricing((prev) => ({
+                              ...prev,
+                              [svc]: {
+                                ...prev[svc],
+                                [size]: Number(e.target.value) || 0,
+                              },
+                            }))
+                          }
+                          className="border rounded w-full pl-6 pr-2 py-1 text-center"
+                          style={{ maxWidth: 80 }}
+                        />
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-xs text-gray-400 mt-3">
+          When multiple services are selected on an appointment, prices are summed automatically.
+          You can always override the amount on any individual appointment.
+        </p>
+
+        <button
+          onClick={savePricing}
+          disabled={pricingSaving}
+          className="btn-primary w-full mt-5"
+        >
+          {pricingSaving ? "Saving Pricing…" : "Save Pricing"}
+        </button>
+      </section>
+
+      {/* ===== SMS AI SCHEDULER ===== */}
+      <section className="border-t pt-8">
+        <h2 className="text-xl font-bold mb-1">SMS AI Scheduler</h2>
+        <p className="text-sm text-gray-500 mb-5">
+          Let clients book, view, and cancel appointments by texting your
+          scheduling number. Powered by AI — no app download required.
+        </p>
+
+        <SmsBotSection userId={user?.id} />
+      </section>
     </main>
+  );
+}
+
+/* ---------------- SMS BOT SECTION ---------------- */
+function SmsBotSection({ userId }) {
+  const [enabled, setEnabled] = useState(null);
+  const [botNumber, setBotNumber] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase
+      .from("groomers")
+      .select("sms_bot_enabled, sms_bot_number")
+      .eq("id", userId)
+      .single()
+      .then(({ data }) => {
+        setEnabled(data?.sms_bot_enabled || false);
+        setBotNumber(data?.sms_bot_number || "");
+        setLoading(false);
+      });
+  }, [userId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    await supabase
+      .from("groomers")
+      .update({ sms_bot_number: botNumber.trim() || null })
+      .eq("id", userId);
+    setSaving(false);
+    alert("Saved!");
+  };
+
+  if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
+
+  if (!enabled) {
+    return (
+      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-5 text-center">
+        <div className="text-2xl mb-2">💬</div>
+        <div className="font-semibold text-gray-800 mb-1">
+          SMS AI Scheduler
+        </div>
+        <p className="text-sm text-gray-500 mb-3">
+          This is a premium add-on ($10/mo). Contact{" "}
+          <a href="mailto:pawscheduler@gmail.com" className="text-emerald-600 underline">
+            pawscheduler@gmail.com
+          </a>{" "}
+          to enable it for your account.
+        </p>
+        <div className="inline-flex items-center gap-2 text-xs bg-gray-200 text-gray-600
+          px-3 py-1.5 rounded-full font-semibold">
+          🔒 Not enabled
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200
+        rounded-xl text-sm text-emerald-800 font-semibold">
+        ✅ SMS AI Scheduler is active on your account
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-1">
+          Your Scheduling Phone Number
+        </label>
+        <input
+          value={botNumber}
+          onChange={(e) => setBotNumber(e.target.value)}
+          placeholder="+18005551234"
+          className="border rounded w-full p-2"
+        />
+        <p className="text-xs text-gray-500 mt-1">
+          Share this number with clients so they can text to book appointments.
+        </p>
+      </div>
+
+      {botNumber && (
+        <div className="rounded-xl bg-gray-50 border p-4 text-sm text-gray-700">
+          <div className="font-semibold mb-2">Share this with clients:</div>
+          <p className="italic">
+            "Text <strong>{botNumber}</strong> to book, reschedule, or cancel
+            your grooming appointment anytime!"
+          </p>
+        </div>
+      )}
+
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="btn-primary"
+      >
+        {saving ? "Saving…" : "Save Number"}
+      </button>
+    </div>
   );
 }
 

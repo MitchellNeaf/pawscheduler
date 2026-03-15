@@ -721,6 +721,103 @@ export default function ClientPets() {
           await reloadPets();
         }}
       />
+
+      {/* SMS CONVERSATION HISTORY */}
+      <SmsConversationHistory clientId={clientId} clientPhone={client?.phone} />
+
     </main>
+  );
+}
+
+/* ---------------- SMS CONVERSATION HISTORY ---------------- */
+function SmsConversationHistory({ clientId, clientPhone }) {
+  const [conv, setConv] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!clientPhone) { setLoading(false); return; }
+
+    supabase
+      .from("sms_conversations")
+      .select("messages, last_message_at")
+      .eq("phone", clientPhone)
+      .order("last_message_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        setConv(data || null);
+        setLoading(false);
+      });
+  }, [clientPhone]);
+
+  if (loading) return null;
+  if (!conv) return null;
+
+  // Filter to only user/assistant text messages (skip tool results)
+  const readable = (conv.messages || []).filter(
+    (m) =>
+      (m.role === "user" || m.role === "assistant") &&
+      typeof m.content === "string" &&
+      m.content.trim()
+  ).slice(-20);
+
+  if (!readable.length) return null;
+
+  const lastSeen = new Date(conv.last_message_at).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+  });
+
+  return (
+    <div className="mt-6">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 text-sm font-semibold text-gray-700
+          hover:text-emerald-700 transition"
+      >
+        <span>💬 SMS Conversation History</span>
+        <span className="text-gray-400 text-xs">Last active {lastSeen}</span>
+        <span className="ml-auto">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div className="mt-3 border rounded-xl overflow-hidden bg-gray-50">
+          <div className="max-h-80 overflow-y-auto p-3 space-y-2">
+            {readable.map((msg, i) => {
+              const isClient = msg.role === "user";
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: "flex",
+                    justifyContent: isClient ? "flex-start" : "flex-end",
+                  }}
+                >
+                  <div
+                    style={{
+                      maxWidth: "78%",
+                      padding: "8px 12px",
+                      borderRadius: isClient
+                        ? "4px 16px 16px 16px"
+                        : "16px 4px 16px 16px",
+                      background: isClient ? "#ffffff" : "#10b981",
+                      color: isClient ? "#111827" : "#ffffff",
+                      border: isClient ? "1px solid #e5e7eb" : "none",
+                      fontSize: "0.83rem",
+                      lineHeight: 1.5,
+                    }}
+                  >
+                    {msg.content}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="px-3 py-2 border-t text-xs text-gray-400 text-right">
+            Showing last {readable.length} messages
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

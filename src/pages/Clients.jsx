@@ -446,17 +446,48 @@ export default function Clients() {
       {clients.length > 0 && (
         <div className="card mb-6">
           <div className="card-body">
-            <input
-              placeholder="Search clients, pets, phone, or address…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <div style={{ position: "relative" }}>
+              <input
+                placeholder="Search clients, pets, phone, or address…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ paddingRight: search ? "2.5rem" : undefined }}
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  style={{
+                    position: "absolute", right: 10, top: "50%",
+                    transform: "translateY(-50%)", background: "none",
+                    border: "none", cursor: "pointer", color: "var(--text-3)",
+                    fontSize: "1rem", lineHeight: 1, padding: 0,
+                  }}
+                  aria-label="Clear search"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            {search && (
+              <div style={{ fontSize: "0.78rem", color: "var(--text-3)",
+                marginTop: 6, fontWeight: 600 }}>
+                {filteredClients.length === 0
+                  ? "No clients match"
+                  : `${filteredClients.length} of ${clients.length} client${clients.length !== 1 ? "s" : ""}`}
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {/* Client List */}
       <ul className="space-y-4">
+        {filteredClients.length === 0 && search && (
+          <div style={{ textAlign: "center", padding: "32px 16px",
+            color: "var(--text-3)", fontSize: "0.9rem" }}>
+            No clients match <strong>"{search}"</strong>
+          </div>
+        )}
         {filteredClients.map((client) => {
           const fullAddress =
             client.street && client.city && client.state && client.zip

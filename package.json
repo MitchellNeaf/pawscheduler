@@ -9,6 +9,7 @@
     "eject": "react-scripts eject"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@headlessui/react": "^1.7.15",
     "@supabase/supabase-js": "^2.50.3",
     "date-fns": "^4.1.0",

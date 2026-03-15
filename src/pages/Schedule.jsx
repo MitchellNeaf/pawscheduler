@@ -43,6 +43,27 @@ const SERVICE_OPTIONS = [
   "Other",
 ];
 
+const DEFAULT_PRICING = {
+  "Bath":        { 1: 25, 2: 40, 3: 60 },
+  "Full Groom":  { 1: 45, 2: 65, 3: 90 },
+  "Nails":       { 1: 15, 2: 15, 3: 20 },
+  "Teeth":       { 1: 15, 2: 15, 3: 20 },
+  "Deshed":      { 1: 35, 2: 55, 3: 75 },
+  "Anal Glands": { 1: 15, 2: 15, 3: 20 },
+  "Puppy Trim":  { 1: 40, 2: 55, 3: 75 },
+  "Other":       { 1: 0,  2: 0,  3: 0  },
+};
+
+// Sum prices for selected services based on pet size (slot_weight)
+const calcAmount = (services, slotWeight, pricing) => {
+  const p = { ...DEFAULT_PRICING, ...(pricing || {}) };
+  const sz = slotWeight || 1;
+  return services.reduce((sum, svc) => {
+    const row = p[svc];
+    return sum + (row ? (row[sz] ?? row[1] ?? 0) : 0);
+  }, 0);
+};
+
 /* ---------------- Trial Banner ---------------- */
 function ScheduleTrialBanner({ userId }) {
   const [status, setStatus] = useState(null);
@@ -347,8 +368,10 @@ function PetSelectModal({ open, onClose, slot, date, pets, loading, onPickPet })
 
 
 /* ---------------- New Appointment Modal ---------------- */
-function NewAppointmentModal({ open, onClose, pet, form, setForm, onSave, saving }) {
+function NewAppointmentModal({ open, onClose, pet, form, setForm, onSave, saving, pricing }) {
   if (!open || !pet) return null;
+
+  const slotWeight = pet?.slot_weight || 1;
 
   const handleChange = (field) => (e) => {
     const raw = e.target.value;
@@ -364,11 +387,14 @@ function NewAppointmentModal({ open, onClose, pet, form, setForm, onSave, saving
   const toggleService = (svc) => {
     setForm((prev) => {
       const exists = prev.services.includes(svc);
+      const newServices = exists
+        ? prev.services.filter((s) => s !== svc)
+        : [...prev.services, svc];
+      const autoAmount = calcAmount(newServices, slotWeight, pricing);
       return {
         ...prev,
-        services: exists
-          ? prev.services.filter((s) => s !== svc)
-          : [...prev.services, svc],
+        services: newServices,
+        amount: autoAmount,
       };
     });
   };
@@ -454,7 +480,14 @@ function NewAppointmentModal({ open, onClose, pet, form, setForm, onSave, saving
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">Amount ($)</span>
+            <span className="font-medium text-gray-700">
+              Amount ($)
+              {form.services.length > 0 && (
+                <span className="ml-2 text-xs text-emerald-600 font-normal">
+                  auto-calculated · override anytime
+                </span>
+              )}
+            </span>
             <input
               type="number"
               min="0"
@@ -541,8 +574,11 @@ function EditAppointmentModal({
   onSave,
   onDelete,
   saving,
+  pricing,
 }) {
   if (!open || !appt) return null;
+
+  const slotWeight = appt?.slot_weight || appt?.pets?.slot_weight || 1;
 
   const handleChange = (field) => (e) => {
     const raw = e.target.value;
@@ -558,11 +594,14 @@ function EditAppointmentModal({
   const toggleService = (svc) => {
     setForm((prev) => {
       const exists = prev.services.includes(svc);
+      const newServices = exists
+        ? prev.services.filter((s) => s !== svc)
+        : [...prev.services, svc];
+      const autoAmount = calcAmount(newServices, slotWeight, pricing);
       return {
         ...prev,
-        services: exists
-          ? prev.services.filter((s) => s !== svc)
-          : [...prev.services, svc],
+        services: newServices,
+        amount: autoAmount,
       };
     });
   };
@@ -648,7 +687,14 @@ function EditAppointmentModal({
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">Amount ($)</span>
+            <span className="font-medium text-gray-700">
+              Amount ($)
+              {form.services.length > 0 && (
+                <span className="ml-2 text-xs text-emerald-600 font-normal">
+                  auto-calculated · override anytime
+                </span>
+              )}
+            </span>
             <input
               type="number"
               min="0"
@@ -967,6 +1013,9 @@ export default function Schedule() {
   const [rebookModalOpen, setRebookModalOpen] = useState(false);
   const [rebookAppt, setRebookAppt] = useState(null);
 
+  // Service pricing loaded from groomers.service_pricing
+  const [pricing, setPricing] = useState(DEFAULT_PRICING);
+
   /* Load user */
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
@@ -1018,7 +1067,7 @@ export default function Schedule() {
       ] = await Promise.all([
         supabase
           .from("groomers")
-          .select("max_parallel")
+          .select("max_parallel, service_pricing")
           .eq("id", user.id)
           .maybeSingle(),
         supabase
@@ -1058,6 +1107,9 @@ export default function Schedule() {
       ]);
 
       setCapacity(groomer?.max_parallel || 1);
+      if (groomer?.service_pricing) {
+        setPricing({ ...DEFAULT_PRICING, ...groomer.service_pricing });
+      }
 
       if (!hours) {
         const apptsWithShots = await attachShotRecords(appts || []);
@@ -1911,6 +1963,7 @@ export default function Schedule() {
         setForm={setNewForm}
         onSave={handleSaveNew}
         saving={savingNew}
+        pricing={pricing}
       />
 
       <EditAppointmentModal
@@ -1925,6 +1978,7 @@ export default function Schedule() {
           setEditModalOpen(false);
         }}
         saving={savingEdit}
+        pricing={pricing}
       />
 
       <RebookWeekModal

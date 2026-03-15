@@ -13,13 +13,38 @@ const toYMD = (d) => {
 };
 
 const SERVICE_OPTIONS = [
+  "Bath",
   "Full Groom",
-  "Bath Only",
-  "Nail Trim",
+  "Nails",
+  "Teeth",
   "Deshed",
-  "Teeth Cleaning",
+  "Anal Glands",
+  "Puppy Trim",
   "Other",
 ];
+
+// Prices match Schedule.jsx service names exactly
+const DEFAULT_PRICING = {
+  "Bath":        { 1: 25, 2: 40, 3: 60 },
+  "Full Groom":  { 1: 45, 2: 65, 3: 90 },
+  "Nails":       { 1: 15, 2: 15, 3: 20 },
+  "Teeth":       { 1: 15, 2: 15, 3: 20 },
+  "Deshed":      { 1: 35, 2: 55, 3: 75 },
+  "Anal Glands": { 1: 15, 2: 15, 3: 20 },
+  "Puppy Trim":  { 1: 40, 2: 55, 3: 75 },
+  "Other":       { 1: 0,  2: 0,  3: 0  },
+};
+
+const calcAmount = (services, slotWeight, pricing) => {
+  const p = { ...DEFAULT_PRICING, ...(pricing || {}) };
+  const sz = slotWeight || 1;
+  return services
+    .filter((s) => s !== "Other")
+    .reduce((sum, svc) => {
+      const row = p[svc];
+      return sum + (row ? (row[sz] ?? row[1] ?? 0) : 0);
+    }, 0);
+};
 
 function getEndTime(start, durationMin) {
   if (!start) return "—";
@@ -84,6 +109,7 @@ function NewAppointmentModal({
   saving,
   editing, // appointment object or null
   initialOtherService,
+  pricing,
 }) {
   const [otherService, setOtherService] = useState("");
 
@@ -105,15 +131,14 @@ function NewAppointmentModal({
     );
   }
 
+  const slotWeight = pet?.slot_weight || 1;
+
   const handleChange = (field) => (e) => {
     const raw = e.target.value;
     const value =
       field === "duration_min"
         ? Number(raw || 0)
-        : field === "amount"
-        ? raw
         : raw;
-
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -128,18 +153,20 @@ function NewAppointmentModal({
             : [...prev.services, "Other"],
         };
       });
-      // If unchecking Other, clear the input
       if (form.services.includes("Other")) setOtherService("");
       return;
     }
 
     setForm((prev) => {
       const exists = prev.services.includes(svc);
+      const newServices = exists
+        ? prev.services.filter((s) => s !== svc)
+        : [...prev.services, svc];
+      const autoAmount = calcAmount(newServices, slotWeight, pricing);
       return {
         ...prev,
-        services: exists
-          ? prev.services.filter((s) => s !== svc)
-          : [...prev.services, svc],
+        services: newServices,
+        amount: autoAmount,
       };
     });
   };
@@ -202,7 +229,14 @@ function NewAppointmentModal({
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">Amount ($)</span>
+            <span className="font-medium text-gray-700">
+              Amount ($)
+              {form.services.filter(s => s !== "Other").length > 0 && (
+                <span className="ml-2 text-xs text-emerald-600 font-normal">
+                  auto-calculated · override anytime
+                </span>
+              )}
+            </span>
             <input
               type="number"
               min="0"
@@ -316,6 +350,9 @@ export default function PetAppointments() {
   const [editingAppt, setEditingAppt] = useState(null);
   const [editOtherService, setEditOtherService] = useState("");
 
+  // Service pricing
+  const [pricing, setPricing] = useState(DEFAULT_PRICING);
+
   // Auth user
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
@@ -328,8 +365,11 @@ export default function PetAppointments() {
     const load = async () => {
       setLoading(true);
 
-      const [{ data: petRow, error: petErr }, { data: appts, error: apptErr }] =
-        await Promise.all([
+      const [
+        { data: petRow, error: petErr },
+        { data: appts, error: apptErr },
+        { data: groomerData },
+      ] = await Promise.all([
           supabase
             .from("pets")
             .select(
@@ -354,10 +394,19 @@ export default function PetAppointments() {
             .eq("pet_id", petId)
             .order("date", { ascending: false })
             .order("time", { ascending: false }),
+          supabase
+            .from("groomers")
+            .select("service_pricing")
+            .eq("id", user.id)
+            .maybeSingle(),
         ]);
 
       if (petErr) console.error(petErr);
       if (apptErr) console.error(apptErr);
+
+      if (groomerData?.service_pricing) {
+        setPricing({ ...DEFAULT_PRICING, ...groomerData.service_pricing });
+      }
 
       setPet(petRow || null);
       setAppointments(appts || []);
@@ -537,6 +586,13 @@ export default function PetAppointments() {
   };
 
   const openEditModal = (appt) => {
+    // Map old service names → new standardized names
+    const LEGACY_MAP = {
+      "Bath Only":      "Bath",
+      "Nail Trim":      "Nails",
+      "Teeth Cleaning": "Teeth",
+    };
+
     const rawServices = Array.isArray(appt.services)
       ? appt.services
       : String(appt.services || "")
@@ -544,8 +600,9 @@ export default function PetAppointments() {
           .map((s) => s.trim())
           .filter(Boolean);
 
-    const known = rawServices.filter((s) => SERVICE_OPTIONS.includes(s));
-    const other = rawServices.find((s) => !SERVICE_OPTIONS.includes(s)) || "";
+    const normalized = rawServices.map((s) => LEGACY_MAP[s] || s);
+    const known = normalized.filter((s) => SERVICE_OPTIONS.includes(s));
+    const other = normalized.find((s) => !SERVICE_OPTIONS.includes(s)) || "";
 
     setEditingAppt(appt);
     setEditOtherService(other);
@@ -736,6 +793,7 @@ export default function PetAppointments() {
         saving={savingNew}
         editing={editingAppt}
         initialOtherService={editOtherService}
+        pricing={pricing}
       />
     </main>
   );
