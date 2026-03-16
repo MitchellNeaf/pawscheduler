@@ -18,6 +18,9 @@ const TELNYX_API_KEY = process.env.TELNYX_API_KEY;
    SEND SMS via Telnyx
 ───────────────────────────────────────── */
 async function sendSms(to, text) {
+  console.log(`Sending SMS to ${to}: ${text}`);
+  console.log(`From: ${BOT_NUMBER}, API key set: ${!!TELNYX_API_KEY}`);
+
   const res = await fetch("https://api.telnyx.com/v2/messages", {
     method: "POST",
     headers: {
@@ -27,8 +30,11 @@ async function sendSms(to, text) {
     body: JSON.stringify({ from: BOT_NUMBER, to, text }),
   });
 
+  const responseText = await res.text();
   if (!res.ok) {
-    console.error("Telnyx send failed:", await res.text());
+    console.error("Telnyx send failed:", res.status, responseText);
+  } else {
+    console.log("Telnyx send success:", res.status);
   }
 }
 
@@ -168,8 +174,8 @@ async function executeTool(name, input) {
         }
 
         // Step 2: For each client, check their groomer has bot enabled
-        let matchedClient = null;
-        let matchedGroomer = null;
+        // Collect ALL valid matches first, then pick the best one
+        const validMatches = [];
 
         for (const c of clients) {
           const { data: groomer, error: gErr } = await supabase
@@ -181,15 +187,24 @@ async function executeTool(name, input) {
           console.log(`Groomer for client ${c.full_name}:`, JSON.stringify({ groomer, gErr }));
 
           if (!gErr && groomer?.sms_bot_enabled === true) {
-            matchedClient = c;
-            matchedGroomer = groomer;
-            break;
+            validMatches.push({ client: c, groomer });
           }
         }
 
-        if (!matchedClient || !matchedGroomer) {
+        if (validMatches.length === 0) {
           return { found: false, message: "No active bot groomer found for this client." };
         }
+
+        // If multiple matches, prefer the one with the most pets (most likely the real client)
+        // then by most recently created (latest id alphabetically as a proxy)
+        validMatches.sort((a, b) => {
+          const aPets = a.client.pets?.length || 0;
+          const bPets = b.client.pets?.length || 0;
+          if (bPets !== aPets) return bPets - aPets; // more pets = better match
+          return b.client.id.localeCompare(a.client.id); // newer id = better match
+        });
+
+        const { client: matchedClient, groomer: matchedGroomer } = validMatches[0];
 
         return {
           found: true,
@@ -765,6 +780,7 @@ exports.handler = async (event) => {
     });
 
     // ── Step 5: Send reply ──
+    console.log("Final response to send:", finalResponse);
     await sendSms(fromPhone, finalResponse);
 
     return { statusCode: 200, body: "OK" };
