@@ -39,13 +39,13 @@ const tools = [
   {
     name: "lookup_client",
     description:
-      "Look up a client by their phone number. Returns client info and their pets. Always call this first to identify who is texting.",
+      "Look up a client by their phone number. Returns client info and their pets. ALWAYS call this first on every new conversation using the exact phone number provided in the system prompt.",
     input_schema: {
       type: "object",
       properties: {
         phone: {
           type: "string",
-          description: "The client's phone number in E.164 format e.g. +18145554321",
+          description: "The client's phone number exactly as provided in the system prompt in E.164 format e.g. +18145554321",
         },
       },
       required: ["phone"],
@@ -578,13 +578,17 @@ async function saveConversation({ phone, groomerId, clientId, messages, existing
 /* ─────────────────────────────────────────
    SYSTEM PROMPT
 ───────────────────────────────────────── */
-function buildSystemPrompt() {
+function buildSystemPrompt(fromPhone) {
   const today = new Date().toISOString().slice(0, 10);
   const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
 
   return `You are a friendly SMS scheduling assistant for a dog grooming business powered by PawScheduler.
 
 Today is ${dayName}, ${today}.
+The client texting you is from phone number: ${fromPhone}
+
+FIRST MESSAGE INSTRUCTIONS:
+On the very first message, immediately call lookup_client with phone="${fromPhone}" to identify who is texting. Do not ask for their name or phone — you already have it. Use it directly.
 
 Your job is to help clients:
 1. Book grooming appointments
@@ -690,7 +694,7 @@ exports.handler = async (event) => {
       const response = await anthropic.messages.create({
         model: "claude-sonnet-4-5",
         max_tokens: 1024,
-        system: buildSystemPrompt(),
+        system: buildSystemPrompt(fromPhone),
         tools,
         messages: currentMessages,
       });
