@@ -148,52 +148,59 @@ async function executeTool(name, input) {
     switch (name) {
 
       case "lookup_client": {
-        // Find which groomer this client belongs to via SMS bot
-        const { data: clients } = await supabase
+        // Step 1: Find client by phone
+        const { data: clients, error: clientErr } = await supabase
           .from("clients")
           .select(`
             id, full_name, phone, email, groomer_id,
-            pets ( id, name, slot_weight, tags, notes ),
-            groomers ( id, full_name, email, sms_bot_enabled, time_zone )
+            pets ( id, name, slot_weight, tags, notes )
           `)
           .eq("phone", input.phone);
+
+        console.log("lookup_client clients:", JSON.stringify({ clients, clientErr }));
+
+        if (clientErr) {
+          return { found: false, message: "Database error: " + clientErr.message };
+        }
 
         if (!clients || clients.length === 0) {
           return { found: false, message: "Client not found in system." };
         }
 
-        // Filter to groomers with bot enabled
-        const active = clients.filter((c) => c.groomers?.sms_bot_enabled);
+        // Step 2: For each client, check their groomer has bot enabled
+        let matchedClient = null;
+        let matchedGroomer = null;
 
-        if (active.length === 0) {
+        for (const c of clients) {
+          const { data: groomer, error: gErr } = await supabase
+            .from("groomers")
+            .select("id, full_name, email, sms_bot_enabled, time_zone, max_parallel")
+            .eq("id", c.groomer_id)
+            .single();
+
+          console.log(`Groomer for client ${c.full_name}:`, JSON.stringify({ groomer, gErr }));
+
+          if (!gErr && groomer?.sms_bot_enabled === true) {
+            matchedClient = c;
+            matchedGroomer = groomer;
+            break;
+          }
+        }
+
+        if (!matchedClient || !matchedGroomer) {
           return { found: false, message: "No active bot groomer found for this client." };
         }
 
-        // If multiple matches (same client, multiple groomers), return all for disambiguation
-        if (active.length > 1) {
-          return {
-            found: true,
-            multiple: true,
-            matches: active.map((c) => ({
-              client_id: c.id,
-              client_name: c.full_name,
-              groomer_id: c.groomer_id,
-              groomer_name: c.groomers?.full_name,
-            })),
-          };
-        }
-
-        const c = active[0];
         return {
           found: true,
-          client_id: c.id,
-          client_name: c.full_name,
-          client_email: c.email,
-          groomer_id: c.groomer_id,
-          groomer_name: c.groomers?.full_name,
-          groomer_email: c.groomers?.email,
-          groomer_time_zone: c.groomers?.time_zone || "America/New_York",
-          pets: c.pets.map((p) => ({
+          client_id: matchedClient.id,
+          client_name: matchedClient.full_name,
+          client_email: matchedClient.email,
+          groomer_id: matchedGroomer.id,
+          groomer_name: matchedGroomer.full_name,
+          groomer_email: matchedGroomer.email,
+          groomer_time_zone: matchedGroomer.time_zone || "America/New_York",
+          pets: (matchedClient.pets || []).map((p) => ({
             id: p.id,
             name: p.name,
             slot_weight: p.slot_weight || 1,
