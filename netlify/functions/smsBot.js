@@ -600,12 +600,11 @@ function trimToolResult(toolName, result) {
 /* ─────────────────────────────────────────
    LOAD CONVERSATION
 ───────────────────────────────────────── */
-async function loadConversation(phone, groomerId) {
+async function loadConversation(phone) {
   const { data } = await supabase
     .from("sms_conversations")
-    .select("id, messages, client_context, last_message_at")
+    .select("id, messages, client_context, groomer_id, last_message_at")
     .eq("phone", phone)
-    .eq("groomer_id", groomerId)
     .order("last_message_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -706,25 +705,15 @@ exports.handler = async (event) => {
   }
 
   try {
-    // ── Step 1: Identify the client + groomer ──
-    // First do a quick lookup to find the groomer_id so we can load conversation
-    const { data: clientRows } = await supabase
-      .from("clients")
-      .select("id, groomer_id, groomers(sms_bot_enabled)")
-      .eq("phone", fromPhone);
-
-    const activeClient = clientRows?.find((c) => c.groomers?.sms_bot_enabled);
-    const groomerId = activeClient?.groomer_id || "unknown";
-    const clientId = activeClient?.id || null;
-
-    // ── Step 2: Load conversation history ──
-    const existing = await loadConversation(fromPhone, groomerId);
+    // ── Step 1: Load conversation history by phone only ──
+    const existing = await loadConversation(fromPhone);
     const conversationId = existing?.id || null;
     const messages = existing?.messages || [];
-
-    // ── Step 3: If client already identified in prior message, inject into system prompt ──
-    // This skips the lookup_client tool call on follow-up messages
     const cachedContext = existing?.client_context || null;
+
+    // Derive groomer_id from cached context or existing conversation
+    const groomerId = existing?.groomer_id || cachedContext?.groomer_id || null;
+    const clientId = cachedContext?.client_id || null;
 
     // Add new user message
     messages.push({ role: "user", content: incomingText });
