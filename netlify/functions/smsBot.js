@@ -550,12 +550,60 @@ async function executeTool(name, input) {
 }
 
 /* ─────────────────────────────────────────
+   TRIM TOOL RESULTS — only send what Claude needs
+───────────────────────────────────────── */
+function trimToolResult(toolName, result) {
+  switch (toolName) {
+    case "lookup_client":
+      if (!result.found) return result;
+      return {
+        found: true,
+        client_id: result.client_id,
+        client_name: result.client_name,
+        groomer_id: result.groomer_id,
+        groomer_email: result.groomer_email,
+        groomer_time_zone: result.groomer_time_zone,
+        pets: result.pets,
+      };
+    case "get_available_slots":
+      return {
+        available: result.available,
+        date: result.date,
+        slots: result.slots?.slice(0, 4), // max 4 slots shown
+        reason: result.reason,
+      };
+    case "book_appointment":
+      return {
+        success: result.success,
+        date: result.date,
+        time12: result.time12,
+        services: result.services,
+        amount: result.amount,
+        error: result.error,
+      };
+    case "get_upcoming_appointments":
+      return {
+        appointments: result.appointments?.slice(0, 5), // max 5
+      };
+    case "cancel_appointment":
+      return {
+        success: result.success,
+        within_cutoff: result.within_cutoff,
+        message: result.message,
+        error: result.error,
+      };
+    default:
+      return result;
+  }
+}
+
+/* ─────────────────────────────────────────
    LOAD CONVERSATION
 ───────────────────────────────────────── */
 async function loadConversation(phone, groomerId) {
   const { data } = await supabase
     .from("sms_conversations")
-    .select("*")
+    .select("id, messages, client_context, last_message_at")
     .eq("phone", phone)
     .eq("groomer_id", groomerId)
     .order("last_message_at", { ascending: false })
@@ -564,10 +612,9 @@ async function loadConversation(phone, groomerId) {
 
   if (!data) return null;
 
-  // Check timeout
   const lastMsg = new Date(data.last_message_at).getTime();
   if (Date.now() - lastMsg > CONVERSATION_TIMEOUT_MS) {
-    return null; // Treat as fresh conversation
+    return null;
   }
 
   return data;
@@ -576,13 +623,14 @@ async function loadConversation(phone, groomerId) {
 /* ─────────────────────────────────────────
    SAVE CONVERSATION
 ───────────────────────────────────────── */
-async function saveConversation({ phone, groomerId, clientId, messages, existingId }) {
+async function saveConversation({ phone, groomerId, clientId, messages, existingId, clientContext }) {
   if (existingId) {
     await supabase
       .from("sms_conversations")
       .update({
         messages,
         client_id: clientId || null,
+        client_context: clientContext || null,
         last_message_at: new Date().toISOString(),
       })
       .eq("id", existingId);
@@ -591,6 +639,7 @@ async function saveConversation({ phone, groomerId, clientId, messages, existing
       phone,
       groomer_id: groomerId,
       client_id: clientId || null,
+      client_context: clientContext || null,
       messages,
       last_message_at: new Date().toISOString(),
     });
@@ -600,55 +649,29 @@ async function saveConversation({ phone, groomerId, clientId, messages, existing
 /* ─────────────────────────────────────────
    SYSTEM PROMPT
 ───────────────────────────────────────── */
-function buildSystemPrompt(fromPhone) {
+function buildSystemPrompt(fromPhone, cachedContext) {
   const today = new Date().toISOString().slice(0, 10);
   const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
 
-  return `You are a friendly SMS scheduling assistant for a dog grooming business powered by PawScheduler.
+  // If we already know who this is, inject it so Claude skips lookup_client
+  const clientInfo = cachedContext
+    ? `Client already identified: ${JSON.stringify(cachedContext)}. Do NOT call lookup_client — you already have the client info above.`
+    : `FIRST: Call lookup_client with phone="${fromPhone}" immediately. Never ask for their name.`;
 
-Today is ${dayName}, ${today}.
-The client texting you is from phone number: ${fromPhone}
+  return `SMS scheduling assistant for a dog grooming business. Today is ${dayName}, ${today}. Client phone: ${fromPhone}
 
-FIRST MESSAGE INSTRUCTIONS:
-On the very first message, immediately call lookup_client with phone="${fromPhone}" to identify who is texting. Do not ask for their name or phone — you already have it. Use it directly.
+${clientInfo}
 
-Your job is to help clients:
-1. Book grooming appointments
-2. View their upcoming appointments  
-3. Cancel appointments (24hr policy applies)
+TASKS: Book appointments, view upcoming appointments, cancel appointments (24hr policy).
 
-PERSONALITY:
-- Warm, friendly, and concise — this is SMS, keep replies SHORT
-- Use emojis sparingly (🐾 ✅ 📅 are fine)
-- Never write more than 3-4 short sentences per message
-- Sound like a helpful human, not a robot
+BOOKING STEPS: confirm pet (if multiple) → ask date → ask services → get_available_slots → confirm details → book_appointment
 
-BOOKING FLOW:
-1. Always call lookup_client first to identify who is texting
-2. If client not found, apologize and ask them to contact the groomer to get set up
-3. Confirm the pet (if they have multiple, ask which one)
-4. Ask what date they want
-5. Ask what services they need
-6. Calculate duration based on services (Full Groom=60min, Bath=30min, Nails=15min, Teeth=15min, Deshed=60min, multiple services add up, max 90min)
-7. Call get_available_slots with the correct duration
-8. Offer up to 3 time options
-9. Confirm all details before booking
-10. Call book_appointment only after client confirms
+SERVICES: Bath, Full Groom, Nails, Teeth, Deshed, Anal Glands, Puppy Trim, Other
+DURATIONS: Full Groom=60min, Bath=30min, Nails=15min, Teeth=15min, Deshed=60min. Multiple services add up, max 90min.
 
-SERVICES (use these exact names):
-Bath, Full Groom, Nails, Teeth, Deshed, Anal Glands, Puppy Trim, Other
+CANCELLATION: get_upcoming_appointments first → confirm which one → cancel_appointment. Within 24hrs = tell them to call directly.
 
-CANCELLATION RULES:
-- Always get upcoming appointments first with get_upcoming_appointments
-- If only one upcoming appointment, confirm it's the right one before cancelling
-- If multiple, show them and ask which to cancel
-- 24hr policy: cannot cancel online within 24hrs, tell them to call directly
-
-IMPORTANT:
-- Never make up available times — always call get_available_slots
-- Never book without explicit client confirmation
-- If something goes wrong, apologize briefly and suggest calling the groomer
-- Keep the conversation moving — don't ask for info you don't need`;
+STYLE: Short SMS replies, max 3 sentences, friendly. Never make up times. Never book without confirmation. If client not found, tell them to contact their groomer.`;
 }
 
 /* ─────────────────────────────────────────
@@ -691,8 +714,6 @@ exports.handler = async (event) => {
       .eq("phone", fromPhone);
 
     const activeClient = clientRows?.find((c) => c.groomers?.sms_bot_enabled);
-
-    // If no active client found, we still try — Claude will handle it gracefully
     const groomerId = activeClient?.groomer_id || "unknown";
     const clientId = activeClient?.id || null;
 
@@ -700,6 +721,10 @@ exports.handler = async (event) => {
     const existing = await loadConversation(fromPhone, groomerId);
     const conversationId = existing?.id || null;
     const messages = existing?.messages || [];
+
+    // ── Step 3: If client already identified in prior message, inject into system prompt ──
+    // This skips the lookup_client tool call on follow-up messages
+    const cachedContext = existing?.client_context || null;
 
     // Add new user message
     messages.push({ role: "user", content: incomingText });
@@ -709,21 +734,21 @@ exports.handler = async (event) => {
     let currentMessages = [...messages];
     let iterations = 0;
     const MAX_ITERATIONS = 10;
+    let newClientContext = cachedContext; // carry forward or update
 
     while (iterations < MAX_ITERATIONS) {
       iterations++;
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1024,
-        system: buildSystemPrompt(fromPhone),
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 512,
+        system: buildSystemPrompt(fromPhone, newClientContext),
         tools,
         messages: currentMessages,
       });
 
       console.log(`Claude iteration ${iterations}, stop_reason: ${response.stop_reason}`);
 
-      // If Claude is done talking (no more tool calls)
       if (response.stop_reason === "end_turn") {
         const textBlock = response.content.find((b) => b.type === "text");
         finalResponse = textBlock?.text || "Sorry, something went wrong. Please try again.";
@@ -731,7 +756,6 @@ exports.handler = async (event) => {
         break;
       }
 
-      // If Claude wants to use tools
       if (response.stop_reason === "tool_use") {
         currentMessages.push({ role: "assistant", content: response.content });
 
@@ -744,12 +768,28 @@ exports.handler = async (event) => {
 
           const result = await executeTool(block.name, block.input);
 
-          console.log(`Tool result: ${block.name}`, JSON.stringify(result).slice(0, 200));
+          // Cache client context after successful lookup to skip it next message
+          if (block.name === "lookup_client" && result.found) {
+            newClientContext = {
+              client_id: result.client_id,
+              client_name: result.client_name,
+              groomer_id: result.groomer_id,
+              groomer_name: result.groomer_name,
+              groomer_email: result.groomer_email,
+              groomer_time_zone: result.groomer_time_zone,
+              pets: result.pets,
+            };
+          }
+
+          // Trim tool result — only send what Claude needs, not debug fields
+          const trimmedResult = trimToolResult(block.name, result);
+
+          console.log(`Tool result: ${block.name}`, JSON.stringify(trimmedResult).slice(0, 200));
 
           toolResults.push({
             type: "tool_result",
             tool_use_id: block.id,
-            content: JSON.stringify(result),
+            content: JSON.stringify(trimmedResult),
           });
         }
 
@@ -757,7 +797,6 @@ exports.handler = async (event) => {
         continue;
       }
 
-      // Unexpected stop reason
       console.error("Unexpected stop_reason:", response.stop_reason);
       finalResponse = "Sorry, I had trouble with that. Please try again.";
       break;
@@ -768,15 +807,17 @@ exports.handler = async (event) => {
     }
 
     // ── Step 4: Save updated conversation ──
-    // Only save last 20 messages to keep the context manageable
-    const trimmedMessages = currentMessages.slice(-20);
+    const trimmedMessages = currentMessages.slice(-10);
+    const resolvedClientId = clientId || newClientContext?.client_id || null;
+    const resolvedGroomerId = groomerId !== "unknown" ? groomerId : newClientContext?.groomer_id || null;
 
     await saveConversation({
       phone: fromPhone,
-      groomerId: groomerId !== "unknown" ? groomerId : null,
-      clientId,
+      groomerId: resolvedGroomerId,
+      clientId: resolvedClientId,
       messages: trimmedMessages,
       existingId: conversationId,
+      clientContext: newClientContext,
     });
 
     // ── Step 5: Send reply ──
