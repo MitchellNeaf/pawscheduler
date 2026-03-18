@@ -14,6 +14,7 @@ const CONVERSATION_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
 const BOT_NUMBER = process.env.TELNYX_BOT_PHONE_NUMBER;
 const TELNYX_API_KEY = process.env.TELNYX_API_KEY;
 const TIME_SLOTS = [];
+
 for (let h = 6; h <= 20; h++) {
   for (const min of [0, 15, 30, 45]) {
     TIME_SLOTS.push(`${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
@@ -76,6 +77,37 @@ function formatDateLong(dateStr) {
   });
 }
 
+function toSafeHistory(messages) {
+  if (!Array.isArray(messages)) return [];
+
+  const safe = [];
+
+  for (const msg of messages) {
+    if (!msg || !msg.role) continue;
+
+    if (typeof msg.content === "string") {
+      safe.push({ role: msg.role, content: msg.content });
+      continue;
+    }
+
+    if (Array.isArray(msg.content)) {
+      const textParts = msg.content
+        .filter((b) => b && b.type === "text" && typeof b.text === "string")
+        .map((b) => b.text.trim())
+        .filter(Boolean);
+
+      if (textParts.length) {
+        safe.push({
+          role: msg.role,
+          content: textParts.join("\n"),
+        });
+      }
+    }
+  }
+
+  return safe.slice(-12);
+}
+
 async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot_weight = 1 }) {
   const { data: groomer, error: groomerErr } = await supabase
     .from("groomers")
@@ -89,7 +121,6 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
 
   const maxParallel = groomer?.max_parallel || 1;
 
-  // Vacation day / partial vacation
   const { data: vacs, error: vacErr } = await supabase
     .from("vacation_days")
     .select("date, start_time, end_time")
@@ -101,7 +132,12 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
   }
 
   if (vacs?.some((v) => !v.start_time && !v.end_time)) {
-    return { available: false, date, reason: "Groomer is on vacation this day.", unavailable_type: "vacation" };
+    return {
+      available: false,
+      date,
+      reason: "Groomer is on vacation this day.",
+      unavailable_type: "vacation",
+    };
   }
 
   const weekday = getWeekdayFromDate(date);
@@ -118,14 +154,24 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
   }
 
   if (!hours?.start_time || !hours?.end_time) {
-    return { available: false, date, reason: "Groomer is not working this day.", unavailable_type: "not_working" };
+    return {
+      available: false,
+      date,
+      reason: "Groomer is not working this day.",
+      unavailable_type: "not_working",
+    };
   }
 
   const startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
   const endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
 
   if (startIdx < 0 || endIdx < 0 || endIdx < startIdx) {
-    return { available: false, date, reason: "Working hours are not configured correctly.", unavailable_type: "config_error" };
+    return {
+      available: false,
+      date,
+      reason: "Working hours are not configured correctly.",
+      unavailable_type: "config_error",
+    };
   }
 
   const workingSlots = TIME_SLOTS.slice(startIdx, endIdx + 1);
@@ -141,6 +187,7 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
   }
 
   const breakSet = new Set();
+
   (breaks || []).forEach((b) => {
     const bi = TIME_SLOTS.indexOf((b.break_start || "").slice(0, 5));
     const ei = TIME_SLOTS.indexOf((b.break_end || "").slice(0, 5));
@@ -149,7 +196,6 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     }
   });
 
-  // Partial vacation windows act like breaks
   (vacs || []).forEach((v) => {
     if (!v.start_time || !v.end_time) return;
     const vi = TIME_SLOTS.indexOf(v.start_time.slice(0, 5));
@@ -171,6 +217,7 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
 
   const loadForSlot = (slot) => {
     let total = 0;
+
     (appts || []).forEach((a) => {
       if (a.no_show === true) return;
       const start = (a.time || "").slice(0, 5);
@@ -180,6 +227,7 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
       const slots = TIME_SLOTS.slice(idx, idx + blocks);
       if (slots.includes(slot)) total += a.slot_weight ?? 1;
     });
+
     return total;
   };
 
@@ -188,10 +236,12 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
 
   workingSlots.forEach((slot, idx) => {
     if (breakSet.has(slot)) return;
+
     const window = workingSlots.slice(idx, idx + blocks);
     if (window.length < blocks) return;
     if (window.some((s) => breakSet.has(s))) return;
     if (window.some((s) => loadForSlot(s) + pet_slot_weight > maxParallel)) return;
+
     available.push(slot);
   });
 
@@ -216,7 +266,13 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
   };
 }
 
-async function getNextAvailableDays({ start_date, days = 7, duration_min, groomer_id, pet_slot_weight = 1 }) {
+async function getNextAvailableDays({
+  start_date,
+  days = 7,
+  duration_min,
+  groomer_id,
+  pet_slot_weight = 1,
+}) {
   const normalizedDays = Math.max(1, Math.min(Number(days) || 7, 21));
   const results = [];
   const unavailableSummary = { vacation: 0, not_working: 0, full: 0, other: 0 };
@@ -263,7 +319,8 @@ const tools = [
       properties: {
         phone: {
           type: "string",
-          description: "The client's phone number exactly as provided in the system prompt in E.164 format e.g. +18145554321",
+          description:
+            "The client's phone number exactly as provided in the system prompt in E.164 format e.g. +18145554321",
         },
       },
       required: ["phone"],
@@ -474,20 +531,28 @@ async function executeTool(name, input) {
 
       case "book_appointment": {
         const {
-          pet_id, groomer_id, date, time, duration_min,
-          services, slot_weight, notes,
-          client_name, pet_name, groomer_email,
+          pet_id,
+          groomer_id,
+          date,
+          time,
+          duration_min,
+          services,
+          slot_weight,
+          notes,
+          client_name,
+          pet_name,
+          groomer_email,
         } = input;
 
         const DEFAULT_PRICING = {
-          "Bath":        { 1: 25, 2: 40, 3: 60 },
-          "Full Groom":  { 1: 45, 2: 65, 3: 90 },
-          "Nails":       { 1: 15, 2: 15, 3: 20 },
-          "Teeth":       { 1: 15, 2: 15, 3: 20 },
-          "Deshed":      { 1: 35, 2: 55, 3: 75 },
+          Bath: { 1: 25, 2: 40, 3: 60 },
+          "Full Groom": { 1: 45, 2: 65, 3: 90 },
+          Nails: { 1: 15, 2: 15, 3: 20 },
+          Teeth: { 1: 15, 2: 15, 3: 20 },
+          Deshed: { 1: 35, 2: 55, 3: 75 },
           "Anal Glands": { 1: 15, 2: 15, 3: 20 },
-          "Puppy Trim":  { 1: 40, 2: 55, 3: 75 },
-          "Other":       { 1: 0,  2: 0,  3: 0  },
+          "Puppy Trim": { 1: 40, 2: 55, 3: 75 },
+          Other: { 1: 0, 2: 0, 3: 0 },
         };
 
         const { data: groomerData } = await supabase
@@ -498,6 +563,7 @@ async function executeTool(name, input) {
 
         const pricing = { ...DEFAULT_PRICING, ...(groomerData?.service_pricing || {}) };
         const sz = slot_weight || 1;
+
         const amount = services
           .filter((s) => s !== "Other")
           .reduce((sum, svc) => {
@@ -599,17 +665,28 @@ async function executeTool(name, input) {
       }
 
       case "cancel_appointment": {
-        const { appointment_id, groomer_id, groomer_email, pet_name, client_name, date, time, services } = input;
+        const {
+          appointment_id,
+          groomer_id,
+          groomer_email,
+          pet_name,
+          client_name,
+          date,
+          time,
+          services,
+        } = input;
 
         if (date && time) {
           const [y, mo, d] = date.split("-").map(Number);
           const [h, m] = (time || "00:00").slice(0, 5).split(":").map(Number);
           const apptMs = new Date(y, mo - 1, d, h, m).getTime();
+
           if (apptMs - Date.now() < 24 * 60 * 60 * 1000) {
             return {
               success: false,
               within_cutoff: true,
-              message: "This appointment is within 24 hours and cannot be cancelled online. Please call or text your groomer directly.",
+              message:
+                "This appointment is within 24 hours and cannot be cancelled online. Please call or text your groomer directly.",
             };
           }
         }
@@ -673,6 +750,7 @@ function trimToolResult(toolName, result) {
         groomer_time_zone: result.groomer_time_zone,
         pets: result.pets,
       };
+
     case "get_available_slots":
       return {
         available: result.available,
@@ -681,6 +759,7 @@ function trimToolResult(toolName, result) {
         reason: result.reason,
         unavailable_type: result.unavailable_type,
       };
+
     case "get_next_available_days":
       return {
         start_date: result.start_date,
@@ -688,6 +767,7 @@ function trimToolResult(toolName, result) {
         available_days: result.available_days,
         unavailable_summary: result.unavailable_summary,
       };
+
     case "book_appointment":
       return {
         success: result.success,
@@ -697,10 +777,12 @@ function trimToolResult(toolName, result) {
         amount: result.amount,
         error: result.error,
       };
+
     case "get_upcoming_appointments":
       return {
         appointments: result.appointments?.slice(0, 5),
       };
+
     case "cancel_appointment":
       return {
         success: result.success,
@@ -708,6 +790,7 @@ function trimToolResult(toolName, result) {
         message: result.message,
         error: result.error,
       };
+
     default:
       return result;
   }
@@ -732,7 +815,10 @@ async function loadConversation(phone) {
     return null;
   }
 
-  return data;
+  return {
+    ...data,
+    messages: toSafeHistory(data.messages),
+  };
 }
 
 /* ─────────────────────────────────────────
@@ -746,13 +832,14 @@ async function saveConversation({ phone, groomerId, clientId, messages, existing
         messages,
         client_id: clientId || null,
         client_context: clientContext || null,
+        groomer_id: groomerId || null,
         last_message_at: new Date().toISOString(),
       })
       .eq("id", existingId);
   } else {
     await supabase.from("sms_conversations").insert({
       phone,
-      groomer_id: groomerId,
+      groomer_id: groomerId || null,
       client_id: clientId || null,
       client_context: clientContext || null,
       messages,
@@ -785,7 +872,8 @@ BOOKING FLOW:
 4. Call get_available_slots for the requested date.
 5. If get_available_slots says unavailable for ANY reason, do NOT stop there.
 6. If unavailable because of vacation, not working, or no openings, call get_next_available_days starting from the requested date for 7-10 days and offer 1-3 nearby alternatives.
-7. Only after a valid slot exists should you confirm the exact time and then call book_appointment.
+7. If the client asks for a specific time like "Anything at 3?" after alternatives were offered, treat that as interest in 3:00 PM on one of the offered dates and answer using the tool results or re-check availability for that date.
+8. Only after a valid slot exists should you confirm the exact time and then call book_appointment.
 
 IMPORTANT SCHEDULING RULES:
 - Never make up availability.
@@ -836,7 +924,7 @@ exports.handler = async (event) => {
   try {
     const existing = await loadConversation(fromPhone);
     const conversationId = existing?.id || null;
-    const messages = existing?.messages || [];
+    const messages = Array.isArray(existing?.messages) ? [...existing.messages] : [];
     const cachedContext = existing?.client_context || null;
 
     const groomerId = existing?.groomer_id || cachedContext?.groomer_id || null;
@@ -918,9 +1006,14 @@ exports.handler = async (event) => {
       finalResponse = "Sorry, something went wrong. Please try again or call us directly.";
     }
 
-    const trimmedMessages = currentMessages.slice(-10);
+    const trimmedMessages = toSafeHistory([
+      ...messages.slice(0, -1),
+      { role: "user", content: incomingText },
+      { role: "assistant", content: finalResponse },
+    ]);
+
     const resolvedClientId = clientId || newClientContext?.client_id || null;
-    const resolvedGroomerId = groomerId !== "unknown" ? groomerId : newClientContext?.groomer_id || null;
+    const resolvedGroomerId = groomerId || newClientContext?.groomer_id || null;
 
     await saveConversation({
       phone: fromPhone,
@@ -939,7 +1032,10 @@ exports.handler = async (event) => {
     console.error("smsBot fatal error:", err);
 
     try {
-      await sendSms(fromPhone, "Sorry, I'm having trouble right now. Please call or text your groomer directly.");
+      await sendSms(
+        fromPhone,
+        "Sorry, I'm having trouble right now. Please call or text your groomer directly."
+      );
     } catch (sendErr) {
       console.error("Failed to send fallback:", sendErr);
     }
