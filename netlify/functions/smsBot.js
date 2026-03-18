@@ -13,8 +13,8 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const CONVERSATION_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
 const BOT_NUMBER = process.env.TELNYX_BOT_PHONE_NUMBER;
 const TELNYX_API_KEY = process.env.TELNYX_API_KEY;
-const TIME_SLOTS = [];
 
+const TIME_SLOTS = [];
 for (let h = 6; h <= 20; h++) {
   for (const min of [0, 15, 30, 45]) {
     TIME_SLOTS.push(`${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
@@ -77,6 +77,32 @@ function formatDateLong(dateStr) {
   });
 }
 
+function addMinutesToTime(time24, minutesToAdd) {
+  const [h, m] = time24.slice(0, 5).split(":").map(Number);
+  const total = h * 60 + m + (Number(minutesToAdd) || 0);
+  const nh = Math.floor(total / 60);
+  const nm = total % 60;
+  return `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`;
+}
+
+function pickRepresentativeSlots(slots, max = 6) {
+  if (!Array.isArray(slots) || slots.length <= max) return slots || [];
+
+  const picked = [];
+  const used = new Set();
+  const lastIndex = slots.length - 1;
+
+  for (let i = 0; i < max; i++) {
+    const idx = Math.round((i * lastIndex) / (max - 1));
+    if (!used.has(idx)) {
+      picked.push(slots[idx]);
+      used.add(idx);
+    }
+  }
+
+  return picked;
+}
+
 function toSafeHistory(messages) {
   if (!Array.isArray(messages)) return [];
 
@@ -108,6 +134,19 @@ function toSafeHistory(messages) {
   return safe.slice(-12);
 }
 
+function computeAmountForServices(pricing, services, slotWeight) {
+  const sz = slotWeight || 1;
+  return (services || [])
+    .filter((s) => s !== "Other")
+    .reduce((sum, svc) => {
+      const row = pricing?.[svc];
+      return sum + (row ? (row[sz] ?? row[1] ?? 0) : 0);
+    }, 0);
+}
+
+/* ─────────────────────────────────────────
+   AVAILABILITY
+───────────────────────────────────────── */
 async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot_weight = 1 }) {
   const { data: groomer, error: groomerErr } = await supabase
     .from("groomers")
@@ -188,20 +227,22 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
 
   const breakSet = new Set();
 
+  // break_end should be exclusive
   (breaks || []).forEach((b) => {
     const bi = TIME_SLOTS.indexOf((b.break_start || "").slice(0, 5));
     const ei = TIME_SLOTS.indexOf((b.break_end || "").slice(0, 5));
-    if (bi !== -1 && ei !== -1 && ei >= bi) {
-      TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakSet.add(s));
+    if (bi !== -1 && ei !== -1 && ei > bi) {
+      TIME_SLOTS.slice(bi, ei).forEach((s) => breakSet.add(s));
     }
   });
 
+  // partial vacation end should also be exclusive
   (vacs || []).forEach((v) => {
     if (!v.start_time || !v.end_time) return;
     const vi = TIME_SLOTS.indexOf(v.start_time.slice(0, 5));
     const vj = TIME_SLOTS.indexOf(v.end_time.slice(0, 5));
-    if (vi !== -1 && vj !== -1 && vj >= vi) {
-      TIME_SLOTS.slice(vi, vj + 1).forEach((s) => breakSet.add(s));
+    if (vi !== -1 && vj !== -1 && vj > vi) {
+      TIME_SLOTS.slice(vi, vj).forEach((s) => breakSet.add(s));
     }
   });
 
@@ -223,6 +264,7 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
       const start = (a.time || "").slice(0, 5);
       const idx = TIME_SLOTS.indexOf(start);
       if (idx < 0) return;
+
       const blocks = Math.ceil((a.duration_min || 15) / 15);
       const slots = TIME_SLOTS.slice(idx, idx + blocks);
       if (slots.includes(slot)) total += a.slot_weight ?? 1;
@@ -258,10 +300,22 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     };
   }
 
+  const displaySlots = pickRepresentativeSlots(filtered, 6);
+
   return {
     available: true,
     date,
-    slots: filtered.slice(0, 6).map((s) => ({ time24: s, time12: fmt12(s) })),
+    duration_min: duration_min || 15,
+    slots: displaySlots.map((s) => {
+      const end24 = addMinutesToTime(s, duration_min || 15);
+      return {
+        time24: s,
+        time12: fmt12(s),
+        end24,
+        end12: fmt12(end24),
+        range12: `${fmt12(s)}–${fmt12(end24)}`,
+      };
+    }),
     all_slots_count: filtered.length,
   };
 }
@@ -290,6 +344,7 @@ async function getNextAvailableDays({
       results.push({
         date,
         date_label: formatDateLong(date),
+        duration_min: info.duration_min,
         slots: (info.slots || []).slice(0, 3),
       });
     } else {
@@ -329,7 +384,7 @@ const tools = [
   {
     name: "get_available_slots",
     description:
-      "Get available appointment time slots for a specific date. Returns open slots based on the groomer's working hours, breaks, vacation days, and existing appointments.",
+      "Get available appointment time slots for a specific date. Use pet_slot_weight as the total combined slot weight needed. For two pets at the same time, pass the sum of both pets' slot weights.",
     input_schema: {
       type: "object",
       properties: {
@@ -347,7 +402,8 @@ const tools = [
         },
         pet_slot_weight: {
           type: "number",
-          description: "The pet's slot weight (1=S/M, 2=Large, 3=XL)",
+          description:
+            "Total slot weight needed. For one pet use that pet's slot weight. For multiple pets together, use the combined slot weight.",
         },
       },
       required: ["date", "duration_min", "groomer_id"],
@@ -356,7 +412,7 @@ const tools = [
   {
     name: "get_next_available_days",
     description:
-      "Check the next several days starting from a given date and return the next available days with sample time options. Use this when a requested date is unavailable because of vacation, closed schedule, or full bookings.",
+      "Check the next several days starting from a given date and return the next available days with sample time options. Use pet_slot_weight as the total combined slot weight needed.",
     input_schema: {
       type: "object",
       properties: {
@@ -378,7 +434,8 @@ const tools = [
         },
         pet_slot_weight: {
           type: "number",
-          description: "The pet's slot weight (1=S/M, 2=Large, 3=XL)",
+          description:
+            "Total slot weight needed. For one pet use that pet's slot weight. For multiple pets together, use the combined slot weight.",
         },
       },
       required: ["start_date", "duration_min", "groomer_id"],
@@ -387,7 +444,7 @@ const tools = [
   {
     name: "book_appointment",
     description:
-      "Book an appointment for a pet. Only call this after confirming the date, time, and services with the client.",
+      "Book a single-pet appointment. Only call this after confirming the date, time, duration, and services with the client.",
     input_schema: {
       type: "object",
       properties: {
@@ -411,6 +468,39 @@ const tools = [
         groomer_email: { type: "string", description: "Groomer's email for notification" },
       },
       required: ["pet_id", "groomer_id", "date", "time", "duration_min", "services", "slot_weight"],
+    },
+  },
+  {
+    name: "book_multi_appointment",
+    description:
+      "Book two or more pets at the same date and time for the same client. Use this when the client wants multiple pets scheduled together. This creates one appointment row per pet at the same start time.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pet_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of pet UUIDs to book together",
+        },
+        groomer_id: { type: "string", description: "The groomer's UUID" },
+        date: { type: "string", description: "Date in YYYY-MM-DD format" },
+        time: { type: "string", description: "Time in HH:MM format (24hr)" },
+        duration_min: { type: "number", description: "Duration in minutes for each pet appointment" },
+        services: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of services that apply to each pet",
+        },
+        notes: { type: "string", description: "Any notes from the client" },
+        client_name: { type: "string", description: "Client's full name for notification" },
+        pet_names: {
+          type: "array",
+          items: { type: "string" },
+          description: "Pet names in the same order as pet_ids",
+        },
+        groomer_email: { type: "string", description: "Groomer's email for notification" },
+      },
+      required: ["pet_ids", "groomer_id", "date", "time", "duration_min", "services"],
     },
   },
   {
@@ -563,13 +653,7 @@ async function executeTool(name, input) {
 
         const pricing = { ...DEFAULT_PRICING, ...(groomerData?.service_pricing || {}) };
         const sz = slot_weight || 1;
-
-        const amount = services
-          .filter((s) => s !== "Other")
-          .reduce((sum, svc) => {
-            const row = pricing[svc];
-            return sum + (row ? (row[sz] ?? row[1] ?? 0) : 0);
-          }, 0);
+        const amount = computeAmountForServices(pricing, services, sz);
 
         const { data: appt, error } = await supabase
           .from("appointments")
@@ -622,9 +706,128 @@ async function executeTool(name, input) {
           appointment_id: appt.id,
           date,
           time12: fmt12(time),
+          end12: fmt12(addMinutesToTime(time, duration_min)),
           duration_min,
           services,
           amount: amount > 0 ? `$${amount.toFixed(2)}` : null,
+        };
+      }
+
+      case "book_multi_appointment": {
+        const {
+          pet_ids,
+          groomer_id,
+          date,
+          time,
+          duration_min,
+          services,
+          notes,
+          client_name,
+          pet_names,
+          groomer_email,
+        } = input;
+
+        if (!Array.isArray(pet_ids) || pet_ids.length < 2) {
+          return { success: false, error: "book_multi_appointment requires at least 2 pet_ids." };
+        }
+
+        const { data: pets, error: petsErr } = await supabase
+          .from("pets")
+          .select("id, name, slot_weight")
+          .in("id", pet_ids);
+
+        if (petsErr) {
+          return { success: false, error: petsErr.message };
+        }
+
+        if (!pets || pets.length !== pet_ids.length) {
+          return { success: false, error: "Could not load all selected pets." };
+        }
+
+        const petMap = new Map(pets.map((p) => [p.id, p]));
+        const orderedPets = pet_ids.map((id) => petMap.get(id)).filter(Boolean);
+
+        const DEFAULT_PRICING = {
+          Bath: { 1: 25, 2: 40, 3: 60 },
+          "Full Groom": { 1: 45, 2: 65, 3: 90 },
+          Nails: { 1: 15, 2: 15, 3: 20 },
+          Teeth: { 1: 15, 2: 15, 3: 20 },
+          Deshed: { 1: 35, 2: 55, 3: 75 },
+          "Anal Glands": { 1: 15, 2: 15, 3: 20 },
+          "Puppy Trim": { 1: 40, 2: 55, 3: 75 },
+          Other: { 1: 0, 2: 0, 3: 0 },
+        };
+
+        const { data: groomerData } = await supabase
+          .from("groomers")
+          .select("service_pricing")
+          .eq("id", groomer_id)
+          .single();
+
+        const pricing = { ...DEFAULT_PRICING, ...(groomerData?.service_pricing || {}) };
+
+        const rows = orderedPets.map((pet) => {
+          const sz = pet.slot_weight || 1;
+          const amount = computeAmountForServices(pricing, services, sz);
+          return {
+            pet_id: pet.id,
+            groomer_id,
+            date,
+            time,
+            duration_min,
+            services,
+            slot_weight: sz,
+            amount: amount > 0 ? amount : null,
+            notes: notes || "",
+            confirmed: false,
+            no_show: false,
+            paid: false,
+            reminder_enabled: true,
+          };
+        });
+
+        const { data: inserted, error: insertErr } = await supabase
+          .from("appointments")
+          .insert(rows)
+          .select("id");
+
+        if (insertErr) {
+          return { success: false, error: insertErr.message };
+        }
+
+        if (groomer_email) {
+          fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: groomer_email,
+              subject: `New multi-pet booking (SMS) — ${(pet_names || orderedPets.map((p) => p.name)).join(", ")} on ${date}`,
+              template: "groomer_notification",
+              data: {
+                pet_name: (pet_names || orderedPets.map((p) => p.name)).join(", "),
+                client_name: client_name || "—",
+                date,
+                time,
+                duration_min,
+                services: services.join(", "),
+                amount: rows
+                  .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+                  .toFixed(2),
+                notes: notes || "",
+              },
+            }),
+          }).catch(() => {});
+        }
+
+        return {
+          success: true,
+          appointment_ids: (inserted || []).map((r) => r.id),
+          pet_names: pet_names || orderedPets.map((p) => p.name),
+          date,
+          time12: fmt12(time),
+          end12: fmt12(addMinutesToTime(time, duration_min)),
+          duration_min,
+          services,
         };
       }
 
@@ -659,6 +862,7 @@ async function executeTool(name, input) {
             time12: fmt12(a.time),
             time24: (a.time || "").slice(0, 5),
             duration_min: a.duration_min,
+            end12: fmt12(addMinutesToTime((a.time || "").slice(0, 5), a.duration_min || 15)),
             services: Array.isArray(a.services) ? a.services.join(", ") : a.services,
           })),
         };
@@ -755,7 +959,8 @@ function trimToolResult(toolName, result) {
       return {
         available: result.available,
         date: result.date,
-        slots: result.slots?.slice(0, 4),
+        duration_min: result.duration_min,
+        slots: result.slots?.slice(0, 6),
         reason: result.reason,
         unavailable_type: result.unavailable_type,
       };
@@ -773,8 +978,22 @@ function trimToolResult(toolName, result) {
         success: result.success,
         date: result.date,
         time12: result.time12,
+        end12: result.end12,
+        duration_min: result.duration_min,
         services: result.services,
         amount: result.amount,
+        error: result.error,
+      };
+
+    case "book_multi_appointment":
+      return {
+        success: result.success,
+        pet_names: result.pet_names,
+        date: result.date,
+        time12: result.time12,
+        end12: result.end12,
+        duration_min: result.duration_min,
+        services: result.services,
         error: result.error,
       };
 
@@ -867,20 +1086,26 @@ TASKS: Book appointments, view upcoming appointments, cancel appointments (24hr 
 
 BOOKING FLOW:
 1. Confirm pet if multiple pets exist.
-2. Ask for date/day and services if missing.
-3. Convert requested services into duration.
-4. Call get_available_slots for the requested date.
-5. If get_available_slots says unavailable for ANY reason, do NOT stop there.
-6. If unavailable because of vacation, not working, or no openings, call get_next_available_days starting from the requested date for 7-10 days and offer 1-3 nearby alternatives.
-7. If the client asks for a specific time like "Anything at 3?" after alternatives were offered, treat that as interest in 3:00 PM on one of the offered dates and answer using the tool results or re-check availability for that date.
-8. Only after a valid slot exists should you confirm the exact time and then call book_appointment.
+2. If the client wants 2 or more pets at the same time, gather all pet names first.
+3. Ask for date/day and services if missing.
+4. Convert requested services into duration.
+5. For one pet, call get_available_slots with that pet's slot_weight.
+6. For multiple pets together, add their slot_weight values and call get_available_slots with the COMBINED total slot weight.
+7. If get_available_slots says unavailable for ANY reason, do NOT stop there.
+8. If unavailable because of vacation, not working, or no openings, call get_next_available_days starting from the requested date for 7-10 days and offer 1-3 nearby alternatives.
+9. If the client asks for a specific time like "Anything at 3?" after alternatives were offered, treat that as interest in 3:00 PM on one of the offered dates and answer using the tool results or re-check availability for that date.
+10. Only after a valid slot exists should you confirm the exact time, duration, and time range before booking.
+11. For one pet, call book_appointment.
+12. For multiple pets together, call book_multi_appointment.
 
 IMPORTANT SCHEDULING RULES:
 - Never make up availability.
 - Never say a day is unavailable without giving alternatives when tools can provide them.
 - If the whole checked window is vacation or closed, say so plainly and ask what later week works.
 - If the client gives a weekday like "Tuesday next week," use that exact requested day first.
-- Never book without an exact offered time and client confirmation.
+- When offering times, mention the time range, not just the start time.
+- When confirming a booking, say the duration clearly. Example: "That will be a 60-minute appointment. I can do 9:00–10:00 AM. Want me to book it?"
+- For multiple pets at the same time, only offer a slot if the combined slot weight fits within the groomer's capacity.
 
 SERVICES: Bath, Full Groom, Nails, Teeth, Deshed, Anal Glands, Puppy Trim, Other
 DURATIONS: Full Groom=60min, Bath=30min, Nails=15min, Teeth=15min, Deshed=60min, Anal Glands=15min, Puppy Trim=60min, Other=30min default. Multiple services add up, max 90min unless client explicitly asks for more.
@@ -966,7 +1191,7 @@ exports.handler = async (event) => {
         for (const block of response.content) {
           if (block.type !== "tool_use") continue;
 
-          console.log(`Tool call: ${block.name}`, JSON.stringify(block.input).slice(0, 400));
+          console.log(`Tool call: ${block.name}`, JSON.stringify(block.input).slice(0, 500));
 
           const result = await executeTool(block.name, block.input);
 
@@ -984,7 +1209,7 @@ exports.handler = async (event) => {
 
           const trimmedResult = trimToolResult(block.name, result);
 
-          console.log(`Tool result: ${block.name}`, JSON.stringify(trimmedResult).slice(0, 400));
+          console.log(`Tool result: ${block.name}`, JSON.stringify(trimmedResult).slice(0, 500));
 
           toolResults.push({
             type: "tool_result",
