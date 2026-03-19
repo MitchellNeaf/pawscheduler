@@ -205,6 +205,12 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, combined
     open.push(slot);
   });
 
+  console.log(`getAvailabilityForDate debug: date=${date} duration=${duration_min} weight=${combined_slot_weight}`);
+  console.log(`workingSlots: ${workingSlots[0]}–${workingSlots[workingSlots.length-1]} (${workingSlots.length} slots)`);
+  console.log(`breakSet size: ${breakSet.size}, sample breaks: ${[...breakSet].slice(0,6).join(", ")}`);
+  console.log(`open slots before filter: ${open.join(", ")}`);
+  console.log(`filtered slots: ${open.filter((s) => s.endsWith(":00") || s.endsWith(":30")).join(", ")}`);
+
   // Only show :00 and :30 to keep SMS clean
   const filtered = open.filter((s) => s.endsWith(":00") || s.endsWith(":30"));
 
