@@ -1,6 +1,5 @@
 // netlify/functions/smsBot.js
 const { createClient } = require("@supabase/supabase-js");
-const fetch = require("node-fetch");
 const Anthropic = require("@anthropic-ai/sdk");
 
 const supabase = createClient(
@@ -17,7 +16,7 @@ const TELNYX_API_KEY = process.env.TELNYX_API_KEY;
 const TIME_SLOTS = [];
 for (let h = 6; h <= 20; h++) {
   for (const min of [0, 15, 30, 45]) {
-    TIME_SLOTS.push(${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")});
+    TIME_SLOTS.push(`${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
   }
 }
 
@@ -25,13 +24,13 @@ for (let h = 6; h <= 20; h++) {
    SEND SMS via Telnyx
 ───────────────────────────────────────── */
 async function sendSms(to, text) {
-  console.log(Sending SMS to ${to}: ${text});
-  console.log(From: ${BOT_NUMBER}, API key set: ${!!TELNYX_API_KEY});
+  console.log(`Sending SMS to ${to}: ${text}`);
+  console.log(`From: ${BOT_NUMBER}, API key set: ${!!TELNYX_API_KEY}`);
 
   const res = await fetch("https://api.telnyx.com/v2/messages", {
     method: "POST",
     headers: {
-      Authorization: Bearer ${TELNYX_API_KEY},
+      Authorization: `Bearer ${TELNYX_API_KEY}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ from: BOT_NUMBER, to, text }),
@@ -52,7 +51,7 @@ function fmt12(t) {
   if (!t) return "";
   const [h, m] = t.slice(0, 5).split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
-  return ${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm};
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
 function addDays(dateStr, daysToAdd) {
@@ -82,7 +81,7 @@ function addMinutesToTime(time24, minutesToAdd) {
   const total = h * 60 + m + (Number(minutesToAdd) || 0);
   const nh = Math.floor(total / 60);
   const nm = total % 60;
-  return ${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")};
+  return `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`;
 }
 
 function pickRepresentativeSlots(slots, max = 6) {
@@ -155,7 +154,7 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     .single();
 
   if (groomerErr) {
-    return { available: false, date, reason: Could not load groomer: ${groomerErr.message} };
+    return { available: false, date, reason: `Could not load groomer: ${groomerErr.message}` };
   }
 
   const maxParallel = groomer?.max_parallel || 1;
@@ -167,7 +166,7 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     .eq("date", date);
 
   if (vacErr) {
-    return { available: false, date, reason: Could not load vacation: ${vacErr.message} };
+    return { available: false, date, reason: `Could not load vacation: ${vacErr.message}` };
   }
 
   if (vacs?.some((v) => !v.start_time && !v.end_time)) {
@@ -189,7 +188,7 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     .maybeSingle();
 
   if (hoursErr) {
-    return { available: false, date, reason: Could not load working hours: ${hoursErr.message} };
+    return { available: false, date, reason: `Could not load working hours: ${hoursErr.message}` };
   }
 
   if (!hours?.start_time || !hours?.end_time) {
@@ -222,12 +221,11 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     .eq("weekday", weekday);
 
   if (breaksErr) {
-    return { available: false, date, reason: Could not load breaks: ${breaksErr.message} };
+    return { available: false, date, reason: `Could not load breaks: ${breaksErr.message}` };
   }
 
   const breakSet = new Set();
 
-  // break_end should be exclusive
   (breaks || []).forEach((b) => {
     const bi = TIME_SLOTS.indexOf((b.break_start || "").slice(0, 5));
     const ei = TIME_SLOTS.indexOf((b.break_end || "").slice(0, 5));
@@ -236,7 +234,6 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     }
   });
 
-  // partial vacation end should also be exclusive
   (vacs || []).forEach((v) => {
     if (!v.start_time || !v.end_time) return;
     const vi = TIME_SLOTS.indexOf(v.start_time.slice(0, 5));
@@ -253,7 +250,7 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     .eq("date", date);
 
   if (apptErr) {
-    return { available: false, date, reason: Could not load appointments: ${apptErr.message} };
+    return { available: false, date, reason: `Could not load appointments: ${apptErr.message}` };
   }
 
   const loadForSlot = (slot) => {
@@ -313,7 +310,7 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
         time12: fmt12(s),
         end24,
         end12: fmt12(end24),
-        range12: ${fmt12(s)}–${fmt12(end24)},
+        range12: `${fmt12(s)}–${fmt12(end24)}`,
       };
     }),
     all_slots_count: filtered.length,
@@ -388,18 +385,12 @@ const tools = [
     input_schema: {
       type: "object",
       properties: {
-        date: {
-          type: "string",
-          description: "Date in YYYY-MM-DD format",
-        },
+        date: { type: "string", description: "Date in YYYY-MM-DD format" },
         duration_min: {
           type: "number",
           description: "Appointment duration in minutes (15, 30, 45, 60, 75, 90, 120)",
         },
-        groomer_id: {
-          type: "string",
-          description: "The groomer's UUID",
-        },
+        groomer_id: { type: "string", description: "The groomer's UUID" },
         pet_slot_weight: {
           type: "number",
           description:
@@ -416,22 +407,10 @@ const tools = [
     input_schema: {
       type: "object",
       properties: {
-        start_date: {
-          type: "string",
-          description: "Starting date in YYYY-MM-DD format",
-        },
-        days: {
-          type: "number",
-          description: "How many days ahead to scan, usually 7 to 10",
-        },
-        duration_min: {
-          type: "number",
-          description: "Appointment duration in minutes",
-        },
-        groomer_id: {
-          type: "string",
-          description: "The groomer's UUID",
-        },
+        start_date: { type: "string", description: "Starting date in YYYY-MM-DD format" },
+        days: { type: "number", description: "How many days ahead to scan, usually 7 to 10" },
+        duration_min: { type: "number", description: "Appointment duration in minutes" },
+        groomer_id: { type: "string", description: "The groomer's UUID" },
         pet_slot_weight: {
           type: "number",
           description:
@@ -458,10 +437,7 @@ const tools = [
           items: { type: "string" },
           description: "List of services e.g. ['Bath', 'Full Groom', 'Nails']",
         },
-        slot_weight: {
-          type: "number",
-          description: "Pet's slot weight (1, 2, or 3)",
-        },
+        slot_weight: { type: "number", description: "Pet's slot weight (1, 2, or 3)" },
         notes: { type: "string", description: "Any notes from the client" },
         client_name: { type: "string", description: "Client's full name for notification" },
         pet_name: { type: "string", description: "Pet's name for notification" },
@@ -485,7 +461,10 @@ const tools = [
         groomer_id: { type: "string", description: "The groomer's UUID" },
         date: { type: "string", description: "Date in YYYY-MM-DD format" },
         time: { type: "string", description: "Time in HH:MM format (24hr)" },
-        duration_min: { type: "number", description: "Duration in minutes for each pet appointment" },
+        duration_min: {
+          type: "number",
+          description: "Duration in minutes for each pet appointment",
+        },
         services: {
           type: "array",
           items: { type: "string" },
@@ -545,10 +524,20 @@ async function executeTool(name, input) {
       case "lookup_client": {
         const { data: clients, error: clientErr } = await supabase
           .from("clients")
-          .select(
-            id, full_name, phone, email, groomer_id,
-            pets ( id, name, slot_weight, tags, notes )
-          )
+          .select(`
+            id,
+            full_name,
+            phone,
+            email,
+            groomer_id,
+            pets (
+              id,
+              name,
+              slot_weight,
+              tags,
+              notes
+            )
+          `)
           .eq("phone", input.phone);
 
         console.log("lookup_client clients:", JSON.stringify({ clients, clientErr }));
@@ -570,7 +559,7 @@ async function executeTool(name, input) {
             .eq("id", c.groomer_id)
             .single();
 
-          console.log(Groomer for client ${c.full_name}:, JSON.stringify({ groomer, gErr }));
+          console.log(`Groomer for client ${c.full_name}:`, JSON.stringify({ groomer, gErr }));
 
           if (!gErr && groomer?.sms_bot_enabled === true) {
             validMatches.push({ client: c, groomer });
@@ -616,7 +605,13 @@ async function executeTool(name, input) {
 
       case "get_next_available_days": {
         const { start_date, days = 7, duration_min, groomer_id, pet_slot_weight = 1 } = input;
-        return await getNextAvailableDays({ start_date, days, duration_min, groomer_id, pet_slot_weight });
+        return await getNextAvailableDays({
+          start_date,
+          days,
+          duration_min,
+          groomer_id,
+          pet_slot_weight,
+        });
       }
 
       case "book_appointment": {
@@ -680,12 +675,12 @@ async function executeTool(name, input) {
         }
 
         if (groomer_email) {
-          fetch(${process.env.URL}/.netlify/functions/sendEmail, {
+          fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: groomer_email,
-              subject: New booking (SMS) — ${pet_name || "a pet"} on ${date},
+              subject: `New booking (SMS) — ${pet_name || "a pet"} on ${date}`,
               template: "groomer_notification",
               data: {
                 pet_name: pet_name || "—",
@@ -694,7 +689,7 @@ async function executeTool(name, input) {
                 time,
                 duration_min,
                 services: services.join(", "),
-                amount: amount > 0 ? $${amount.toFixed(2)} : "—",
+                amount: amount > 0 ? `$${amount.toFixed(2)}` : "—",
                 notes: notes || "",
               },
             }),
@@ -709,7 +704,7 @@ async function executeTool(name, input) {
           end12: fmt12(addMinutesToTime(time, duration_min)),
           duration_min,
           services,
-          amount: amount > 0 ? $${amount.toFixed(2)} : null,
+          amount: amount > 0 ? `$${amount.toFixed(2)}` : null,
         };
       }
 
@@ -796,12 +791,12 @@ async function executeTool(name, input) {
         }
 
         if (groomer_email) {
-          fetch(${process.env.URL}/.netlify/functions/sendEmail, {
+          fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: groomer_email,
-              subject: New multi-pet booking (SMS) — ${(pet_names || orderedPets.map((p) => p.name)).join(", ")} on ${date},
+              subject: `New multi-pet booking (SMS) — ${(pet_names || orderedPets.map((p) => p.name)).join(", ")} on ${date}`,
               template: "groomer_notification",
               data: {
                 pet_name: (pet_names || orderedPets.map((p) => p.name)).join(", "),
@@ -810,9 +805,7 @@ async function executeTool(name, input) {
                 time,
                 duration_min,
                 services: services.join(", "),
-                amount: rows
-                  .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
-                  .toFixed(2),
+                amount: `$${rows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0).toFixed(2)}`,
                 notes: notes || "",
               },
             }),
@@ -906,12 +899,12 @@ async function executeTool(name, input) {
         }
 
         if (groomer_email) {
-          fetch(${process.env.URL}/.netlify/functions/sendEmail, {
+          fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: groomer_email,
-              subject: Appointment cancelled (SMS) — ${pet_name || "a pet"} on ${date},
+              subject: `Appointment cancelled (SMS) — ${pet_name || "a pet"} on ${date}`,
               template: "groomer_cancellation",
               data: {
                 pet_name: pet_name || "—",
@@ -930,16 +923,16 @@ async function executeTool(name, input) {
       }
 
       default:
-        return { error: Unknown tool: ${name} };
+        return { error: `Unknown tool: ${name}` };
     }
   } catch (err) {
-    console.error(Tool error [${name}]:, err);
+    console.error(`Tool error [${name}]:`, err);
     return { error: err.message };
   }
 }
 
 /* ─────────────────────────────────────────
-   TRIM TOOL RESULTS — only send what Claude needs
+   TRIM TOOL RESULTS
 ───────────────────────────────────────── */
 function trimToolResult(toolName, result) {
   switch (toolName) {
@@ -1075,8 +1068,8 @@ function buildSystemPrompt(fromPhone, cachedContext) {
   const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
 
   const clientInfo = cachedContext
-    ? Client already identified: ${JSON.stringify(cachedContext)}. Do NOT call lookup_client — you already have the client info above.
-    : FIRST: Call lookup_client with phone="${fromPhone}" immediately. Never ask for their name.;
+    ? `Client already identified: ${JSON.stringify(cachedContext)}. Do NOT call lookup_client — you already have the client info above.`
+    : `FIRST: Call lookup_client with phone="${fromPhone}" immediately. Never ask for their name.`;
 
   return `SMS scheduling assistant for a dog grooming business. Today is ${dayName}, ${today}. Client phone: ${fromPhone}
 
@@ -1140,7 +1133,7 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: "Ignored" };
   }
 
-  console.log(SMS from ${fromPhone}: ${incomingText});
+  console.log(`SMS from ${fromPhone}: ${incomingText}`);
 
   if (incomingText.toUpperCase() === "STOP") {
     return { statusCode: 200, body: "STOP handled elsewhere" };
@@ -1167,14 +1160,14 @@ exports.handler = async (event) => {
       iterations++;
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: "claude-sonnet-4-5",
         max_tokens: 512,
         system: buildSystemPrompt(fromPhone, newClientContext),
         tools,
         messages: currentMessages,
       });
 
-      console.log(Claude iteration ${iterations}, stop_reason: ${response.stop_reason});
+      console.log(`Claude iteration ${iterations}, stop_reason: ${response.stop_reason}`);
 
       if (response.stop_reason === "end_turn") {
         const textBlock = response.content.find((b) => b.type === "text");
@@ -1191,7 +1184,7 @@ exports.handler = async (event) => {
         for (const block of response.content) {
           if (block.type !== "tool_use") continue;
 
-          console.log(Tool call: ${block.name}, JSON.stringify(block.input).slice(0, 500));
+          console.log(`Tool call: ${block.name}`, JSON.stringify(block.input).slice(0, 500));
 
           const result = await executeTool(block.name, block.input);
 
@@ -1209,7 +1202,7 @@ exports.handler = async (event) => {
 
           const trimmedResult = trimToolResult(block.name, result);
 
-          console.log(Tool result: ${block.name}, JSON.stringify(trimmedResult).slice(0, 500));
+          console.log(`Tool result: ${block.name}`, JSON.stringify(trimmedResult).slice(0, 500));
 
           toolResults.push({
             type: "tool_result",
