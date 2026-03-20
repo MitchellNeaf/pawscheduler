@@ -14,29 +14,29 @@ const CONVERSATION_TIMEOUT_MS = 2 * 60 * 60 * 1000; // 2 hours
 const BOT_NUMBER = process.env.TELNYX_BOT_PHONE_NUMBER;
 const TELNYX_API_KEY = process.env.TELNYX_API_KEY;
 
-/* ─────────────────────────────────────────
-   TIME SLOTS (module-level, built once)
-───────────────────────────────────────── */
 const TIME_SLOTS = [];
 for (let h = 6; h <= 20; h++) {
   for (const min of [0, 15, 30, 45]) {
-    TIME_SLOTS.push(`${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
+    TIME_SLOTS.push(${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")});
   }
 }
 
 /* ─────────────────────────────────────────
-   SEND SMS
+   SEND SMS via Telnyx
 ───────────────────────────────────────── */
 async function sendSms(to, text) {
-  console.log(`Sending SMS to ${to}: ${text}`);
+  console.log(Sending SMS to ${to}: ${text});
+  console.log(From: ${BOT_NUMBER}, API key set: ${!!TELNYX_API_KEY});
+
   const res = await fetch("https://api.telnyx.com/v2/messages", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${TELNYX_API_KEY}`,
+      Authorization: Bearer ${TELNYX_API_KEY},
       "Content-Type": "application/json",
     },
     body: JSON.stringify({ from: BOT_NUMBER, to, text }),
   });
+
   const responseText = await res.text();
   if (!res.ok) {
     console.error("Telnyx send failed:", res.status, responseText);
@@ -46,41 +46,95 @@ async function sendSms(to, text) {
 }
 
 /* ─────────────────────────────────────────
-   PURE HELPERS
+   HELPERS
 ───────────────────────────────────────── */
 function fmt12(t) {
   if (!t) return "";
   const [h, m] = t.slice(0, 5).split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
-  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
+  return ${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm};
+}
+
+function addDays(dateStr, daysToAdd) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + daysToAdd);
+  return dt.toISOString().slice(0, 10);
+}
+
+function getWeekdayFromDate(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+}
+
+function formatDateLong(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function addMinutesToTime(time24, minutesToAdd) {
   const [h, m] = time24.slice(0, 5).split(":").map(Number);
   const total = h * 60 + m + (Number(minutesToAdd) || 0);
-  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  const nh = Math.floor(total / 60);
+  const nm = total % 60;
+  return ${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")};
 }
 
-function getWeekdayUTC(dateStr) {
-  const [y, mo, d] = dateStr.split("-").map(Number);
-  return new Date(Date.UTC(y, mo - 1, d)).getUTCDay();
+function pickRepresentativeSlots(slots, max = 6) {
+  if (!Array.isArray(slots) || slots.length <= max) return slots || [];
+
+  const picked = [];
+  const used = new Set();
+  const lastIndex = slots.length - 1;
+
+  for (let i = 0; i < max; i++) {
+    const idx = Math.round((i * lastIndex) / (max - 1));
+    if (!used.has(idx)) {
+      picked.push(slots[idx]);
+      used.add(idx);
+    }
+  }
+
+  return picked;
 }
 
-function addDays(dateStr, n) {
-  const [y, mo, d] = dateStr.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, mo - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + n);
-  return dt.toISOString().slice(0, 10);
+function toSafeHistory(messages) {
+  if (!Array.isArray(messages)) return [];
+
+  const safe = [];
+
+  for (const msg of messages) {
+    if (!msg || !msg.role) continue;
+
+    if (typeof msg.content === "string") {
+      safe.push({ role: msg.role, content: msg.content });
+      continue;
+    }
+
+    if (Array.isArray(msg.content)) {
+      const textParts = msg.content
+        .filter((b) => b && b.type === "text" && typeof b.text === "string")
+        .map((b) => b.text.trim())
+        .filter(Boolean);
+
+      if (textParts.length) {
+        safe.push({
+          role: msg.role,
+          content: textParts.join("\n"),
+        });
+      }
+    }
+  }
+
+  return safe.slice(-12);
 }
 
-function formatDateLong(dateStr) {
-  const [y, mo, d] = dateStr.split("-").map(Number);
-  return new Date(Date.UTC(y, mo - 1, d)).toLocaleDateString("en-US", {
-    weekday: "long", month: "short", day: "numeric", timeZone: "UTC",
-  });
-}
-
-function computeAmount(pricing, services, slotWeight) {
+function computeAmountForServices(pricing, services, slotWeight) {
   const sz = slotWeight || 1;
   return (services || [])
     .filter((s) => s !== "Other")
@@ -90,351 +144,392 @@ function computeAmount(pricing, services, slotWeight) {
     }, 0);
 }
 
-// Strip tool blocks — only keep plain text turns for history
-function toSafeHistory(messages) {
-  if (!Array.isArray(messages)) return [];
-  const safe = [];
-  for (const msg of messages) {
-    if (!msg?.role) continue;
-    if (typeof msg.content === "string") {
-      safe.push({ role: msg.role, content: msg.content });
-    } else if (Array.isArray(msg.content)) {
-      const text = msg.content
-        .filter((b) => b?.type === "text" && typeof b.text === "string")
-        .map((b) => b.text.trim())
-        .filter(Boolean)
-        .join("\n");
-      if (text) safe.push({ role: msg.role, content: text });
-    }
-  }
-  return safe.slice(-12);
-}
-
-const DEFAULT_PRICING = {
-  "Bath":        { 1: 25, 2: 40, 3: 60 },
-  "Full Groom":  { 1: 45, 2: 65, 3: 90 },
-  "Nails":       { 1: 15, 2: 15, 3: 20 },
-  "Teeth":       { 1: 15, 2: 15, 3: 20 },
-  "Deshed":      { 1: 35, 2: 55, 3: 75 },
-  "Anal Glands": { 1: 15, 2: 15, 3: 20 },
-  "Puppy Trim":  { 1: 40, 2: 55, 3: 75 },
-  "Other":       { 1: 0,  2: 0,  3: 0  },
-};
-
 /* ─────────────────────────────────────────
-   SHARED AVAILABILITY HELPER
-   Used by both get_available_slots tool
-   AND the pre-insert re-validation in bookPets().
-   Single source of truth for slot logic.
+   AVAILABILITY
 ───────────────────────────────────────── */
-async function getAvailabilityForDate({ date, duration_min, groomer_id, combined_slot_weight = 1 }) {
-  // 1. groomer capacity
-  const { data: groomer, error: gErr } = await supabase
-    .from("groomers").select("max_parallel").eq("id", groomer_id).single();
-  if (gErr) return { available: false, reason: `Groomer load error: ${gErr.message}` };
+async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot_weight = 1 }) {
+  const { data: groomer, error: groomerErr } = await supabase
+    .from("groomers")
+    .select("max_parallel")
+    .eq("id", groomer_id)
+    .single();
+
+  if (groomerErr) {
+    return { available: false, date, reason: Could not load groomer: ${groomerErr.message} };
+  }
+
   const maxParallel = groomer?.max_parallel || 1;
 
-  // 2. vacation
-  const { data: vacs } = await supabase
-    .from("vacation_days").select("date, start_time, end_time")
-    .eq("groomer_id", groomer_id).eq("date", date);
-  if (vacs?.some((v) => !v.start_time && !v.end_time)) {
-    return { available: false, reason: "Groomer is on vacation this day.", type: "vacation" };
+  const { data: vacs, error: vacErr } = await supabase
+    .from("vacation_days")
+    .select("date, start_time, end_time")
+    .eq("groomer_id", groomer_id)
+    .eq("date", date);
+
+  if (vacErr) {
+    return { available: false, date, reason: Could not load vacation: ${vacErr.message} };
   }
 
-  // 3. working hours
-  const weekday = getWeekdayUTC(date);
-  const { data: hours } = await supabase
-    .from("working_hours").select("start_time, end_time")
-    .eq("groomer_id", groomer_id).eq("weekday", weekday).maybeSingle();
+  if (vacs?.some((v) => !v.start_time && !v.end_time)) {
+    return {
+      available: false,
+      date,
+      reason: "Groomer is on vacation this day.",
+      unavailable_type: "vacation",
+    };
+  }
+
+  const weekday = getWeekdayFromDate(date);
+
+  const { data: hours, error: hoursErr } = await supabase
+    .from("working_hours")
+    .select("start_time, end_time")
+    .eq("groomer_id", groomer_id)
+    .eq("weekday", weekday)
+    .maybeSingle();
+
+  if (hoursErr) {
+    return { available: false, date, reason: Could not load working hours: ${hoursErr.message} };
+  }
+
   if (!hours?.start_time || !hours?.end_time) {
-    return { available: false, reason: "Groomer is not working this day.", type: "not_working" };
+    return {
+      available: false,
+      date,
+      reason: "Groomer is not working this day.",
+      unavailable_type: "not_working",
+    };
   }
 
   const startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
-  const endIdx   = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
-  if (startIdx < 0 || endIdx < 0 || endIdx <= startIdx) {
-    return { available: false, reason: "Working hours misconfigured." };
-  }
-  const workingSlots = TIME_SLOTS.slice(startIdx, endIdx);
+  const endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
 
-  // 4. breaks (exclusive end)
-  const { data: breaks } = await supabase
-    .from("working_breaks").select("break_start, break_end")
-    .eq("groomer_id", groomer_id).eq("weekday", weekday);
+  if (startIdx < 0 || endIdx < 0 || endIdx < startIdx) {
+    return {
+      available: false,
+      date,
+      reason: "Working hours are not configured correctly.",
+      unavailable_type: "config_error",
+    };
+  }
+
+  const workingSlots = TIME_SLOTS.slice(startIdx, endIdx + 1);
+
+  const { data: breaks, error: breaksErr } = await supabase
+    .from("working_breaks")
+    .select("break_start, break_end")
+    .eq("groomer_id", groomer_id)
+    .eq("weekday", weekday);
+
+  if (breaksErr) {
+    return { available: false, date, reason: Could not load breaks: ${breaksErr.message} };
+  }
+
   const breakSet = new Set();
+
+  // break_end should be exclusive
   (breaks || []).forEach((b) => {
     const bi = TIME_SLOTS.indexOf((b.break_start || "").slice(0, 5));
-    const ei = TIME_SLOTS.indexOf((b.break_end   || "").slice(0, 5));
-    if (bi >= 0 && ei > bi) TIME_SLOTS.slice(bi, ei).forEach((s) => breakSet.add(s));
+    const ei = TIME_SLOTS.indexOf((b.break_end || "").slice(0, 5));
+    if (bi !== -1 && ei !== -1 && ei > bi) {
+      TIME_SLOTS.slice(bi, ei).forEach((s) => breakSet.add(s));
+    }
   });
-  // partial vacation blocks
+
+  // partial vacation end should also be exclusive
   (vacs || []).forEach((v) => {
     if (!v.start_time || !v.end_time) return;
     const vi = TIME_SLOTS.indexOf(v.start_time.slice(0, 5));
     const vj = TIME_SLOTS.indexOf(v.end_time.slice(0, 5));
-    if (vi >= 0 && vj > vi) TIME_SLOTS.slice(vi, vj).forEach((s) => breakSet.add(s));
+    if (vi !== -1 && vj !== -1 && vj > vi) {
+      TIME_SLOTS.slice(vi, vj).forEach((s) => breakSet.add(s));
+    }
   });
 
-  // 5. existing appointments load
-  const { data: appts } = await supabase
-    .from("appointments").select("time, duration_min, slot_weight, no_show")
-    .eq("groomer_id", groomer_id).eq("date", date);
+  const { data: appts, error: apptErr } = await supabase
+    .from("appointments")
+    .select("time, duration_min, slot_weight, no_show")
+    .eq("groomer_id", groomer_id)
+    .eq("date", date);
 
-  const loadAt = (slot) => {
+  if (apptErr) {
+    return { available: false, date, reason: Could not load appointments: ${apptErr.message} };
+  }
+
+  const loadForSlot = (slot) => {
     let total = 0;
+
     (appts || []).forEach((a) => {
       if (a.no_show === true) return;
-      const idx = TIME_SLOTS.indexOf((a.time || "").slice(0, 5));
+      const start = (a.time || "").slice(0, 5);
+      const idx = TIME_SLOTS.indexOf(start);
       if (idx < 0) return;
-      const occupied = TIME_SLOTS.slice(idx, idx + Math.ceil((a.duration_min || 15) / 15));
-      if (occupied.includes(slot)) total += a.slot_weight ?? 1;
+
+      const blocks = Math.ceil((a.duration_min || 15) / 15);
+      const slots = TIME_SLOTS.slice(idx, idx + blocks);
+      if (slots.includes(slot)) total += a.slot_weight ?? 1;
     });
+
     return total;
   };
 
-  // 6. find valid start slots
   const blocks = Math.ceil((duration_min || 15) / 15);
-  const open = [];
-  workingSlots.forEach((slot, i) => {
+  const available = [];
+
+  workingSlots.forEach((slot, idx) => {
     if (breakSet.has(slot)) return;
-    const window = workingSlots.slice(i, i + blocks);
+
+    const window = workingSlots.slice(idx, idx + blocks);
     if (window.length < blocks) return;
     if (window.some((s) => breakSet.has(s))) return;
-    if (window.some((s) => loadAt(s) + combined_slot_weight > maxParallel)) return;
-    open.push(slot);
+    if (window.some((s) => loadForSlot(s) + pet_slot_weight > maxParallel)) return;
+
+    available.push(slot);
   });
 
-  console.log(`getAvailabilityForDate debug: date=${date} duration=${duration_min} weight=${combined_slot_weight}`);
-  console.log(`workingSlots: ${workingSlots[0]}–${workingSlots[workingSlots.length-1]} (${workingSlots.length} slots)`);
-  console.log(`breakSet size: ${breakSet.size}, sample breaks: ${[...breakSet].slice(0,6).join(", ")}`);
-  console.log(`open slots before filter: ${open.join(", ")}`);
-  console.log(`filtered slots: ${open.filter((s) => s.endsWith(":00") || s.endsWith(":30")).join(", ")}`);
-
-  // Only show :00 and :30 to keep SMS clean
-  const filtered = open.filter((s) => s.endsWith(":00") || s.endsWith(":30"));
+  const filtered = available.filter((s) => s.endsWith(":00") || s.endsWith(":30"));
 
   if (!filtered.length) {
-    return { available: false, reason: "No openings on this day.", type: "full" };
+    return {
+      available: false,
+      date,
+      reason: "No openings remain on this day.",
+      unavailable_type: "full",
+      slots: [],
+      all_slots_count: 0,
+    };
   }
+
+  const displaySlots = pickRepresentativeSlots(filtered, 6);
 
   return {
     available: true,
     date,
-    slots: filtered.slice(0, 6).map((s) => ({
-      time24: s,
-      time12: fmt12(s),
-      end12:  fmt12(addMinutesToTime(s, duration_min)),
-      range12: `${fmt12(s)}–${fmt12(addMinutesToTime(s, duration_min))}`,
-    })),
+    duration_min: duration_min || 15,
+    slots: displaySlots.map((s) => {
+      const end24 = addMinutesToTime(s, duration_min || 15);
+      return {
+        time24: s,
+        time12: fmt12(s),
+        end24,
+        end12: fmt12(end24),
+        range12: ${fmt12(s)}–${fmt12(end24)},
+      };
+    }),
+    all_slots_count: filtered.length,
   };
 }
 
-/* ─────────────────────────────────────────
-   SHARED BOOKING FUNCTION
-   Handles 1 or more pets atomically:
-   - re-validates capacity with combined weight
-   - inserts all rows or none (fails fast)
-   Used by book_appointment tool only.
-───────────────────────────────────────── */
-async function bookPets({ pets, groomer_id, date, time, duration_min, services, notes,
-                          client_name, groomer_email }) {
-  if (!Array.isArray(pets) || pets.length === 0) {
-    return { success: false, error: "No pets provided." };
-  }
+async function getNextAvailableDays({
+  start_date,
+  days = 7,
+  duration_min,
+  groomer_id,
+  pet_slot_weight = 1,
+}) {
+  const normalizedDays = Math.max(1, Math.min(Number(days) || 7, 21));
+  const results = [];
+  const unavailableSummary = { vacation: 0, not_working: 0, full: 0, other: 0 };
 
-  const combinedWeight = pets.reduce((sum, p) => sum + (p.slot_weight || 1), 0);
-
-  // Re-validate slot is still open with combined weight
-  const recheck = await getAvailabilityForDate({
-    date, duration_min, groomer_id, combined_slot_weight: combinedWeight,
-  });
-
-  if (!recheck.available) {
-    return { success: false, slot_taken: true, error: `Slot no longer available: ${recheck.reason}` };
-  }
-
-  const slotOk = recheck.slots?.some((s) => s.time24 === time.slice(0, 5));
-  if (!slotOk) {
-    const alts = recheck.slots?.slice(0, 3).map((s) => s.time12).join(", ") || "none";
-    return {
-      success: false, slot_taken: true,
-      error: `That exact time was just taken. Other available times: ${alts}.`,
-    };
-  }
-
-  // Load groomer pricing once
-  const { data: groomerData } = await supabase
-    .from("groomers").select("service_pricing").eq("id", groomer_id).single();
-  const pricing = { ...DEFAULT_PRICING, ...(groomerData?.service_pricing || {}) };
-
-  // Build one row per pet
-  const rows = pets.map((pet) => {
-    const sz = pet.slot_weight || 1;
-    const amount = computeAmount(pricing, services, sz);
-    return {
-      pet_id: pet.id,
-      groomer_id,
+  for (let i = 0; i < normalizedDays; i++) {
+    const date = addDays(start_date, i);
+    const info = await getAvailabilityForDate({
       date,
-      time,
       duration_min,
-      services,
-      slot_weight: sz,
-      amount: amount > 0 ? amount : null,
-      notes: notes || "",
-      confirmed: false,
-      no_show: false,
-      paid: false,
-      reminder_enabled: true,
-    };
-  });
+      groomer_id,
+      pet_slot_weight,
+    });
 
-  const { data: inserted, error } = await supabase
-    .from("appointments").insert(rows).select("id");
-
-  if (error) return { success: false, error: error.message };
-
-  const petNames = pets.map((p) => p.name).join(", ");
-  const totalAmount = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-
-  // Groomer notification email (fire-and-forget)
-  if (groomer_email) {
-    fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: groomer_email,
-        subject: `New SMS booking — ${petNames} on ${date}`,
-        template: "groomer_notification",
-        data: {
-          pet_name: petNames,
-          client_name: client_name || "—",
-          date,
-          time,
-          duration_min,
-          services: services.join(", "),
-          amount: totalAmount > 0 ? `$${totalAmount.toFixed(2)}` : "—",
-          notes: notes || "",
-        },
-      }),
-    }).catch(() => {});
+    if (info.available) {
+      results.push({
+        date,
+        date_label: formatDateLong(date),
+        duration_min: info.duration_min,
+        slots: (info.slots || []).slice(0, 3),
+      });
+    } else {
+      const bucket = info.unavailable_type || "other";
+      unavailableSummary[bucket] = (unavailableSummary[bucket] || 0) + 1;
+    }
   }
 
   return {
-    success: true,
-    appointment_ids: (inserted || []).map((r) => r.id),
-    pet_names: petNames,
-    date,
-    time12: fmt12(time),
-    end12: fmt12(addMinutesToTime(time, duration_min)),
-    services,
-    amount: totalAmount > 0 ? `$${totalAmount.toFixed(2)}` : null,
+    start_date,
+    days_checked: normalizedDays,
+    available_days: results.slice(0, 5),
+    unavailable_summary: unavailableSummary,
   };
 }
 
 /* ─────────────────────────────────────────
-   TOOL DEFINITIONS
-   book_appointment handles 1 OR multiple pets.
-   get_available_slots uses combined_slot_weight.
+   TOOL DEFINITIONS for Claude
 ───────────────────────────────────────── */
 const tools = [
   {
     name: "lookup_client",
-    description: "Look up a client by phone number. Returns client info and pets. Call this first on every new conversation.",
+    description:
+      "Look up a client by their phone number. Returns client info and their pets. ALWAYS call this first on every new conversation using the exact phone number provided in the system prompt.",
     input_schema: {
       type: "object",
       properties: {
-        phone: { type: "string", description: "E.164 phone number e.g. +18145554321" },
+        phone: {
+          type: "string",
+          description:
+            "The client's phone number exactly as provided in the system prompt in E.164 format e.g. +18145554321",
+        },
       },
       required: ["phone"],
     },
   },
   {
     name: "get_available_slots",
-    description: "Get available slots for a date. Pass combined_slot_weight as the SUM of all pets being booked together. Returns open times with ranges.",
+    description:
+      "Get available appointment time slots for a specific date. Use pet_slot_weight as the total combined slot weight needed. For two pets at the same time, pass the sum of both pets' slot weights.",
     input_schema: {
       type: "object",
       properties: {
-        date:                { type: "string", description: "YYYY-MM-DD" },
-        duration_min:        { type: "number", description: "Total appointment duration in minutes" },
-        groomer_id:          { type: "string", description: "Groomer UUID" },
-        combined_slot_weight: { type: "number", description: "Sum of slot weights for all pets being booked. 1 pet S/M=1, Large=2, XL=3. 2 pets S/M=2." },
+        date: {
+          type: "string",
+          description: "Date in YYYY-MM-DD format",
+        },
+        duration_min: {
+          type: "number",
+          description: "Appointment duration in minutes (15, 30, 45, 60, 75, 90, 120)",
+        },
+        groomer_id: {
+          type: "string",
+          description: "The groomer's UUID",
+        },
+        pet_slot_weight: {
+          type: "number",
+          description:
+            "Total slot weight needed. For one pet use that pet's slot weight. For multiple pets together, use the combined slot weight.",
+        },
       },
       required: ["date", "duration_min", "groomer_id"],
     },
   },
   {
     name: "get_next_available_days",
-    description: "Scan the next N days from start_date and return days that have open slots. Use when a requested day has no availability.",
+    description:
+      "Check the next several days starting from a given date and return the next available days with sample time options. Use pet_slot_weight as the total combined slot weight needed.",
     input_schema: {
       type: "object",
       properties: {
-        start_date:          { type: "string", description: "YYYY-MM-DD to start scanning from" },
-        days:                { type: "number", description: "How many days to scan (max 14)" },
-        duration_min:        { type: "number", description: "Duration in minutes" },
-        groomer_id:          { type: "string", description: "Groomer UUID" },
-        combined_slot_weight: { type: "number", description: "Combined slot weight for all pets" },
+        start_date: {
+          type: "string",
+          description: "Starting date in YYYY-MM-DD format",
+        },
+        days: {
+          type: "number",
+          description: "How many days ahead to scan, usually 7 to 10",
+        },
+        duration_min: {
+          type: "number",
+          description: "Appointment duration in minutes",
+        },
+        groomer_id: {
+          type: "string",
+          description: "The groomer's UUID",
+        },
+        pet_slot_weight: {
+          type: "number",
+          description:
+            "Total slot weight needed. For one pet use that pet's slot weight. For multiple pets together, use the combined slot weight.",
+        },
       },
       required: ["start_date", "duration_min", "groomer_id"],
     },
   },
   {
     name: "book_appointment",
-    description: "Book one OR more pets at the same date and time. Pass an array of pet objects. Re-validates capacity before inserting. Only call after client confirms all details.",
+    description:
+      "Book a single-pet appointment. Only call this after confirming the date, time, duration, and services with the client.",
     input_schema: {
       type: "object",
       properties: {
-        pets: {
+        pet_id: { type: "string", description: "The pet's UUID" },
+        groomer_id: { type: "string", description: "The groomer's UUID" },
+        date: { type: "string", description: "Date in YYYY-MM-DD format" },
+        time: { type: "string", description: "Time in HH:MM format (24hr)" },
+        duration_min: { type: "number", description: "Duration in minutes" },
+        services: {
           type: "array",
-          description: "Array of pets to book. Each must have id, name, slot_weight.",
-          items: {
-            type: "object",
-            properties: {
-              id:          { type: "string" },
-              name:        { type: "string" },
-              slot_weight: { type: "number" },
-            },
-            required: ["id", "name", "slot_weight"],
-          },
+          items: { type: "string" },
+          description: "List of services e.g. ['Bath', 'Full Groom', 'Nails']",
         },
-        groomer_id:   { type: "string" },
-        date:         { type: "string", description: "YYYY-MM-DD" },
-        time:         { type: "string", description: "HH:MM 24hr" },
-        duration_min: { type: "number" },
-        services:     { type: "array", items: { type: "string" }, description: "e.g. ['Full Groom', 'Nails']" },
-        notes:        { type: "string" },
-        client_name:  { type: "string" },
-        groomer_email: { type: "string" },
+        slot_weight: {
+          type: "number",
+          description: "Pet's slot weight (1, 2, or 3)",
+        },
+        notes: { type: "string", description: "Any notes from the client" },
+        client_name: { type: "string", description: "Client's full name for notification" },
+        pet_name: { type: "string", description: "Pet's name for notification" },
+        groomer_email: { type: "string", description: "Groomer's email for notification" },
       },
-      required: ["pets", "groomer_id", "date", "time", "duration_min", "services"],
+      required: ["pet_id", "groomer_id", "date", "time", "duration_min", "services", "slot_weight"],
+    },
+  },
+  {
+    name: "book_multi_appointment",
+    description:
+      "Book two or more pets at the same date and time for the same client. Use this when the client wants multiple pets scheduled together. This creates one appointment row per pet at the same start time.",
+    input_schema: {
+      type: "object",
+      properties: {
+        pet_ids: {
+          type: "array",
+          items: { type: "string" },
+          description: "Array of pet UUIDs to book together",
+        },
+        groomer_id: { type: "string", description: "The groomer's UUID" },
+        date: { type: "string", description: "Date in YYYY-MM-DD format" },
+        time: { type: "string", description: "Time in HH:MM format (24hr)" },
+        duration_min: { type: "number", description: "Duration in minutes for each pet appointment" },
+        services: {
+          type: "array",
+          items: { type: "string" },
+          description: "List of services that apply to each pet",
+        },
+        notes: { type: "string", description: "Any notes from the client" },
+        client_name: { type: "string", description: "Client's full name for notification" },
+        pet_names: {
+          type: "array",
+          items: { type: "string" },
+          description: "Pet names in the same order as pet_ids",
+        },
+        groomer_email: { type: "string", description: "Groomer's email for notification" },
+      },
+      required: ["pet_ids", "groomer_id", "date", "time", "duration_min", "services"],
     },
   },
   {
     name: "get_upcoming_appointments",
-    description: "Get all upcoming appointments for a client.",
+    description: "Get all upcoming appointments for a client's pets.",
     input_schema: {
       type: "object",
       properties: {
-        client_id:  { type: "string" },
-        groomer_id: { type: "string" },
+        client_id: { type: "string", description: "The client's UUID" },
+        groomer_id: { type: "string", description: "The groomer's UUID" },
       },
       required: ["client_id", "groomer_id"],
     },
   },
   {
     name: "cancel_appointment",
-    description: "Cancel an appointment. Enforces 24hr policy.",
+    description:
+      "Cancel an appointment. Will fail if the appointment is within 24 hours — in that case tell the client to call directly.",
     input_schema: {
       type: "object",
       properties: {
-        appointment_id: { type: "string" },
-        groomer_id:     { type: "string" },
-        groomer_email:  { type: "string" },
-        pet_name:       { type: "string" },
-        client_name:    { type: "string" },
-        date:           { type: "string" },
-        time:           { type: "string" },
-        services:       { type: "string" },
+        appointment_id: { type: "string", description: "The appointment UUID to cancel" },
+        groomer_id: { type: "string", description: "The groomer's UUID" },
+        groomer_email: { type: "string", description: "Groomer email for cancellation notification" },
+        pet_name: { type: "string" },
+        client_name: { type: "string" },
+        date: { type: "string" },
+        time: { type: "string" },
+        services: { type: "string" },
       },
       required: ["appointment_id", "groomer_id"],
     },
@@ -447,43 +542,64 @@ const tools = [
 async function executeTool(name, input) {
   try {
     switch (name) {
-
       case "lookup_client": {
         const { data: clients, error: clientErr } = await supabase
           .from("clients")
-          .select("id, full_name, phone, email, groomer_id, pets(id, name, slot_weight, tags, notes)")
+          .select(
+            id, full_name, phone, email, groomer_id,
+            pets ( id, name, slot_weight, tags, notes )
+          )
           .eq("phone", input.phone);
 
-        console.log("lookup_client:", JSON.stringify({ count: clients?.length, clientErr }));
+        console.log("lookup_client clients:", JSON.stringify({ clients, clientErr }));
 
-        if (clientErr) return { found: false, message: "DB error: " + clientErr.message };
-        if (!clients?.length) return { found: false, message: "Client not found." };
-
-        const matches = [];
-        for (const c of clients) {
-          const { data: gr } = await supabase
-            .from("groomers")
-            .select("id, full_name, email, sms_bot_enabled, time_zone")
-            .eq("id", c.groomer_id).single();
-          console.log(`Groomer for ${c.full_name}: sms_bot_enabled=${gr?.sms_bot_enabled}`);
-          if (gr?.sms_bot_enabled) matches.push({ client: c, groomer: gr });
+        if (clientErr) {
+          return { found: false, message: "Database error: " + clientErr.message };
         }
 
-        if (!matches.length) return { found: false, message: "No active bot groomer for this client." };
+        if (!clients || clients.length === 0) {
+          return { found: false, message: "Client not found in system." };
+        }
 
-        // Prefer client with most pets
-        matches.sort((a, b) => (b.client.pets?.length || 0) - (a.client.pets?.length || 0));
-        const { client: mc, groomer: mg } = matches[0];
+        const validMatches = [];
+
+        for (const c of clients) {
+          const { data: groomer, error: gErr } = await supabase
+            .from("groomers")
+            .select("id, full_name, email, sms_bot_enabled, time_zone, max_parallel")
+            .eq("id", c.groomer_id)
+            .single();
+
+          console.log(Groomer for client ${c.full_name}:, JSON.stringify({ groomer, gErr }));
+
+          if (!gErr && groomer?.sms_bot_enabled === true) {
+            validMatches.push({ client: c, groomer });
+          }
+        }
+
+        if (validMatches.length === 0) {
+          return { found: false, message: "No active bot groomer found for this client." };
+        }
+
+        validMatches.sort((a, b) => {
+          const aPets = a.client.pets?.length || 0;
+          const bPets = b.client.pets?.length || 0;
+          if (bPets !== aPets) return bPets - aPets;
+          return b.client.id.localeCompare(a.client.id);
+        });
+
+        const { client: matchedClient, groomer: matchedGroomer } = validMatches[0];
 
         return {
           found: true,
-          client_id: mc.id,
-          client_name: mc.full_name,
-          groomer_id: mg.id,
-          groomer_name: mg.full_name,
-          groomer_email: mg.email,
-          groomer_time_zone: mg.time_zone || "America/New_York",
-          pets: (mc.pets || []).map((p) => ({
+          client_id: matchedClient.id,
+          client_name: matchedClient.full_name,
+          client_email: matchedClient.email,
+          groomer_id: matchedGroomer.id,
+          groomer_name: matchedGroomer.full_name,
+          groomer_email: matchedGroomer.email,
+          groomer_time_zone: matchedGroomer.time_zone || "America/New_York",
+          pets: (matchedClient.pets || []).map((p) => ({
             id: p.id,
             name: p.name,
             slot_weight: p.slot_weight || 1,
@@ -494,52 +610,240 @@ async function executeTool(name, input) {
       }
 
       case "get_available_slots": {
-        const { date, duration_min, groomer_id, combined_slot_weight = 1 } = input;
-        return await getAvailabilityForDate({ date, duration_min, groomer_id, combined_slot_weight });
+        const { date, duration_min, groomer_id, pet_slot_weight = 1 } = input;
+        return await getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot_weight });
       }
 
       case "get_next_available_days": {
-        const { start_date, days = 7, duration_min, groomer_id, combined_slot_weight = 1 } = input;
-        const limit = Math.min(Number(days) || 7, 14);
-        const found = [];
-        const summary = { vacation: 0, not_working: 0, full: 0 };
-
-        for (let i = 0; i < limit; i++) {
-          const date = addDays(start_date, i);
-          const info = await getAvailabilityForDate({ date, duration_min, groomer_id, combined_slot_weight });
-          if (info.available) {
-            found.push({ date, date_label: formatDateLong(date), slots: info.slots.slice(0, 3) });
-            if (found.length >= 5) break;
-          } else {
-            summary[info.type || "full"] = (summary[info.type || "full"] || 0) + 1;
-          }
-        }
-
-        return { start_date, days_checked: limit, available_days: found, unavailable_summary: summary };
+        const { start_date, days = 7, duration_min, groomer_id, pet_slot_weight = 1 } = input;
+        return await getNextAvailableDays({ start_date, days, duration_min, groomer_id, pet_slot_weight });
       }
 
       case "book_appointment": {
-        // Single unified booking path for 1 or more pets
-        return await bookPets({
-          pets:         input.pets,
-          groomer_id:   input.groomer_id,
-          date:         input.date,
-          time:         input.time,
-          duration_min: input.duration_min,
-          services:     input.services,
-          notes:        input.notes,
-          client_name:  input.client_name,
-          groomer_email: input.groomer_email,
+        const {
+          pet_id,
+          groomer_id,
+          date,
+          time,
+          duration_min,
+          services,
+          slot_weight,
+          notes,
+          client_name,
+          pet_name,
+          groomer_email,
+        } = input;
+
+        const DEFAULT_PRICING = {
+          Bath: { 1: 25, 2: 40, 3: 60 },
+          "Full Groom": { 1: 45, 2: 65, 3: 90 },
+          Nails: { 1: 15, 2: 15, 3: 20 },
+          Teeth: { 1: 15, 2: 15, 3: 20 },
+          Deshed: { 1: 35, 2: 55, 3: 75 },
+          "Anal Glands": { 1: 15, 2: 15, 3: 20 },
+          "Puppy Trim": { 1: 40, 2: 55, 3: 75 },
+          Other: { 1: 0, 2: 0, 3: 0 },
+        };
+
+        const { data: groomerData } = await supabase
+          .from("groomers")
+          .select("service_pricing")
+          .eq("id", groomer_id)
+          .single();
+
+        const pricing = { ...DEFAULT_PRICING, ...(groomerData?.service_pricing || {}) };
+        const sz = slot_weight || 1;
+        const amount = computeAmountForServices(pricing, services, sz);
+
+        const { data: appt, error } = await supabase
+          .from("appointments")
+          .insert({
+            pet_id,
+            groomer_id,
+            date,
+            time,
+            duration_min,
+            services,
+            slot_weight: sz,
+            amount: amount > 0 ? amount : null,
+            notes: notes || "",
+            confirmed: false,
+            no_show: false,
+            paid: false,
+            reminder_enabled: true,
+          })
+          .select("id")
+          .single();
+
+        if (error) {
+          return { success: false, error: error.message };
+        }
+
+        if (groomer_email) {
+          fetch(${process.env.URL}/.netlify/functions/sendEmail, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: groomer_email,
+              subject: New booking (SMS) — ${pet_name || "a pet"} on ${date},
+              template: "groomer_notification",
+              data: {
+                pet_name: pet_name || "—",
+                client_name: client_name || "—",
+                date,
+                time,
+                duration_min,
+                services: services.join(", "),
+                amount: amount > 0 ? $${amount.toFixed(2)} : "—",
+                notes: notes || "",
+              },
+            }),
+          }).catch(() => {});
+        }
+
+        return {
+          success: true,
+          appointment_id: appt.id,
+          date,
+          time12: fmt12(time),
+          end12: fmt12(addMinutesToTime(time, duration_min)),
+          duration_min,
+          services,
+          amount: amount > 0 ? $${amount.toFixed(2)} : null,
+        };
+      }
+
+      case "book_multi_appointment": {
+        const {
+          pet_ids,
+          groomer_id,
+          date,
+          time,
+          duration_min,
+          services,
+          notes,
+          client_name,
+          pet_names,
+          groomer_email,
+        } = input;
+
+        if (!Array.isArray(pet_ids) || pet_ids.length < 2) {
+          return { success: false, error: "book_multi_appointment requires at least 2 pet_ids." };
+        }
+
+        const { data: pets, error: petsErr } = await supabase
+          .from("pets")
+          .select("id, name, slot_weight")
+          .in("id", pet_ids);
+
+        if (petsErr) {
+          return { success: false, error: petsErr.message };
+        }
+
+        if (!pets || pets.length !== pet_ids.length) {
+          return { success: false, error: "Could not load all selected pets." };
+        }
+
+        const petMap = new Map(pets.map((p) => [p.id, p]));
+        const orderedPets = pet_ids.map((id) => petMap.get(id)).filter(Boolean);
+
+        const DEFAULT_PRICING = {
+          Bath: { 1: 25, 2: 40, 3: 60 },
+          "Full Groom": { 1: 45, 2: 65, 3: 90 },
+          Nails: { 1: 15, 2: 15, 3: 20 },
+          Teeth: { 1: 15, 2: 15, 3: 20 },
+          Deshed: { 1: 35, 2: 55, 3: 75 },
+          "Anal Glands": { 1: 15, 2: 15, 3: 20 },
+          "Puppy Trim": { 1: 40, 2: 55, 3: 75 },
+          Other: { 1: 0, 2: 0, 3: 0 },
+        };
+
+        const { data: groomerData } = await supabase
+          .from("groomers")
+          .select("service_pricing")
+          .eq("id", groomer_id)
+          .single();
+
+        const pricing = { ...DEFAULT_PRICING, ...(groomerData?.service_pricing || {}) };
+
+        const rows = orderedPets.map((pet) => {
+          const sz = pet.slot_weight || 1;
+          const amount = computeAmountForServices(pricing, services, sz);
+          return {
+            pet_id: pet.id,
+            groomer_id,
+            date,
+            time,
+            duration_min,
+            services,
+            slot_weight: sz,
+            amount: amount > 0 ? amount : null,
+            notes: notes || "",
+            confirmed: false,
+            no_show: false,
+            paid: false,
+            reminder_enabled: true,
+          };
         });
+
+        const { data: inserted, error: insertErr } = await supabase
+          .from("appointments")
+          .insert(rows)
+          .select("id");
+
+        if (insertErr) {
+          return { success: false, error: insertErr.message };
+        }
+
+        if (groomer_email) {
+          fetch(${process.env.URL}/.netlify/functions/sendEmail, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: groomer_email,
+              subject: New multi-pet booking (SMS) — ${(pet_names || orderedPets.map((p) => p.name)).join(", ")} on ${date},
+              template: "groomer_notification",
+              data: {
+                pet_name: (pet_names || orderedPets.map((p) => p.name)).join(", "),
+                client_name: client_name || "—",
+                date,
+                time,
+                duration_min,
+                services: services.join(", "),
+                amount: rows
+                  .reduce((sum, r) => sum + (Number(r.amount) || 0), 0)
+                  .toFixed(2),
+                notes: notes || "",
+              },
+            }),
+          }).catch(() => {});
+        }
+
+        return {
+          success: true,
+          appointment_ids: (inserted || []).map((r) => r.id),
+          pet_names: pet_names || orderedPets.map((p) => p.name),
+          date,
+          time12: fmt12(time),
+          end12: fmt12(addMinutesToTime(time, duration_min)),
+          duration_min,
+          services,
+        };
       }
 
       case "get_upcoming_appointments": {
         const { client_id, groomer_id } = input;
+
         const { data: pets } = await supabase
-          .from("pets").select("id").eq("client_id", client_id).eq("groomer_id", groomer_id);
+          .from("pets")
+          .select("id, name")
+          .eq("client_id", client_id)
+          .eq("groomer_id", groomer_id);
+
         if (!pets?.length) return { appointments: [] };
 
         const today = new Date().toISOString().slice(0, 10);
+
         const { data: appts } = await supabase
           .from("appointments")
           .select("id, date, time, duration_min, services, pets(name)")
@@ -557,6 +861,7 @@ async function executeTool(name, input) {
             date: a.date,
             time12: fmt12(a.time),
             time24: (a.time || "").slice(0, 5),
+            duration_min: a.duration_min,
             end12: fmt12(addMinutesToTime((a.time || "").slice(0, 5), a.duration_min || 15)),
             services: Array.isArray(a.services) ? a.services.join(", ") : a.services,
           })),
@@ -564,36 +869,59 @@ async function executeTool(name, input) {
       }
 
       case "cancel_appointment": {
-        const { appointment_id, groomer_id, groomer_email, pet_name, client_name, date, time, services } = input;
+        const {
+          appointment_id,
+          groomer_id,
+          groomer_email,
+          pet_name,
+          client_name,
+          date,
+          time,
+          services,
+        } = input;
 
-        // 24hr check
         if (date && time) {
           const [y, mo, d] = date.split("-").map(Number);
           const [h, m] = (time || "00:00").slice(0, 5).split(":").map(Number);
-          if (new Date(y, mo - 1, d, h, m).getTime() - Date.now() < 24 * 60 * 60 * 1000) {
+          const apptMs = new Date(y, mo - 1, d, h, m).getTime();
+
+          if (apptMs - Date.now() < 24 * 60 * 60 * 1000) {
             return {
-              success: false, within_cutoff: true,
-              message: "Within 24 hours — please call or text your groomer directly.",
+              success: false,
+              within_cutoff: true,
+              message:
+                "This appointment is within 24 hours and cannot be cancelled online. Please call or text your groomer directly.",
             };
           }
         }
 
         const { error } = await supabase
-          .from("appointments").delete()
-          .eq("id", appointment_id).eq("groomer_id", groomer_id);
+          .from("appointments")
+          .delete()
+          .eq("id", appointment_id)
+          .eq("groomer_id", groomer_id);
 
-        if (error) return { success: false, error: error.message };
+        if (error) {
+          return { success: false, error: error.message };
+        }
 
         if (groomer_email) {
-          fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
+          fetch(${process.env.URL}/.netlify/functions/sendEmail, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: groomer_email,
-              subject: `Appointment cancelled (SMS) — ${pet_name || "a pet"} on ${date}`,
+              subject: Appointment cancelled (SMS) — ${pet_name || "a pet"} on ${date},
               template: "groomer_cancellation",
-              data: { pet_name: pet_name || "—", client_name: client_name || "—",
-                      date: date || "—", time: time || "—", duration_min: "", services: services || "—", notes: "" },
+              data: {
+                pet_name: pet_name || "—",
+                client_name: client_name || "—",
+                date: date || "—",
+                time: time || "—",
+                duration_min: "",
+                services: services || "—",
+                notes: "",
+              },
             }),
           }).catch(() => {});
         }
@@ -602,46 +930,93 @@ async function executeTool(name, input) {
       }
 
       default:
-        return { error: `Unknown tool: ${name}` };
+        return { error: Unknown tool: ${name} };
     }
   } catch (err) {
-    console.error(`Tool error [${name}]:`, err);
+    console.error(Tool error [${name}]:, err);
     return { error: err.message };
   }
 }
 
 /* ─────────────────────────────────────────
-   TRIM TOOL RESULTS (reduce tokens sent to Claude)
+   TRIM TOOL RESULTS — only send what Claude needs
 ───────────────────────────────────────── */
-function trimResult(name, result) {
-  switch (name) {
+function trimToolResult(toolName, result) {
+  switch (toolName) {
     case "lookup_client":
-      return result.found
-        ? { found: true, client_id: result.client_id, client_name: result.client_name,
-            groomer_id: result.groomer_id, groomer_email: result.groomer_email,
-            groomer_time_zone: result.groomer_time_zone, pets: result.pets }
-        : result;
+      if (!result.found) return result;
+      return {
+        found: true,
+        client_id: result.client_id,
+        client_name: result.client_name,
+        groomer_id: result.groomer_id,
+        groomer_email: result.groomer_email,
+        groomer_time_zone: result.groomer_time_zone,
+        pets: result.pets,
+      };
+
     case "get_available_slots":
-      return { available: result.available, date: result.date,
-               slots: result.slots?.slice(0, 6), reason: result.reason, type: result.type };
+      return {
+        available: result.available,
+        date: result.date,
+        duration_min: result.duration_min,
+        slots: result.slots?.slice(0, 6),
+        reason: result.reason,
+        unavailable_type: result.unavailable_type,
+      };
+
     case "get_next_available_days":
-      return { available_days: result.available_days, unavailable_summary: result.unavailable_summary };
+      return {
+        start_date: result.start_date,
+        days_checked: result.days_checked,
+        available_days: result.available_days,
+        unavailable_summary: result.unavailable_summary,
+      };
+
     case "book_appointment":
-      return { success: result.success, pet_names: result.pet_names, date: result.date,
-               time12: result.time12, end12: result.end12, services: result.services,
-               amount: result.amount, slot_taken: result.slot_taken, error: result.error };
+      return {
+        success: result.success,
+        date: result.date,
+        time12: result.time12,
+        end12: result.end12,
+        duration_min: result.duration_min,
+        services: result.services,
+        amount: result.amount,
+        error: result.error,
+      };
+
+    case "book_multi_appointment":
+      return {
+        success: result.success,
+        pet_names: result.pet_names,
+        date: result.date,
+        time12: result.time12,
+        end12: result.end12,
+        duration_min: result.duration_min,
+        services: result.services,
+        error: result.error,
+      };
+
     case "get_upcoming_appointments":
-      return { appointments: result.appointments?.slice(0, 5) };
+      return {
+        appointments: result.appointments?.slice(0, 5),
+      };
+
     case "cancel_appointment":
-      return { success: result.success, within_cutoff: result.within_cutoff,
-               message: result.message, error: result.error };
+      return {
+        success: result.success,
+        within_cutoff: result.within_cutoff,
+        message: result.message,
+        error: result.error,
+      };
+
     default:
       return result;
   }
 }
 
 /* ─────────────────────────────────────────
-   CONVERSATION PERSISTENCE
+   LOAD CONVERSATION
 ───────────────────────────────────────── */
 async function loadConversation(phone) {
   const { data } = await supabase
@@ -653,49 +1028,43 @@ async function loadConversation(phone) {
     .maybeSingle();
 
   if (!data) return null;
-  if (Date.now() - new Date(data.last_message_at).getTime() > CONVERSATION_TIMEOUT_MS) return null;
 
-  return { ...data, messages: toSafeHistory(data.messages) };
-}
-
-async function saveConversation({ phone, groomerId, clientId, messages, existingId, clientContext }) {
-  const payload = {
-    messages,
-    client_id: clientId || null,
-    client_context: clientContext || null,
-    groomer_id: groomerId || null,
-    last_message_at: new Date().toISOString(),
-  };
-
-  if (existingId) {
-    await supabase.from("sms_conversations").update(payload).eq("id", existingId);
-  } else {
-    await supabase.from("sms_conversations").insert({ phone, ...payload });
+  const lastMsg = new Date(data.last_message_at).getTime();
+  if (Date.now() - lastMsg > CONVERSATION_TIMEOUT_MS) {
+    return null;
   }
+
+  return {
+    ...data,
+    messages: toSafeHistory(data.messages),
+  };
 }
 
 /* ─────────────────────────────────────────
-   RATE LIMITER — 30 messages per phone per day
+   SAVE CONVERSATION
 ───────────────────────────────────────── */
-async function isRateLimited(phone) {
-  const startOfDay = new Date();
-  startOfDay.setUTCHours(0, 0, 0, 0);
-
-  const { data } = await supabase
-    .from("sms_conversations")
-    .select("messages")
-    .eq("phone", phone)
-    .gte("last_message_at", startOfDay.toISOString())
-    .order("last_message_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const count = data?.messages?.length || 0;
-  if (count >= 30) {
-    console.log(`Rate limit hit for ${phone}: ${count} messages today`);
-    return true;
+async function saveConversation({ phone, groomerId, clientId, messages, existingId, clientContext }) {
+  if (existingId) {
+    await supabase
+      .from("sms_conversations")
+      .update({
+        messages,
+        client_id: clientId || null,
+        client_context: clientContext || null,
+        groomer_id: groomerId || null,
+        last_message_at: new Date().toISOString(),
+      })
+      .eq("id", existingId);
+  } else {
+    await supabase.from("sms_conversations").insert({
+      phone,
+      groomer_id: groomerId || null,
+      client_id: clientId || null,
+      client_context: clientContext || null,
+      messages,
+      last_message_at: new Date().toISOString(),
+    });
   }
-  return false;
 }
 
 /* ─────────────────────────────────────────
@@ -706,73 +1075,95 @@ function buildSystemPrompt(fromPhone, cachedContext) {
   const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
 
   const clientInfo = cachedContext
-    ? `Client already identified: ${JSON.stringify(cachedContext)}. Do NOT call lookup_client — you already have everything above.`
-    : `FIRST: Call lookup_client with phone="${fromPhone}" immediately. Do not ask for their name.`;
+    ? Client already identified: ${JSON.stringify(cachedContext)}. Do NOT call lookup_client — you already have the client info above.
+    : FIRST: Call lookup_client with phone="${fromPhone}" immediately. Never ask for their name.;
 
-  return `SMS scheduling assistant for a dog grooming business. Today is ${dayName}, ${today}.
+  return `SMS scheduling assistant for a dog grooming business. Today is ${dayName}, ${today}. Client phone: ${fromPhone}
 
 ${clientInfo}
 
-TASKS: Book appointments · View upcoming appointments · Cancel appointments (24hr policy)
+TASKS: Book appointments, view upcoming appointments, cancel appointments (24hr policy).
 
 BOOKING FLOW:
-1. Confirm which pet(s). If multiple pets at once, gather all names.
-2. Ask date and services if not given.
-3. Duration: Full Groom=60, Bath=30, Nails=15, Teeth=15, Deshed=60, Anal Glands=15, Puppy Trim=60. Add durations, max 90min.
-4. Call get_available_slots with combined_slot_weight = sum of all pets' slot weights.
-5. If unavailable, call get_next_available_days and offer alternatives. Never dead-end.
-6. Confirm pet(s), date, time range, services, and duration before booking.
-7. Call book_appointment with pets array (works for 1 or more pets).
+1. Confirm pet if multiple pets exist.
+2. If the client wants 2 or more pets at the same time, gather all pet names first.
+3. Ask for date/day and services if missing.
+4. Convert requested services into duration.
+5. For one pet, call get_available_slots with that pet's slot_weight.
+6. For multiple pets together, add their slot_weight values and call get_available_slots with the COMBINED total slot weight.
+7. If get_available_slots says unavailable for ANY reason, do NOT stop there.
+8. If unavailable because of vacation, not working, or no openings, call get_next_available_days starting from the requested date for 7-10 days and offer 1-3 nearby alternatives.
+9. If the client asks for a specific time like "Anything at 3?" after alternatives were offered, treat that as interest in 3:00 PM on one of the offered dates and answer using the tool results or re-check availability for that date.
+10. Only after a valid slot exists should you confirm the exact time, duration, and time range before booking.
+11. For one pet, call book_appointment.
+12. For multiple pets together, call book_multi_appointment.
+
+IMPORTANT SCHEDULING RULES:
+- Never make up availability.
+- Never say a day is unavailable without giving alternatives when tools can provide them.
+- If the whole checked window is vacation or closed, say so plainly and ask what later week works.
+- If the client gives a weekday like "Tuesday next week," use that exact requested day first.
+- When offering times, mention the time range, not just the start time.
+- When confirming a booking, say the duration clearly. Example: "That will be a 60-minute appointment. I can do 9:00–10:00 AM. Want me to book it?"
+- For multiple pets at the same time, only offer a slot if the combined slot weight fits within the groomer's capacity.
 
 SERVICES: Bath, Full Groom, Nails, Teeth, Deshed, Anal Glands, Puppy Trim, Other
+DURATIONS: Full Groom=60min, Bath=30min, Nails=15min, Teeth=15min, Deshed=60min, Anal Glands=15min, Puppy Trim=60min, Other=30min default. Multiple services add up, max 90min unless client explicitly asks for more.
 
-CANCELLATION: get_upcoming_appointments → confirm which → cancel_appointment. Within 24hrs → tell them to call directly.
+CANCELLATION: get_upcoming_appointments first → confirm which one → cancel_appointment. Within 24hrs = tell them to call directly.
 
-STYLE: Short replies, max 3 sentences. Show time ranges not just start times. Never invent availability. Never book without confirmation.`;
+STYLE:
+- Short SMS replies, max 3 sentences, friendly.
+- Prefer specific days/times over vague wording.
+- If client not found, tell them to contact their groomer.`;
 }
 
 /* ─────────────────────────────────────────
    MAIN HANDLER
 ───────────────────────────────────────── */
 exports.handler = async (event) => {
-  if (event.httpMethod !== "POST") return { statusCode: 405, body: "Method not allowed" };
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: "Method not allowed" };
+  }
 
   let body;
-  try { body = JSON.parse(event.body || "{}"); }
-  catch { return { statusCode: 400, body: "Invalid JSON" }; }
+  try {
+    body = JSON.parse(event.body || "{}");
+  } catch {
+    return { statusCode: 400, body: "Invalid JSON" };
+  }
 
-  const fromPhone   = body?.data?.payload?.from?.phone_number;
+  const fromPhone = body?.data?.payload?.from?.phone_number;
   const incomingText = body?.data?.payload?.text?.trim();
 
-  if (!fromPhone || !incomingText) return { statusCode: 200, body: "Ignored" };
+  if (!fromPhone || !incomingText) {
+    return { statusCode: 200, body: "Ignored" };
+  }
 
-  console.log(`SMS from ${fromPhone}: ${incomingText}`);
+  console.log(SMS from ${fromPhone}: ${incomingText});
 
-  if (incomingText.toUpperCase() === "STOP") return { statusCode: 200, body: "STOP handled elsewhere" };
-
-  // Rate limit check
-  if (await isRateLimited(fromPhone)) {
-    await sendSms(fromPhone, "You've reached the daily message limit. Please call your groomer directly, or try again tomorrow.");
-    return { statusCode: 200, body: "Rate limited" };
+  if (incomingText.toUpperCase() === "STOP") {
+    return { statusCode: 200, body: "STOP handled elsewhere" };
   }
 
   try {
-    // Load conversation by phone only — no pre-lookup needed
-    const existing    = await loadConversation(fromPhone);
+    const existing = await loadConversation(fromPhone);
     const conversationId = existing?.id || null;
-    const messages    = Array.isArray(existing?.messages) ? [...existing.messages] : [];
+    const messages = Array.isArray(existing?.messages) ? [...existing.messages] : [];
     const cachedContext = existing?.client_context || null;
-    const groomerId   = existing?.groomer_id || cachedContext?.groomer_id || null;
-    const clientId    = cachedContext?.client_id || null;
+
+    const groomerId = existing?.groomer_id || cachedContext?.groomer_id || null;
+    const clientId = cachedContext?.client_id || null;
 
     messages.push({ role: "user", content: incomingText });
 
-    let finalResponse   = null;
+    let finalResponse = null;
     let currentMessages = [...messages];
-    let iterations      = 0;
+    let iterations = 0;
+    const MAX_ITERATIONS = 10;
     let newClientContext = cachedContext;
 
-    while (iterations < 10) {
+    while (iterations < MAX_ITERATIONS) {
       iterations++;
 
       const response = await anthropic.messages.create({
@@ -783,42 +1174,48 @@ exports.handler = async (event) => {
         messages: currentMessages,
       });
 
-      console.log(`Claude iteration ${iterations}, stop_reason: ${response.stop_reason}`);
+      console.log(Claude iteration ${iterations}, stop_reason: ${response.stop_reason});
 
       if (response.stop_reason === "end_turn") {
-        const tb = response.content.find((b) => b.type === "text");
-        finalResponse = tb?.text || "Sorry, something went wrong. Please try again.";
+        const textBlock = response.content.find((b) => b.type === "text");
+        finalResponse = textBlock?.text || "Sorry, something went wrong. Please try again.";
         currentMessages.push({ role: "assistant", content: response.content });
         break;
       }
 
       if (response.stop_reason === "tool_use") {
         currentMessages.push({ role: "assistant", content: response.content });
+
         const toolResults = [];
 
         for (const block of response.content) {
           if (block.type !== "tool_use") continue;
-          console.log(`Tool call: ${block.name}`, JSON.stringify(block.input).slice(0, 400));
+
+          console.log(Tool call: ${block.name}, JSON.stringify(block.input).slice(0, 500));
 
           const result = await executeTool(block.name, block.input);
 
-          // Cache client context after first successful lookup
           if (block.name === "lookup_client" && result.found) {
             newClientContext = {
-              client_id:        result.client_id,
-              client_name:      result.client_name,
-              groomer_id:       result.groomer_id,
-              groomer_name:     result.groomer_name,
-              groomer_email:    result.groomer_email,
+              client_id: result.client_id,
+              client_name: result.client_name,
+              groomer_id: result.groomer_id,
+              groomer_name: result.groomer_name,
+              groomer_email: result.groomer_email,
               groomer_time_zone: result.groomer_time_zone,
-              pets:             result.pets,
+              pets: result.pets,
             };
           }
 
-          const trimmed = trimResult(block.name, result);
-          console.log(`Tool result: ${block.name}`, JSON.stringify(trimmed).slice(0, 400));
+          const trimmedResult = trimToolResult(block.name, result);
 
-          toolResults.push({ type: "tool_result", tool_use_id: block.id, content: JSON.stringify(trimmed) });
+          console.log(Tool result: ${block.name}, JSON.stringify(trimmedResult).slice(0, 500));
+
+          toolResults.push({
+            type: "tool_result",
+            tool_use_id: block.id,
+            content: JSON.stringify(trimmedResult),
+          });
         }
 
         currentMessages.push({ role: "user", content: toolResults });
@@ -830,32 +1227,44 @@ exports.handler = async (event) => {
       break;
     }
 
-    if (!finalResponse) finalResponse = "Sorry, something went wrong. Please try again or call us directly.";
+    if (!finalResponse) {
+      finalResponse = "Sorry, something went wrong. Please try again or call us directly.";
+    }
 
-    // Save only clean text history, last 12 turns
     const trimmedMessages = toSafeHistory([
       ...messages.slice(0, -1),
-      { role: "user",      content: incomingText },
+      { role: "user", content: incomingText },
       { role: "assistant", content: finalResponse },
     ]);
 
+    const resolvedClientId = clientId || newClientContext?.client_id || null;
+    const resolvedGroomerId = groomerId || newClientContext?.groomer_id || null;
+
     await saveConversation({
       phone: fromPhone,
-      groomerId:  groomerId  || newClientContext?.groomer_id || null,
-      clientId:   clientId   || newClientContext?.client_id  || null,
-      messages:   trimmedMessages,
+      groomerId: resolvedGroomerId,
+      clientId: resolvedClientId,
+      messages: trimmedMessages,
       existingId: conversationId,
       clientContext: newClientContext,
     });
 
-    console.log("Final response:", finalResponse);
+    console.log("Final response to send:", finalResponse);
     await sendSms(fromPhone, finalResponse);
-    return { statusCode: 200, body: "OK" };
 
+    return { statusCode: 200, body: "OK" };
   } catch (err) {
     console.error("smsBot fatal error:", err);
-    try { await sendSms(fromPhone, "Sorry, I'm having trouble right now. Please call your groomer directly."); }
-    catch {}
+
+    try {
+      await sendSms(
+        fromPhone,
+        "Sorry, I'm having trouble right now. Please call or text your groomer directly."
+      );
+    } catch (sendErr) {
+      console.error("Failed to send fallback:", sendErr);
+    }
+
     return { statusCode: 200, body: "Error handled" };
   }
 };
