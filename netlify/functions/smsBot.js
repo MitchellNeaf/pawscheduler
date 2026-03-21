@@ -994,7 +994,7 @@ IMPORTANT SCHEDULING RULES:
 SERVICES: Bath, Full Groom, Nails, Teeth, Deshed, Anal Glands, Puppy Trim, Other
 DURATIONS: Full Groom=60min, Bath=30min, Nails=15min, Teeth=15min, Deshed=60min, Anal Glands=15min, Puppy Trim=60min, Other=30min. Multiple services add up, max 90min.
 
-CANCELLATION: get_upcoming_appointments → confirm which → cancel_appointment. Within 24hrs → tell them to call directly.
+CANCELLATION: Always call get_upcoming_appointments first to get real appointment IDs. Never invent or guess appointment_id values — only use IDs returned by get_upcoming_appointments. Confirm with client before cancelling, then call cancel_appointment once per appointment using the exact UUID from the tool result. Within 24hrs → tell them to call directly.
 
 STYLE: Short SMS replies, max 3 sentences, friendly. If client not found, tell them to contact their groomer.`;
 }
@@ -1037,6 +1037,17 @@ exports.handler = async (event) => {
     const cachedContext = existing?.client_context || null;
     const groomerId     = existing?.groomer_id || cachedContext?.groomer_id || null;
     const clientId      = cachedContext?.client_id || null;
+
+    // Deduplicate: if the last user message is identical and within 30 seconds, drop it.
+    // Prevents double-tap / duplicate webhook from firing twice.
+    if (existing?.last_message_at) {
+      const lastUserMsg = messages.filter((m) => m.role === "user").slice(-1)[0];
+      const ageMs = Date.now() - new Date(existing.last_message_at).getTime();
+      if (lastUserMsg?.content === incomingText && ageMs < 30_000) {
+        log.warn("Duplicate message dropped", { ageMs });
+        return { statusCode: 200, body: "Duplicate ignored" };
+      }
+    }
 
     messages.push({ role: "user", content: incomingText });
 
