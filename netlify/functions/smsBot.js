@@ -1061,7 +1061,7 @@ exports.handler = async (event) => {
         ],
         tools,
         messages: currentMessages,
-        betas: ["prompt-caching-2024-07-31"],
+        // betas: ["prompt-caching-2024-07-31"], // enable only if on an Anthropic plan that supports prompt caching
       });
 
       log.info(`Claude iteration ${iterations}, stop_reason: ${response.stop_reason}`);
