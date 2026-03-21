@@ -1051,7 +1051,7 @@ exports.handler = async (event) => {
       // Use Anthropic prompt caching on the system prompt to reduce input token cost
       const response = await anthropic.messages.create({
         model: "claude-sonnet-4-5",
-        max_tokens: 512,
+        max_tokens: 1024,
         system: [
           {
             type: "text",
@@ -1103,6 +1103,16 @@ exports.handler = async (event) => {
 
         currentMessages.push({ role: "user", content: toolResults });
         continue;
+      }
+
+      // max_tokens: extract whatever text Claude managed to write rather than failing
+      if (response.stop_reason === "max_tokens") {
+        const tb = response.content.find((b) => b.type === "text");
+        finalResponse = tb?.text
+          ? tb.text.trim() + " (reply cut short — please ask again if needed)"
+          : "Sorry, my reply was too long. Could you ask one thing at a time?";
+        log.warn("max_tokens hit", { iteration: iterations });
+        break;
       }
 
       log.error("Unexpected stop_reason:", response.stop_reason);
