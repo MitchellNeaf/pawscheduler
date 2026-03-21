@@ -1,5 +1,4 @@
 // netlify/functions/smsBot.js
-const fetch = globalThis.fetch || require("node-fetch"); // node-fetch fallback for older Netlify runtimes
 const { createClient } = require("@supabase/supabase-js");
 const Anthropic = require("@anthropic-ai/sdk");
 
@@ -186,7 +185,7 @@ const DEFAULT_PRICING = {
    Uses groomer's actual hours to build the
    slot grid dynamically — not hardcoded.
 ───────────────────────────────────────── */
-async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot_weight = 1, exclude_appointment_id = null }) {
+async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot_weight = 1 }) {
   const { data: groomer, error: groomerErr } = await supabase
     .from("groomers").select("max_parallel").eq("id", groomer_id).single();
   if (groomerErr) return { available: false, date, reason: `Could not load groomer: ${groomerErr.message}` };
@@ -240,7 +239,7 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
   });
 
   const { data: appts, error: apptErr } = await supabase
-    .from("appointments").select("id, time, duration_min, slot_weight, no_show")
+    .from("appointments").select("time, duration_min, slot_weight, no_show")
     .eq("groomer_id", groomer_id).eq("date", date);
   if (apptErr) return { available: false, date, reason: `Could not load appointments: ${apptErr.message}` };
 
@@ -248,8 +247,6 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     let total = 0;
     (appts || []).forEach((a) => {
       if (a.no_show === true) return;
-      // Exclude the appointment being rescheduled — it vacates its old slot
-      if (exclude_appointment_id && a.id === exclude_appointment_id) return;
       const start = (a.time || "").slice(0, 5);
       const idx = SLOTS.indexOf(start);
       if (idx < 0) return;
@@ -409,24 +406,24 @@ const tools = [
   },
   {
     name: "reschedule_appointment",
-    description: "Reschedule an existing appointment to a new date and time by updating it in place. Only use after confirming the new date and time with the client. The tool validates the new slot before making any changes. The 24hr policy applies to the existing appointment's current date and time.",
+    description: "Reschedule an existing appointment to a new date and time. Cancels the old appointment and creates a new one. Only use after confirming the new date and time with the client.",
     input_schema: {
       type: "object",
       properties: {
-        appointment_id: { type: "string", description: "The existing appointment UUID to reschedule" },
+        appointment_id: { type: "string", description: "The existing appointment UUID to cancel" },
         pet_id:         { type: "string", description: "The pet's UUID" },
         groomer_id:     { type: "string", description: "The groomer's UUID" },
         new_date:       { type: "string", description: "New date in YYYY-MM-DD format" },
         new_time:       { type: "string", description: "New time in HH:MM 24hr format" },
-        duration_min:   { type: "number", description: "Duration in minutes — omit to keep the existing duration" },
-        services:       { type: "array", items: { type: "string" }, description: "Services — omit to keep existing services" },
-        slot_weight:    { type: "number", description: "Pet slot weight (1, 2, or 3) — omit to keep existing" },
-        notes:          { type: "string", description: "Notes — omit to keep existing notes" },
+        duration_min:   { type: "number", description: "Duration in minutes" },
+        services:       { type: "array", items: { type: "string" }, description: "Services for the appointment" },
+        slot_weight:    { type: "number", description: "Pet's slot weight (1, 2, or 3)" },
+        notes:          { type: "string" },
         client_name:    { type: "string" },
         pet_name:       { type: "string" },
         groomer_email:  { type: "string" },
       },
-      required: ["appointment_id", "groomer_id", "new_date", "new_time"],
+      required: ["appointment_id", "pet_id", "groomer_id", "new_date", "new_time", "duration_min", "services", "slot_weight"],
     },
   },
   {
@@ -624,84 +621,37 @@ async function executeTool(name, input) {
         const { appointment_id, pet_id, groomer_id, new_date, new_time, duration_min,
                 services, slot_weight, notes, client_name, pet_name, groomer_email } = input;
 
-        // Load existing appointment — need old date/time for 24hr check and return payload
-        const { data: existing, error: fetchErr } = await supabase
-          .from("appointments")
-          .select("id, date, time, slot_weight, duration_min, services, notes")
-          .eq("id", appointment_id)
-          .eq("groomer_id", groomer_id)
-          .single();
-
-        if (fetchErr || !existing) {
-          return { success: false, error: "Could not find that appointment." };
+        // Check 24hr cutoff on existing appointment
+        const { data: existing } = await supabase
+          .from("appointments").select("date, time").eq("id", appointment_id).single();
+        if (existing?.date && existing?.time) {
+          const [y, mo, d] = existing.date.split("-").map(Number);
+          const [h, m] = existing.time.slice(0, 5).split(":").map(Number);
+          if (new Date(y, mo - 1, d, h, m).getTime() - Date.now() < 24 * 60 * 60 * 1000) {
+            return { success: false, within_cutoff: true,
+                     message: "This appointment is within 24 hours and cannot be changed online. Please call your groomer directly." };
+          }
         }
 
-        // 24hr cutoff on the EXISTING appointment
-        const [ey, emo, ed] = existing.date.split("-").map(Number);
-        const [eh, em] = existing.time.slice(0, 5).split(":").map(Number);
-        if (new Date(ey, emo - 1, ed, eh, em).getTime() - Date.now() < 24 * 60 * 60 * 1000) {
-          return { success: false, within_cutoff: true,
-                   message: "This appointment is within 24 hours and cannot be changed online. Please call your groomer directly." };
-        }
+        // Delete old appointment
+        const { error: delErr } = await supabase
+          .from("appointments").delete().eq("id", appointment_id).eq("groomer_id", groomer_id);
+        if (delErr) return { success: false, error: `Could not remove old appointment: ${delErr.message}` };
 
-        // Validate the new slot BEFORE touching anything.
-        // Pass exclude_appointment_id so the existing appointment doesn't
-        // count against capacity on its old date (relevant when same-day reschedule).
-        const sz = slot_weight || existing.slot_weight || 1;
-        const check = await getAvailabilityForDate({
-          date: new_date,
-          duration_min: duration_min || existing.duration_min,
-          groomer_id,
-          pet_slot_weight: sz,
-          exclude_appointment_id: appointment_id,
-        });
-
-        if (!check.available) {
-          return { success: false, slot_unavailable: true,
-                   reason: check.reason || "No availability on the requested date.",
-                   unavailable_type: check.unavailable_type };
-        }
-
-        const newTime5 = new_time.slice(0, 5);
-        const slotOk = check.slots?.some((s) => s.time24 === newTime5);
-        if (!slotOk) {
-          const alts = check.slots?.slice(0, 3).map((s) => s.range12).join(", ") || "none";
-          return { success: false, slot_taken: true,
-                   message: `That exact time isn't available. Other openings: ${alts}.` };
-        }
-
-        // Slot is valid — UPDATE the existing row in place (atomic, no orphan risk)
-        const { data: groomerData } = await supabase
-          .from("groomers").select("service_pricing").eq("id", groomer_id).single();
+        // Create new appointment
+        const { data: groomerData } = await supabase.from("groomers").select("service_pricing").eq("id", groomer_id).single();
         const pricing = { ...DEFAULT_PRICING, ...(groomerData?.service_pricing || {}) };
+        const sz = slot_weight || 1;
+        const amount = computeAmountForServices(pricing, services, sz);
 
-        // Fallback to existing values when Claude omits optional fields
-        const resolvedServices  = (services  && services.length  > 0) ? services  : existing.services;
-        const resolvedNotes     = notes !== undefined                  ? notes     : existing.notes;
-        const resolvedDuration  = duration_min                        || existing.duration_min;
-
-        // Amount must be computed from resolvedServices, not raw services
-        const resolvedServicesArr = Array.isArray(resolvedServices) ? resolvedServices : [];
-        const amount = computeAmountForServices(pricing, resolvedServicesArr, sz);
-
-        const { error: updateErr } = await supabase
+        const { data: newAppt, error: newErr } = await supabase
           .from("appointments")
-          .update({
-            date: new_date,
-            time: new_time,
-            duration_min: resolvedDuration,
-            services: resolvedServicesArr,
-            slot_weight: sz,
-            amount: amount > 0 ? amount : null,
-            notes: resolvedNotes || "",
-            confirmed: false, // reset confirmation for the new time
-          })
-          .eq("id", appointment_id)
-          .eq("groomer_id", groomer_id);
+          .insert({ pet_id, groomer_id, date: new_date, time: new_time, duration_min, services,
+                    slot_weight: sz, amount: amount > 0 ? amount : null, notes: notes || "",
+                    confirmed: false, no_show: false, paid: false, reminder_enabled: true })
+          .select("id").single();
 
-        if (updateErr) {
-          return { success: false, error: `Could not update appointment: ${updateErr.message}` };
-        }
+        if (newErr) return { success: false, error: `Could not create new appointment: ${newErr.message}` };
 
         if (groomer_email) {
           fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
@@ -711,26 +661,18 @@ async function executeTool(name, input) {
               subject: `Appointment rescheduled (SMS) — ${pet_name || "a pet"} to ${new_date}`,
               template: "groomer_notification",
               data: { pet_name: pet_name || "—", client_name: client_name || "—",
-                      date: new_date, time: new_time,
-                      duration_min: resolvedDuration,
-                      services: resolvedServicesArr.join(", "),
+                      date: new_date, time: new_time, duration_min,
+                      services: services.join(", "),
                       amount: amount > 0 ? `$${amount.toFixed(2)}` : "—",
-                      notes: `RESCHEDULED from ${existing.date} ${existing.time}. ${notes || ""}` },
+                      notes: `RESCHEDULED. ${notes || ""}` },
             }),
           }).catch(() => {});
         }
 
-        return {
-          success: true,
-          old_date: existing.date,
-          old_time12: fmt12(existing.time),
-          new_date,
-          time12: fmt12(new_time),
-          end12: fmt12(addMinutesToTime(new_time, resolvedDuration)),
-          duration_min: resolvedDuration,
-          services: resolvedServicesArr,
-          amount: amount > 0 ? `$${amount.toFixed(2)}` : null,
-        };
+        return { success: true, new_date, time12: fmt12(new_time),
+                 end12: fmt12(addMinutesToTime(new_time, duration_min)),
+                 duration_min, services,
+                 amount: amount > 0 ? `$${amount.toFixed(2)}` : null };
       }
 
       case "toggle_reminder": {
@@ -853,12 +795,9 @@ function trimToolResult(toolName, result) {
                services: result.services, error: result.error };
 
     case "reschedule_appointment":
-      return { success: result.success, old_date: result.old_date, old_time12: result.old_time12,
-               new_date: result.new_date, time12: result.time12, end12: result.end12,
-               duration_min: result.duration_min, services: result.services, amount: result.amount,
-               within_cutoff: result.within_cutoff, slot_taken: result.slot_taken,
-               slot_unavailable: result.slot_unavailable, message: result.message,
-               reason: result.reason, error: result.error };
+      return { success: result.success, new_date: result.new_date, time12: result.time12,
+               end12: result.end12, duration_min: result.duration_min, services: result.services,
+               amount: result.amount, within_cutoff: result.within_cutoff, error: result.error };
 
     case "toggle_reminder":
       return { success: result.success, reminder_enabled: result.reminder_enabled, error: result.error };
