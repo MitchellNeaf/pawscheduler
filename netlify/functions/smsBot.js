@@ -66,7 +66,8 @@ function buildTimeSlots(startHour = 6, endHour = 20) {
 }
 
 // Module-level fallback used before groomer hours are known
-const TIME_SLOTS = buildTimeSlots(6, 20);
+// Note: slot grids are built dynamically per groomer inside getAvailabilityForDate
+// using the groomer's actual working hours — no hardcoded time range here.
 
 /* ─────────────────────────────────────────
    SEND SMS
