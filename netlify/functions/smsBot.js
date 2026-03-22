@@ -340,7 +340,7 @@ const tools = [
   },
   {
     name: "get_available_slots",
-    description: "Get available appointment time slots for a specific date. Use pet_slot_weight as the total combined slot weight needed. For two pets at the same time, pass the sum of both pets' slot weights.",
+    description: "Get available appointment time slots for a specific date. Use pet_slot_weight as the total combined slot weight needed. For two pets at the same time, pass the sum of both pets' slot weights. If the client mentioned a time preference (e.g. 'afternoon', 'morning', 'around 3'), pass preferred_time in HH:MM 24hr format — slots will be sorted by proximity to that time.",
     input_schema: {
       type: "object",
       properties: {
@@ -348,6 +348,7 @@ const tools = [
         duration_min:    { type: "number", description: "Appointment duration in minutes (15, 30, 45, 60, 75, 90, 120)" },
         groomer_id:      { type: "string", description: "The groomer's UUID" },
         pet_slot_weight: { type: "number", description: "Total slot weight needed. For one pet use that pet's slot weight. For multiple pets together, use the combined slot weight." },
+        preferred_time:  { type: "string", description: "Optional. Preferred time in HH:MM 24hr format. Map 'morning' → '09:00', 'afternoon' → '14:00', 'evening' → '17:00', or use the exact time the client mentioned. Slots closest to this time are shown first." },
       },
       required: ["date", "duration_min", "groomer_id"],
     },
@@ -528,8 +529,20 @@ async function executeTool(name, input) {
       }
 
       case "get_available_slots": {
-        const { date, duration_min, groomer_id, pet_slot_weight = 1 } = input;
-        return await getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot_weight });
+        const { date, duration_min, groomer_id, pet_slot_weight = 1, preferred_time } = input;
+        const result = await getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot_weight });
+
+        if (result.available && preferred_time && result.slots?.length) {
+          const [ph, pm] = preferred_time.split(":").map(Number);
+          const prefMins = (ph || 0) * 60 + (pm || 0);
+          result.slots.sort((a, b) => {
+            const [ah, am] = a.time24.split(":").map(Number);
+            const [bh, bm] = b.time24.split(":").map(Number);
+            return Math.abs(ah * 60 + am - prefMins) - Math.abs(bh * 60 + bm - prefMins);
+          });
+        }
+
+        return result;
       }
 
       case "get_next_available_days": {
@@ -977,6 +990,15 @@ BOOKING FLOW:
 9. When offering times, show the range (e.g. 3:00–4:00 PM). Show slots closest to what the client asked for.
 10. Only after a valid slot exists should you confirm the exact time, duration, and time range before booking.
 11. For one pet call book_appointment. For multiple pets call book_multi_appointment.
+12. After a successful booking, always end your confirmation with: "Want me to book you again in 4 weeks?" — this gives the client an easy way to set up their next appointment without starting over.
+
+PREFERRED TIME BIAS:
+When the client mentions a time preference, always pass preferred_time to get_available_slots:
+- "morning" → "09:00"
+- "afternoon" → "14:00"  
+- "evening" → "17:00"
+- Specific time like "around 3" or "3pm" → "15:00"
+This sorts available slots closest to what they asked for so you show relevant times first.
 
 RESCHEDULING:
 - Use get_upcoming_appointments to find the appointment, confirm new date/time with the client, then call reschedule_appointment.
@@ -996,6 +1018,8 @@ SERVICES: Bath, Full Groom, Nails, Teeth, Deshed, Anal Glands, Puppy Trim, Other
 DURATIONS: Full Groom=60min, Bath=30min, Nails=15min, Teeth=15min, Deshed=60min, Anal Glands=15min, Puppy Trim=60min, Other=30min. Multiple services add up, max 90min.
 
 CANCELLATION: Always call get_upcoming_appointments first to get real appointment IDs. Never invent or guess appointment_id values — only use IDs returned by get_upcoming_appointments. Confirm with client before cancelling, then call cancel_appointment once per appointment using the exact UUID from the tool result. Within 24hrs → tell them to call directly.
+
+EARLIEST AVAILABLE: If the client says "earliest", "soonest", "first available", or similar — skip get_available_slots and go straight to get_next_available_days starting from today. Offer the first 1-2 results.
 
 STYLE: Short SMS replies, max 3 sentences, friendly. If client not found, tell them to contact their groomer.`;
 }
