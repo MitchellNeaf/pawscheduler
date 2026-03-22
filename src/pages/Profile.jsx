@@ -651,7 +651,7 @@ function SmsBotSection({ userId }) {
   const [enabled, setEnabled] = useState(null);
   const [botNumber, setBotNumber] = useState("");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -667,25 +667,25 @@ function SmsBotSection({ userId }) {
       });
   }, [userId]);
 
-  const handleSave = async () => {
-    setSaving(true);
+  const handleToggle = async () => {
+    setToggling(true);
+    const newVal = !enabled;
     await supabase
       .from("groomers")
-      .update({ sms_bot_number: botNumber.trim() || null })
+      .update({ sms_bot_enabled: newVal })
       .eq("id", userId);
-    setSaving(false);
-    alert("Saved!");
+    setEnabled(newVal);
+    setToggling(false);
   };
 
   if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
 
-  if (!enabled) {
+  // Not provisioned — no number assigned yet
+  if (!botNumber) {
     return (
       <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-5 text-center">
         <div className="text-2xl mb-2">💬</div>
-        <div className="font-semibold text-gray-800 mb-1">
-          SMS AI Scheduler
-        </div>
+        <div className="font-semibold text-gray-800 mb-1">SMS AI Scheduler</div>
         <p className="text-sm text-gray-500 mb-3">
           This is a premium add-on ($10/mo). Contact{" "}
           <a href="mailto:pawscheduler@gmail.com" className="text-emerald-600 underline">
@@ -701,45 +701,62 @@ function SmsBotSection({ userId }) {
     );
   }
 
+  // Number is provisioned — show toggle + read-only number
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200
-        rounded-xl text-sm text-emerald-800 font-semibold">
-        ✅ SMS AI Scheduler is active on your account
+
+      {/* Status + Toggle */}
+      <div className="flex items-center justify-between p-4 bg-white border rounded-xl">
+        <div>
+          <div className="font-semibold text-gray-800 text-sm">SMS AI Scheduler</div>
+          <div className={`text-xs mt-0.5 font-medium ${enabled ? "text-emerald-600" : "text-gray-400"}`}>
+            {enabled ? "✅ Active — clients can text to book" : "⏸ Paused — bot will not respond"}
+          </div>
+        </div>
+        <button
+          onClick={handleToggle}
+          disabled={toggling}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors
+            focus:outline-none ${enabled ? "bg-emerald-500" : "bg-gray-300"}
+            ${toggling ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform
+              ${enabled ? "translate-x-6" : "translate-x-1"}`}
+          />
+        </button>
       </div>
 
+      {/* Read-only bot number */}
       <div>
-        <label className="block text-sm font-medium mb-1">
+        <label className="block text-sm font-medium mb-1 text-gray-700">
           Your Scheduling Phone Number
         </label>
-        <input
-          value={botNumber}
-          onChange={(e) => setBotNumber(e.target.value)}
-          placeholder="+18005551234"
-          className="border rounded w-full p-2"
-        />
+        <div className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-gray-50">
+          <span className="text-sm font-mono text-gray-800 flex-1">{botNumber}</span>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(botNumber);
+            }}
+            className="text-xs text-emerald-600 font-semibold hover:underline shrink-0"
+          >
+            Copy
+          </button>
+        </div>
         <p className="text-xs text-gray-500 mt-1">
           Share this number with clients so they can text to book appointments.
         </p>
       </div>
 
-      {botNumber && (
-        <div className="rounded-xl bg-gray-50 border p-4 text-sm text-gray-700">
-          <div className="font-semibold mb-2">Share this with clients:</div>
-          <p className="italic">
-            "Text <strong>{botNumber}</strong> to book, reschedule, or cancel
-            your grooming appointment anytime!"
-          </p>
-        </div>
-      )}
+      {/* Share text */}
+      <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4 text-sm text-gray-700">
+        <div className="font-semibold mb-2 text-emerald-800">Share this with clients:</div>
+        <p className="italic text-gray-600">
+          "Text <strong className="text-gray-800">{botNumber}</strong> to book, reschedule, or cancel
+          your grooming appointment anytime — day or night! 🐾"
+        </p>
+      </div>
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="btn-primary"
-      >
-        {saving ? "Saving…" : "Save Number"}
-      </button>
     </div>
   );
 }
