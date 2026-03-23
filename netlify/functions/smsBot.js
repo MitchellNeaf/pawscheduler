@@ -189,9 +189,10 @@ const DEFAULT_PRICING = {
 ───────────────────────────────────────── */
 async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot_weight = 1, exclude_appointment_id = null }) {
   const { data: groomer, error: groomerErr } = await supabase
-    .from("groomers").select("max_parallel").eq("id", groomer_id).single();
+    .from("groomers").select("max_parallel, max_appts_per_day").eq("id", groomer_id).single();
   if (groomerErr) return { available: false, date, reason: `Could not load groomer: ${groomerErr.message}` };
-  const maxParallel = groomer?.max_parallel || 1;
+  const maxParallel    = groomer?.max_parallel || 1;
+  const maxApptsPerDay = groomer?.max_appts_per_day || null; // null = no limit
 
   const { data: vacs, error: vacErr } = await supabase
     .from("vacation_days").select("date, start_time, end_time")
@@ -244,6 +245,20 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     .from("appointments").select("id, time, duration_min, slot_weight, no_show")
     .eq("groomer_id", groomer_id).eq("date", date);
   if (apptErr) return { available: false, date, reason: `Could not load appointments: ${apptErr.message}` };
+
+  // Check daily appointment cap (excludes no-shows and the appt being rescheduled)
+  if (maxApptsPerDay) {
+    const activeCount = (appts || []).filter(
+      (a) => a.no_show !== true && a.id !== exclude_appointment_id
+    ).length;
+    if (activeCount >= maxApptsPerDay) {
+      return {
+        available: false, date,
+        reason: `Fully booked for the day (max ${maxApptsPerDay} appointments).`,
+        unavailable_type: "full",
+      };
+    }
+  }
 
   const loadForSlot = (slot) => {
     let total = 0;
@@ -562,7 +577,8 @@ async function executeTool(name, input) {
           .from("appointments")
           .insert({ pet_id, groomer_id, date, time, duration_min, services, slot_weight: sz,
                     amount: amount > 0 ? amount : null, notes: notes || "",
-                    confirmed: false, no_show: false, paid: false, reminder_enabled: true })
+                    confirmed: false, no_show: false, paid: false, reminder_enabled: true,
+                    source: "sms_bot" })
           .select("id").single();
 
         if (error) return { success: false, error: error.message };
@@ -606,7 +622,8 @@ async function executeTool(name, input) {
           const amount = computeAmountForServices(pricing, services, sz);
           return { pet_id: pet.id, groomer_id, date, time, duration_min, services, slot_weight: sz,
                    amount: amount > 0 ? amount : null, notes: notes || "",
-                   confirmed: false, no_show: false, paid: false, reminder_enabled: true };
+                   confirmed: false, no_show: false, paid: false, reminder_enabled: true,
+                   source: "sms_bot" };
         });
 
         const { data: inserted, error: insertErr } = await supabase.from("appointments").insert(rows).select("id");

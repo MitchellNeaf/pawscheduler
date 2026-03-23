@@ -1085,7 +1085,7 @@ export default function Schedule() {
           .from("appointments")
           .select(`
             id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-            services, notes, confirmed, no_show, paid, amount, reminder_enabled,
+            services, notes, confirmed, no_show, paid, amount, reminder_enabled, source,
             pets (
               id, name, tags, client_id,
               clients (
@@ -1721,6 +1721,15 @@ export default function Schedule() {
                                     <span className="text-[9px] font-bold text-amber-600 uppercase tracking-wide">Unconfirmed</span>
                                   )}
                                 </div>
+
+                                {/* SMS bot badge */}
+                                {appt.source === "sms_bot" && (
+                                  <div className="mt-0.5">
+                                    <span className="text-[9px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 leading-none">
+                                      📱 SMS
+                                    </span>
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>

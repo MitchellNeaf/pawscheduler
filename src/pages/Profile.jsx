@@ -57,6 +57,7 @@ export default function Profile() {
   const [logoUrl, setLogoUrl] = useState(null);
   const [user, setUser] = useState(null);
   const [maxParallel, setMaxParallel] = useState(1);
+  const [maxApptsPerDay, setMaxApptsPerDay] = useState(null); // null = no limit
 
   // ✅ Timezone
   const [timeZone, setTimeZone] = useState("America/New_York");
@@ -91,6 +92,7 @@ export default function Profile() {
         setSlug(data.slug || "");
         setLogoUrl(data.logo_url || null);
         setMaxParallel(data.max_parallel ?? 1);
+        setMaxApptsPerDay(data.max_appts_per_day ?? null);
 
         // Load service pricing — merge with defaults so new services always have a price
         if (data.service_pricing) {
@@ -251,7 +253,8 @@ export default function Profile() {
         full_name: fullName,
         slug: cleanSlug,
         max_parallel: maxParallel,
-        time_zone: timeZone, // ✅ Save timezone
+        max_appts_per_day: maxApptsPerDay || null,
+        time_zone: timeZone,
       })
       .eq("id", user.id);
 
@@ -403,6 +406,27 @@ export default function Profile() {
         </select>
         <span className="text-sm text-gray-600">
           (Total pets you can groom simultaneously)
+        </span>
+      </div>
+
+      <label className="block mt-4 font-medium">Max Appointments Per Day</label>
+      <div className="flex items-center gap-3">
+        <select
+          value={maxApptsPerDay ?? ""}
+          onChange={(e) =>
+            setMaxApptsPerDay(e.target.value === "" ? null : Number(e.target.value))
+          }
+          className="border rounded p-2 w-32"
+        >
+          <option value="">No limit</option>
+          {[2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20].map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </select>
+        <span className="text-sm text-gray-600">
+          (SMS bot won't book if this limit is reached)
         </span>
       </div>
 
@@ -651,7 +675,7 @@ function SmsBotSection({ userId }) {
   const [enabled, setEnabled] = useState(null);
   const [botNumber, setBotNumber] = useState("");
   const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -667,25 +691,25 @@ function SmsBotSection({ userId }) {
       });
   }, [userId]);
 
-  const handleToggle = async () => {
-    setToggling(true);
-    const newVal = !enabled;
+  const handleSave = async () => {
+    setSaving(true);
     await supabase
       .from("groomers")
-      .update({ sms_bot_enabled: newVal })
+      .update({ sms_bot_number: botNumber.trim() || null })
       .eq("id", userId);
-    setEnabled(newVal);
-    setToggling(false);
+    setSaving(false);
+    alert("Saved!");
   };
 
   if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
 
-  // Not provisioned — no number assigned yet
-  if (!botNumber) {
+  if (!enabled) {
     return (
       <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-5 text-center">
         <div className="text-2xl mb-2">💬</div>
-        <div className="font-semibold text-gray-800 mb-1">SMS AI Scheduler</div>
+        <div className="font-semibold text-gray-800 mb-1">
+          SMS AI Scheduler
+        </div>
         <p className="text-sm text-gray-500 mb-3">
           This is a premium add-on ($10/mo). Contact{" "}
           <a href="mailto:pawscheduler@gmail.com" className="text-emerald-600 underline">
@@ -701,62 +725,45 @@ function SmsBotSection({ userId }) {
     );
   }
 
-  // Number is provisioned — show toggle + read-only number
   return (
     <div className="space-y-4">
-
-      {/* Status + Toggle */}
-      <div className="flex items-center justify-between p-4 bg-white border rounded-xl">
-        <div>
-          <div className="font-semibold text-gray-800 text-sm">SMS AI Scheduler</div>
-          <div className={`text-xs mt-0.5 font-medium ${enabled ? "text-emerald-600" : "text-gray-400"}`}>
-            {enabled ? "✅ Active — clients can text to book" : "⏸ Paused — bot will not respond"}
-          </div>
-        </div>
-        <button
-          onClick={handleToggle}
-          disabled={toggling}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-            focus:outline-none ${enabled ? "bg-emerald-500" : "bg-gray-300"}
-            ${toggling ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-        >
-          <span
-            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform
-              ${enabled ? "translate-x-6" : "translate-x-1"}`}
-          />
-        </button>
+      <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200
+        rounded-xl text-sm text-emerald-800 font-semibold">
+        ✅ SMS AI Scheduler is active on your account
       </div>
 
-      {/* Read-only bot number */}
       <div>
-        <label className="block text-sm font-medium mb-1 text-gray-700">
+        <label className="block text-sm font-medium mb-1">
           Your Scheduling Phone Number
         </label>
-        <div className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-gray-50">
-          <span className="text-sm font-mono text-gray-800 flex-1">{botNumber}</span>
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(botNumber);
-            }}
-            className="text-xs text-emerald-600 font-semibold hover:underline shrink-0"
-          >
-            Copy
-          </button>
-        </div>
+        <input
+          value={botNumber}
+          onChange={(e) => setBotNumber(e.target.value)}
+          placeholder="+18005551234"
+          className="border rounded w-full p-2"
+        />
         <p className="text-xs text-gray-500 mt-1">
           Share this number with clients so they can text to book appointments.
         </p>
       </div>
 
-      {/* Share text */}
-      <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4 text-sm text-gray-700">
-        <div className="font-semibold mb-2 text-emerald-800">Share this with clients:</div>
-        <p className="italic text-gray-600">
-          "Text <strong className="text-gray-800">{botNumber}</strong> to book, reschedule, or cancel
-          your grooming appointment anytime — day or night! 🐾"
-        </p>
-      </div>
+      {botNumber && (
+        <div className="rounded-xl bg-gray-50 border p-4 text-sm text-gray-700">
+          <div className="font-semibold mb-2">Share this with clients:</div>
+          <p className="italic">
+            "Text <strong>{botNumber}</strong> to book, reschedule, or cancel
+            your grooming appointment anytime!"
+          </p>
+        </div>
+      )}
 
+      <button
+        onClick={handleSave}
+        disabled={saving}
+        className="btn-primary"
+      >
+        {saving ? "Saving…" : "Save Number"}
+      </button>
     </div>
   );
 }
