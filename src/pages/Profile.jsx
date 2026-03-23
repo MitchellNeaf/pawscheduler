@@ -318,6 +318,9 @@ export default function Profile() {
     setPricingSaving(false);
   };
 
+  // ---------------- TABS ----------------
+  const [activeTab, setActiveTab] = useState("profile");
+
   // ---------------- BILLING PORTAL ----------------
   const handleManageBilling = async () => {
     const {
@@ -341,341 +344,248 @@ export default function Profile() {
 
   if (loading || hoursLoading) return <Loader />;
 
+  const TABS = [
+    { id: "profile",  label: "👤 Profile" },
+    { id: "schedule", label: "🗓 Schedule" },
+    { id: "pricing",  label: "💲 Pricing" },
+    { id: "smsbot",   label: "💬 SMS Bot" },
+  ];
+
   return (
-    <main className="max-w-lg mx-auto p-6 space-y-10">
-      <h1 className="text-2xl font-bold">Your Profile</h1>
+    <main className="max-w-lg mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-3">Settings</h1>
 
-      {/* TRIAL COUNTDOWN */}
       <TrialBanner userId={user?.id} />
-
-      {/* SUBSCRIPTION STATUS BOX */}
       <SubscriptionStatus userId={user?.id} onManageBilling={handleManageBilling} />
 
-      {logoUrl ? (
-        <img
-          src={logoUrl}
-          alt="Logo"
-          className="w-32 h-32 object-cover rounded-full border mx-auto"
-        />
-      ) : (
-        <div className="w-32 h-32 bg-gray-200 rounded-full mx-auto flex items-center justify-center text-gray-600">
-          No Logo
+      {/* TAB BAR */}
+      <div className="flex gap-1 mt-4 mb-6 overflow-x-auto pb-1 border-b border-gray-200">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setActiveTab(tab.id)}
+            className={`whitespace-nowrap px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors
+              ${activeTab === tab.id
+                ? "bg-white border border-b-white border-gray-200 text-emerald-700 -mb-px"
+                : "text-gray-500 hover:text-gray-800"
+              }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── PROFILE TAB ── */}
+      {activeTab === "profile" && (
+        <div className="space-y-4">
+          <div className="flex flex-col items-center gap-3">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Logo" className="w-24 h-24 object-cover rounded-full border" />
+            ) : (
+              <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 text-sm">
+                No Logo
+              </div>
+            )}
+            <label className="cursor-pointer">
+              <span className="border rounded px-3 py-1.5 bg-white hover:bg-gray-50 text-sm font-medium">
+                Upload Logo
+              </span>
+              <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
+            </label>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Business Name</label>
+            <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="border rounded w-full p-2" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Public Booking Slug</label>
+            <input
+              value={slug}
+              onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, ""))}
+              className="border rounded w-full p-2"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Time Zone</label>
+            <select value={timeZone} onChange={(e) => setTimeZone(e.target.value)} className="border rounded w-full p-2">
+              {TIMEZONE_OPTIONS.map((tz) => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Controls booking times and "tomorrow" SMS reminders.</p>
+          </div>
+
+          <button onClick={saveProfile} disabled={saving} className="btn-primary w-full mt-2">
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
         </div>
       )}
 
-      <label className="block text-sm font-medium mt-4">Upload Logo</label>
-      <input type="file" accept="image/*" onChange={handleLogoChange} />
-
-      <label className="block mt-4 font-medium">Business Name</label>
-      <input
-        value={fullName}
-        onChange={(e) => setFullName(e.target.value)}
-        className="border rounded w-full p-2"
-      />
-
-      {/* ✅ TIME ZONE DROPDOWN */}
-      <label className="block mt-4 font-medium">Time Zone</label>
-      <select
-        value={timeZone}
-        onChange={(e) => setTimeZone(e.target.value)}
-        className="border rounded w-full p-2"
-      >
-        {TIMEZONE_OPTIONS.map((tz) => (
-          <option key={tz.value} value={tz.value}>
-            {tz.label}
-          </option>
-        ))}
-      </select>
-      <div className="text-xs text-gray-500 mt-1">
-        This controls your booking times and “tomorrow” SMS reminders.
-      </div>
-
-      <label className="block mt-4 font-medium">Public Booking Slug</label>
-      <label className="block mt-4 font-medium">Max Dogs at Same Time</label>
-      <div className="flex items-center gap-3">
-        <select
-          value={maxParallel}
-          onChange={(e) => setMaxParallel(Number(e.target.value))}
-          className="border rounded p-2 w-32"
-        >
-          {[1, 2, 3, 4, 5].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-        <span className="text-sm text-gray-600">
-          (Total pets you can groom simultaneously)
-        </span>
-      </div>
-
-      <label className="block mt-4 font-medium">Max Appointments Per Day</label>
-      <div className="flex items-center gap-3">
-        <select
-          value={maxApptsPerDay ?? ""}
-          onChange={(e) =>
-            setMaxApptsPerDay(e.target.value === "" ? null : Number(e.target.value))
-          }
-          className="border rounded p-2 w-32"
-        >
-          <option value="">No limit</option>
-          {[2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20].map((n) => (
-            <option key={n} value={n}>
-              {n}
-            </option>
-          ))}
-        </select>
-        <span className="text-sm text-gray-600">
-          (SMS bot won't book if this limit is reached)
-        </span>
-      </div>
-
-      <input
-        value={slug}
-        onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, ""))}
-        className="border rounded w-full p-2"
-      />
-
-      <button onClick={saveProfile} disabled={saving} className="btn-primary w-full mt-4">
-        {saving ? "Saving…" : "Save Changes"}
-      </button>
-
-      <section className="mt-10 border-t pt-8">
-        <h2 className="text-xl font-bold mb-4">Working Hours</h2>
-
-        {Object.keys(hours).map((key) => {
-          const dayIndex = Number(key);
-
-          return (
-            <div key={dayIndex} className="border p-4 rounded mb-4 bg-gray-50">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">{WEEKDAYS[dayIndex]}</h3>
-
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={hours[dayIndex].enabled}
-                    onChange={(e) =>
-                      setHours((prev) => ({
-                        ...prev,
-                        [dayIndex]: {
-                          ...prev[dayIndex],
-                          enabled: e.target.checked,
-                        },
-                      }))
-                    }
-                  />
-                  <span className="text-sm">Open</span>
-                </label>
+      {/* ── SCHEDULE TAB ── */}
+      {activeTab === "schedule" && (
+        <div>
+          <h2 className="text-lg font-bold mb-4">Working Hours</h2>
+          {Object.keys(hours).map((key) => {
+            const dayIndex = Number(key);
+            return (
+              <div key={dayIndex} className="border p-4 rounded mb-4 bg-gray-50">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold">{WEEKDAYS[dayIndex]}</h3>
+                  <label className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      checked={hours[dayIndex].enabled}
+                      onChange={(e) => setHours((prev) => ({ ...prev, [dayIndex]: { ...prev[dayIndex], enabled: e.target.checked } }))}
+                    />
+                    <span className="text-sm">Open</span>
+                  </label>
+                </div>
+                {hours[dayIndex].enabled && (
+                  <>
+                    <div className="grid grid-cols-2 gap-4 mt-3">
+                      <div>
+                        <label className="text-sm">Start</label>
+                        <input type="time" value={hours[dayIndex].start}
+                          onChange={(e) => setHours((prev) => ({ ...prev, [dayIndex]: { ...prev[dayIndex], start: e.target.value } }))}
+                          className="border rounded w-full p-2" />
+                      </div>
+                      <div>
+                        <label className="text-sm">End</label>
+                        <input type="time" value={hours[dayIndex].end}
+                          onChange={(e) => setHours((prev) => ({ ...prev, [dayIndex]: { ...prev[dayIndex], end: e.target.value } }))}
+                          className="border rounded w-full p-2" />
+                      </div>
+                    </div>
+                    <div className="mt-4">
+                      <h4 className="text-sm font-medium">Breaks</h4>
+                      {breaks[dayIndex].map((b, idx) => (
+                        <div key={idx} className="grid grid-cols-3 gap-3 mt-2 items-center">
+                          <input type="time" value={b.start}
+                            onChange={(e) => setBreaks((prev) => { const c = { ...prev }; c[dayIndex][idx].start = e.target.value; return c; })}
+                            className="border rounded p-2" />
+                          <input type="time" value={b.end}
+                            onChange={(e) => setBreaks((prev) => { const c = { ...prev }; c[dayIndex][idx].end = e.target.value; return c; })}
+                            className="border rounded p-2" />
+                          <button className="text-red-600 text-sm"
+                            onClick={() => setBreaks((prev) => { const c = { ...prev }; c[dayIndex] = c[dayIndex].filter((_, i) => i !== idx); return c; })}>
+                            Delete
+                          </button>
+                        </div>
+                      ))}
+                      <button className="mt-2 text-blue-600 text-sm"
+                        onClick={() => setBreaks((prev) => ({ ...prev, [dayIndex]: [...prev[dayIndex], { start: "12:00", end: "12:30" }] }))}>
+                        ➕ Add Break
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
+            );
+          })}
+          <button onClick={saveSchedule} disabled={hoursSaving} className="btn-primary w-full mt-2">
+            {hoursSaving ? "Saving Schedule…" : "Save Schedule"}
+          </button>
+          <div className="mt-6"><VacationSection userId={user.id} /></div>
+        </div>
+      )}
 
-              {hours[dayIndex].enabled && (
-                <>
-                  <div className="grid grid-cols-2 gap-4 mt-3">
-                    <div>
-                      <label className="text-sm">Start</label>
-                      <input
-                        type="time"
-                        value={hours[dayIndex].start}
-                        onChange={(e) =>
-                          setHours((prev) => ({
-                            ...prev,
-                            [dayIndex]: {
-                              ...prev[dayIndex],
-                              start: e.target.value,
-                            },
-                          }))
-                        }
-                        className="border rounded w-full p-2"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-sm">End</label>
-                      <input
-                        type="time"
-                        value={hours[dayIndex].end}
-                        onChange={(e) =>
-                          setHours((prev) => ({
-                            ...prev,
-                            [dayIndex]: {
-                              ...prev[dayIndex],
-                              end: e.target.value,
-                            },
-                          }))
-                        }
-                        className="border rounded w-full p-2"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mt-4">
-                    <h4 className="text-sm font-medium">Breaks</h4>
-
-                    {breaks[dayIndex].map((b, idx) => (
-                      <div key={idx} className="grid grid-cols-3 gap-3 mt-2 items-center">
-                        <input
-                          type="time"
-                          value={b.start}
-                          onChange={(e) =>
-                            setBreaks((prev) => {
-                              const copy = { ...prev };
-                              copy[dayIndex][idx].start = e.target.value;
-                              return copy;
-                            })
-                          }
-                          className="border rounded p-2"
-                        />
-
-                        <input
-                          type="time"
-                          value={b.end}
-                          onChange={(e) =>
-                            setBreaks((prev) => {
-                              const copy = { ...prev };
-                              copy[dayIndex][idx].end = e.target.value;
-                              return copy;
-                            })
-                          }
-                          className="border rounded p-2"
-                        />
-
-                        <button
-                          className="text-red-600"
-                          onClick={() =>
-                            setBreaks((prev) => {
-                              const copy = { ...prev };
-                              copy[dayIndex] = copy[dayIndex].filter((_, i) => i !== idx);
-                              return copy;
-                            })
-                          }
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    ))}
-
-                    <button
-                      className="mt-2 text-blue-600"
-                      onClick={() =>
-                        setBreaks((prev) => ({
-                          ...prev,
-                          [dayIndex]: [...prev[dayIndex], { start: "12:00", end: "12:30" }],
-                        }))
-                      }
-                    >
-                      ➕ Add Break
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-
-        <button
-          onClick={saveSchedule}
-          disabled={hoursSaving}
-          className="btn-primary w-full mt-6"
-        >
-          {hoursSaving ? "Saving Schedule…" : "Save Schedule"}
-        </button>
-
-        <VacationSection userId={user.id} />
-      </section>
-
-      {/* ===== SERVICE PRICING ===== */}
-      <section className="border-t pt-8">
-        <h2 className="text-xl font-bold mb-1">Service Pricing</h2>
-        <p className="text-sm text-gray-500 mb-5">
-          Set your default prices by service and dog size. These auto-fill the
-          amount when you create an appointment.
-        </p>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr>
-                <th className="text-left py-2 pr-4 font-semibold text-gray-700 w-32">
-                  Service
-                </th>
-                {[1, 2, 3].map((size) => (
-                  <th key={size} className="text-center py-2 px-2 font-semibold text-gray-700">
-                    {SIZE_LABELS[size]}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {SERVICE_OPTIONS.map((svc) => (
-                <tr key={svc} className="border-t border-gray-100">
-                  <td className="py-2 pr-4 font-medium text-gray-800">{svc}</td>
+      {/* ── PRICING TAB ── */}
+      {activeTab === "pricing" && (
+        <div>
+          <h2 className="text-lg font-bold mb-1">Service Pricing</h2>
+          <p className="text-sm text-gray-500 mb-5">
+            Set your default prices by service and dog size. These auto-fill when you create an appointment.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr>
+                  <th className="text-left py-2 pr-4 font-semibold text-gray-700 w-32">Service</th>
                   {[1, 2, 3].map((size) => (
-                    <td key={size} className="py-2 px-2">
-                      <div className="relative">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
-                          $
-                        </span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={pricing[svc]?.[size] ?? 0}
-                          onChange={(e) =>
-                            setPricing((prev) => ({
-                              ...prev,
-                              [svc]: {
-                                ...prev[svc],
-                                [size]: Number(e.target.value) || 0,
-                              },
-                            }))
-                          }
-                          className="border rounded w-full pl-6 pr-2 py-1 text-center"
-                          style={{ maxWidth: 80 }}
-                        />
-                      </div>
-                    </td>
+                    <th key={size} className="text-center py-2 px-2 font-semibold text-gray-700">{SIZE_LABELS[size]}</th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {SERVICE_OPTIONS.map((svc) => (
+                  <tr key={svc} className="border-t border-gray-100">
+                    <td className="py-2 pr-4 font-medium text-gray-800">{svc}</td>
+                    {[1, 2, 3].map((size) => (
+                      <td key={size} className="py-2 px-2">
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                          <input type="number" min="0" step="1" value={pricing[svc]?.[size] ?? 0}
+                            onChange={(e) => setPricing((prev) => ({ ...prev, [svc]: { ...prev[svc], [size]: Number(e.target.value) || 0 } }))}
+                            className="border rounded w-full pl-6 pr-2 py-1 text-center" style={{ maxWidth: 80 }} />
+                        </div>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-gray-400 mt-3">
+            Multiple services are summed automatically. You can always override the amount per appointment.
+          </p>
+          <button onClick={savePricing} disabled={pricingSaving} className="btn-primary w-full mt-5">
+            {pricingSaving ? "Saving Pricing…" : "Save Pricing"}
+          </button>
         </div>
+      )}
 
-        <p className="text-xs text-gray-400 mt-3">
-          When multiple services are selected on an appointment, prices are summed automatically.
-          You can always override the amount on any individual appointment.
-        </p>
+      {/* ── SMS BOT TAB ── */}
+      {activeTab === "smsbot" && (
+        <div>
+          <h2 className="text-lg font-bold mb-1">SMS AI Scheduler</h2>
+          <p className="text-sm text-gray-500 mb-5">
+            Let clients book, view, and cancel appointments by texting your scheduling number. Powered by AI — no app download required.
+          </p>
 
-        <button
-          onClick={savePricing}
-          disabled={pricingSaving}
-          className="btn-primary w-full mt-5"
-        >
-          {pricingSaving ? "Saving Pricing…" : "Save Pricing"}
-        </button>
-      </section>
+          <div className="bg-gray-50 border rounded-xl p-4 space-y-4 mb-5">
+            <h3 className="text-sm font-semibold text-gray-700">Booking Limits</h3>
+            <div>
+              <label className="block text-sm font-medium mb-1">Max Dogs at Same Time</label>
+              <div className="flex items-center gap-3">
+                <select value={maxParallel} onChange={(e) => setMaxParallel(Number(e.target.value))} className="border rounded p-2 w-28 bg-white">
+                  {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <span className="text-sm text-gray-500">pets simultaneously</span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Max Appointments Per Day</label>
+              <div className="flex items-center gap-3">
+                <select value={maxApptsPerDay ?? ""} onChange={(e) => setMaxApptsPerDay(e.target.value === "" ? null : Number(e.target.value))} className="border rounded p-2 w-28 bg-white">
+                  <option value="">No limit</option>
+                  {[2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <span className="text-sm text-gray-500">SMS bot won't book beyond this</span>
+              </div>
+            </div>
+            <button onClick={saveProfile} disabled={saving} className="btn-primary w-full">
+              {saving ? "Saving…" : "Save Limits"}
+            </button>
+          </div>
 
-      {/* ===== SMS AI SCHEDULER ===== */}
-      <section className="border-t pt-8">
-        <h2 className="text-xl font-bold mb-1">SMS AI Scheduler</h2>
-        <p className="text-sm text-gray-500 mb-5">
-          Let clients book, view, and cancel appointments by texting your
-          scheduling number. Powered by AI — no app download required.
-        </p>
+          <SmsBotSection userId={user?.id} />
+        </div>
+      )}
 
-        <SmsBotSection userId={user?.id} />
-      </section>
     </main>
   );
 }
 
 /* ---------------- SMS BOT SECTION ---------------- */
 function SmsBotSection({ userId }) {
-  const [enabled, setEnabled] = useState(null);
   const [botNumber, setBotNumber] = useState("");
+  const [enabled, setEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const [toggling, setToggling] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -691,25 +601,32 @@ function SmsBotSection({ userId }) {
       });
   }, [userId]);
 
-  const handleSave = async () => {
-    setSaving(true);
-    await supabase
+  const handleToggle = async () => {
+    if (toggling) return;
+    setToggling(true);
+    const newVal = !enabled;
+    // Optimistic update — feels instant on mobile
+    setEnabled(newVal);
+    const { error } = await supabase
       .from("groomers")
-      .update({ sms_bot_number: botNumber.trim() || null })
+      .update({ sms_bot_enabled: newVal })
       .eq("id", userId);
-    setSaving(false);
-    alert("Saved!");
+    if (error) {
+      // Revert on failure
+      setEnabled(!newVal);
+      alert("Failed to save. Please try again.");
+    }
+    setToggling(false);
   };
 
   if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
 
-  if (!enabled) {
+  // Not provisioned — no number assigned yet
+  if (!botNumber) {
     return (
       <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-5 text-center">
         <div className="text-2xl mb-2">💬</div>
-        <div className="font-semibold text-gray-800 mb-1">
-          SMS AI Scheduler
-        </div>
+        <div className="font-semibold text-gray-800 mb-1">SMS AI Scheduler</div>
         <p className="text-sm text-gray-500 mb-3">
           This is a premium add-on ($10/mo). Contact{" "}
           <a href="mailto:pawscheduler@gmail.com" className="text-emerald-600 underline">
@@ -725,45 +642,83 @@ function SmsBotSection({ userId }) {
     );
   }
 
+  // Provisioned — show status + toggle + read-only number
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-200
-        rounded-xl text-sm text-emerald-800 font-semibold">
-        ✅ SMS AI Scheduler is active on your account
+
+      {/* Toggle row — large tap target for mobile */}
+      <div className="flex items-center justify-between p-4 bg-white border rounded-xl">
+        <div>
+          <div className="font-semibold text-gray-800 text-sm">SMS AI Scheduler</div>
+          <div className={`text-xs mt-0.5 font-medium ${enabled ? "text-emerald-600" : "text-gray-400"}`}>
+            {enabled ? "✅ Active — clients can text to book" : "⏸ Paused — bot will not respond"}
+          </div>
+        </div>
+        {/* Native checkbox hidden, large button is the real tap target */}
+        <button
+          type="button"
+          onClick={handleToggle}
+          disabled={toggling}
+          aria-label={enabled ? "Disable SMS bot" : "Enable SMS bot"}
+          style={{
+            width: 52,
+            height: 32,
+            borderRadius: 999,
+            backgroundColor: enabled ? "#10b981" : "#d1d5db",
+            border: "none",
+            padding: 3,
+            cursor: toggling ? "not-allowed" : "pointer",
+            opacity: toggling ? 0.6 : 1,
+            transition: "background-color 0.2s",
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          <span
+            style={{
+              display: "block",
+              width: 26,
+              height: 26,
+              borderRadius: "50%",
+              backgroundColor: "white",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+              transform: enabled ? "translateX(20px)" : "translateX(0px)",
+              transition: "transform 0.2s",
+            }}
+          />
+        </button>
       </div>
 
+      {/* Read-only bot number */}
       <div>
-        <label className="block text-sm font-medium mb-1">
+        <label className="block text-sm font-medium mb-1 text-gray-700">
           Your Scheduling Phone Number
         </label>
-        <input
-          value={botNumber}
-          onChange={(e) => setBotNumber(e.target.value)}
-          placeholder="+18005551234"
-          className="border rounded w-full p-2"
-        />
+        <div className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-gray-50">
+          <span className="text-sm font-mono text-gray-800 flex-1">{botNumber}</span>
+          <button
+            type="button"
+            onClick={() => navigator.clipboard.writeText(botNumber)}
+            className="text-xs text-emerald-600 font-semibold hover:underline shrink-0"
+          >
+            Copy
+          </button>
+        </div>
         <p className="text-xs text-gray-500 mt-1">
           Share this number with clients so they can text to book appointments.
         </p>
       </div>
 
-      {botNumber && (
-        <div className="rounded-xl bg-gray-50 border p-4 text-sm text-gray-700">
-          <div className="font-semibold mb-2">Share this with clients:</div>
-          <p className="italic">
-            "Text <strong>{botNumber}</strong> to book, reschedule, or cancel
-            your grooming appointment anytime!"
-          </p>
-        </div>
-      )}
+      {/* Share text */}
+      <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4 text-sm text-gray-700">
+        <div className="font-semibold mb-2 text-emerald-800">Share this with clients:</div>
+        <p className="italic text-gray-600">
+          "Text <strong className="text-gray-800">{botNumber}</strong> to book, reschedule, or cancel
+          your grooming appointment anytime — day or night! 🐾"
+        </p>
+      </div>
 
-      <button
-        onClick={handleSave}
-        disabled={saving}
-        className="btn-primary"
-      >
-        {saving ? "Saving…" : "Save Number"}
-      </button>
     </div>
   );
 }
