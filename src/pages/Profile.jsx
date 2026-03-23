@@ -345,10 +345,10 @@ export default function Profile() {
   if (loading || hoursLoading) return <Loader />;
 
   const TABS = [
-    { id: "profile",  label: "👤 Profile" },
-    { id: "schedule", label: "🗓 Schedule" },
-    { id: "pricing",  label: "💲 Pricing" },
-    { id: "smsbot",   label: "💬 SMS Bot" },
+    { id: "profile",  emoji: "👤", label: "Profile"  },
+    { id: "schedule", emoji: "🗓", label: "Schedule" },
+    { id: "pricing",  emoji: "💲", label: "Pricing"  },
+    { id: "smsbot",   emoji: "💬", label: "SMS Bot"  },
   ];
 
   return (
@@ -359,19 +359,21 @@ export default function Profile() {
       <SubscriptionStatus userId={user?.id} onManageBilling={handleManageBilling} />
 
       {/* TAB BAR */}
-      <div className="flex gap-1 mt-4 mb-6 overflow-x-auto pb-1 border-b border-gray-200">
+      <div className="flex mt-4 mb-6 border-b border-gray-200">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            className={`whitespace-nowrap px-4 py-2 rounded-t-lg text-sm font-semibold transition-colors
+            style={{ flex: 1 }}
+            className={`py-2.5 text-xs font-semibold transition-colors text-center border-b-2
               ${activeTab === tab.id
-                ? "bg-white border border-b-white border-gray-200 text-emerald-700 -mb-px"
-                : "text-gray-500 hover:text-gray-800"
+                ? "border-emerald-500 text-emerald-700"
+                : "border-transparent text-gray-400 hover:text-gray-600"
               }`}
           >
-            {tab.label}
+            <span className="block text-base leading-none mb-0.5">{tab.emoji}</span>
+            <span className="block">{tab.label}</span>
           </button>
         ))}
       </div>
