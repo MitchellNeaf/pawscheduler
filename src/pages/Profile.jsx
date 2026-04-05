@@ -586,6 +586,7 @@ export default function Profile() {
 function SmsBotSection({ userId }) {
   const [botNumber, setBotNumber] = useState("");
   const [enabled, setEnabled] = useState(false);
+  const [subStatus, setSubStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
 
@@ -593,12 +594,13 @@ function SmsBotSection({ userId }) {
     if (!userId) return;
     supabase
       .from("groomers")
-      .select("sms_bot_enabled, sms_bot_number")
+      .select("sms_bot_enabled, sms_bot_number, subscription_status")
       .eq("id", userId)
       .single()
       .then(({ data }) => {
         setEnabled(data?.sms_bot_enabled || false);
         setBotNumber(data?.sms_bot_number || "");
+        setSubStatus(data?.subscription_status || null);
         setLoading(false);
       });
   }, [userId]);
@@ -607,14 +609,12 @@ function SmsBotSection({ userId }) {
     if (toggling) return;
     setToggling(true);
     const newVal = !enabled;
-    // Optimistic update — feels instant on mobile
     setEnabled(newVal);
     const { error } = await supabase
       .from("groomers")
       .update({ sms_bot_enabled: newVal })
       .eq("id", userId);
     if (error) {
-      // Revert on failure
       setEnabled(!newVal);
       alert("Failed to save. Please try again.");
     }
@@ -623,32 +623,52 @@ function SmsBotSection({ userId }) {
 
   if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
 
-  // Not provisioned — no number assigned yet
-  if (!botNumber) {
+  // STATE 1: Trial — locked, upsell to paid
+  if (subStatus === "trial" || subStatus === null) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-5 text-center">
+      <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50 p-5 text-center">
         <div className="text-2xl mb-2">💬</div>
-        <div className="font-semibold text-gray-800 mb-1">SMS AI Scheduler</div>
-        <p className="text-sm text-gray-500 mb-3">
-          This is a premium add-on ($10/mo). Contact{" "}
-          <a href="mailto:pawscheduler@gmail.com" className="text-emerald-600 underline">
-            pawscheduler@gmail.com
-          </a>{" "}
-          to enable it for your account.
+        <div className="font-semibold text-gray-800 mb-1">AI SMS Scheduler</div>
+        <p className="text-sm text-gray-600 mb-3">
+          Included with every paid plan. Upgrade to get your dedicated scheduling
+          number — clients text it to book, reschedule, or cancel anytime.
         </p>
-        <div className="inline-flex items-center gap-2 text-xs bg-gray-200 text-gray-600
-          px-3 py-1.5 rounded-full font-semibold">
-          🔒 Not enabled
-        </div>
+        <a
+          href="/upgrade"
+          className="inline-flex items-center gap-2 text-sm bg-emerald-600 text-white
+            px-4 py-2 rounded-full font-semibold hover:bg-emerald-700 transition"
+        >
+          Upgrade to unlock →
+        </a>
       </div>
     );
   }
 
-  // Provisioned — show status + toggle + read-only number
+  // STATE 2: Paid but number not yet assigned
+  if (!botNumber) {
+    return (
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-center">
+        <div className="text-2xl mb-2">⏳</div>
+        <div className="font-semibold text-gray-800 mb-1">Number Being Assigned</div>
+        <p className="text-sm text-gray-600 mb-2">
+          Your SMS scheduling number is being set up. You’ll receive an email
+          within 24 hours once it’s ready.
+        </p>
+        <p className="text-xs text-gray-400">
+          Questions?{" "}
+          <a href="mailto:pawscheduler@gmail.com" className="text-emerald-600 underline">
+            pawscheduler@gmail.com
+          </a>
+        </p>
+      </div>
+    );
+  }
+
+  // STATE 3: Active — number assigned
   return (
     <div className="space-y-4">
 
-      {/* Toggle row — large tap target for mobile */}
+      {/* Toggle */}
       <div className="flex items-center justify-between p-4 bg-white border rounded-xl">
         <div>
           <div className="font-semibold text-gray-800 text-sm">SMS AI Scheduler</div>
@@ -656,43 +676,31 @@ function SmsBotSection({ userId }) {
             {enabled ? "✅ Active — clients can text to book" : "⏸ Paused — bot will not respond"}
           </div>
         </div>
-        {/* Native checkbox hidden, large button is the real tap target */}
         <button
           type="button"
           onClick={handleToggle}
           disabled={toggling}
           aria-label={enabled ? "Disable SMS bot" : "Enable SMS bot"}
           style={{
-            width: 52,
-            height: 32,
-            borderRadius: 999,
+            width: 52, height: 32, borderRadius: 999,
             backgroundColor: enabled ? "#10b981" : "#d1d5db",
-            border: "none",
-            padding: 3,
+            border: "none", padding: 3,
             cursor: toggling ? "not-allowed" : "pointer",
             opacity: toggling ? 0.6 : 1,
             transition: "background-color 0.2s",
-            flexShrink: 0,
-            display: "flex",
-            alignItems: "center",
+            flexShrink: 0, display: "flex", alignItems: "center",
           }}
         >
-          <span
-            style={{
-              display: "block",
-              width: 26,
-              height: 26,
-              borderRadius: "50%",
-              backgroundColor: "white",
-              boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
-              transform: enabled ? "translateX(20px)" : "translateX(0px)",
-              transition: "transform 0.2s",
-            }}
-          />
+          <span style={{
+            display: "block", width: 26, height: 26, borderRadius: "50%",
+            backgroundColor: "white", boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+            transform: enabled ? "translateX(20px)" : "translateX(0px)",
+            transition: "transform 0.2s",
+          }} />
         </button>
       </div>
 
-      {/* Read-only bot number */}
+      {/* Read-only number */}
       <div>
         <label className="block text-sm font-medium mb-1 text-gray-700">
           Your Scheduling Phone Number
@@ -724,6 +732,7 @@ function SmsBotSection({ userId }) {
     </div>
   );
 }
+
 
 /* ---------------- TRIAL BANNER ---------------- */
 function TrialBanner({ userId }) {

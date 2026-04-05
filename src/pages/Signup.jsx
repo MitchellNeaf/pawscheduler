@@ -73,10 +73,11 @@ export default function Signup() {
             <li>🐾 Unlimited clients & pets</li>
             <li>🔔 Automated reminders (email & SMS)</li>
             <li>📱 Designed for phone-first use</li>
+            <li>💬 AI SMS Scheduler included — clients text to book</li>
           </ul>
 
           <p className="mt-6 text-xs text-gray-500">
-            No contracts. Cancel anytime.
+            No contracts. Cancel anytime. AI SMS Scheduler unlocks on paid plans.
           </p>
         </div>
 
@@ -92,8 +93,16 @@ export default function Signup() {
           <p className="text-sm text-gray-600 text-center mb-4">
             {pilot
               ? "You’re starting with a pilot account"
-              : "No credit card required"}
+              : "30-day free trial · No credit card required"}
           </p>
+
+          {!pilot && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mb-4 text-center">
+              <p className="text-xs text-emerald-700 font-medium">
+                💬 AI SMS Scheduler included with paid plans
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="text-red-600 text-sm mb-3 text-center">

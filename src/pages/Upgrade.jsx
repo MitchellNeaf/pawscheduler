@@ -120,7 +120,7 @@ export default function Upgrade() {
           <h2 className="text-xl font-semibold text-gray-800">Monthly</h2>
 
           <p className="text-4xl font-extrabold text-emerald-600 mt-2">
-            $14.99
+            $29.99
             <span className="text-base font-medium text-gray-600">/mo</span>
           </p>
 
@@ -135,7 +135,7 @@ export default function Upgrade() {
           <button
             disabled={loading}
             className="btn btn-primary w-full mt-6 rounded-xl py-3 font-semibold"
-            onClick={() => startCheckout("price_1SWkwi1RxmPJHwWbDomOHAt8")}
+            onClick={() => startCheckout("price_1TJ05P1RxmPJHwWbW7DeCdM8")}
           >
             Upgrade Monthly
           </button>
@@ -146,7 +146,7 @@ export default function Upgrade() {
           <h2 className="text-xl font-semibold text-emerald-900">Yearly</h2>
 
           <p className="text-4xl font-extrabold text-emerald-700 mt-2">
-            $119
+            $299.99
             <span className="text-base font-medium text-emerald-800">/yr</span>
           </p>
 
@@ -163,7 +163,7 @@ export default function Upgrade() {
           <button
             disabled={loading}
             className="btn btn-primary w-full mt-6 rounded-xl py-3 font-semibold"
-            onClick={() => startCheckout("price_1SWkxJ1RxmPJHwWbtraAOeAR")}
+            onClick={() => startCheckout("price_1TJ04q1RxmPJHwWbtrEnKIHW")}
           >
             Upgrade Yearly
           </button>
