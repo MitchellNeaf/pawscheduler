@@ -34,10 +34,6 @@ const CONVERSATION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const BOT_NUMBER = process.env.TELNYX_BOT_PHONE_NUMBER;
 const TELNYX_API_KEY = process.env.TELNYX_API_KEY;
 
-const MINUTE_WINDOW_MS = 60 * 1000;
-const MAX_INBOUND_PER_MINUTE = Number(process.env.MAX_INBOUND_PER_MINUTE || 3);
-const MAX_GROOMER_MESSAGES_PER_MONTH = Number(process.env.MAX_GROOMER_MESSAGES_PER_MONTH || 2000);
-
 /* ─────────────────────────────────────────
    LOGGER — masks phone numbers and keys
 ───────────────────────────────────────── */
@@ -76,22 +72,7 @@ function buildTimeSlots(startHour = 6, endHour = 20) {
 /* ─────────────────────────────────────────
    SEND SMS
 ───────────────────────────────────────── */
-async function writeSmsLog({ groomerId = null, clientId = null, direction, from, to, body }) {
-  try {
-    await supabase.from("sms_messages").insert({
-      groomer_id: groomerId,
-      client_id: clientId,
-      direction,
-      from_number: from,
-      to_number: to,
-      body: body || "",
-    });
-  } catch (err) {
-    log.warn("sms_messages log failed:", err.message);
-  }
-}
-
-async function sendSms(to, text, meta = {}) {
+async function sendSms(to, text) {
   log.info(`Sending SMS to ${maskPhone(to)}: ${text}`);
   const res = await fetch("https://api.telnyx.com/v2/messages", {
     method: "POST",
@@ -106,14 +87,6 @@ async function sendSms(to, text, meta = {}) {
     log.error("Telnyx send failed:", res.status, responseText);
   } else {
     log.info("Telnyx send success:", res.status);
-    await writeSmsLog({
-      groomerId: meta.groomerId || null,
-      clientId: meta.clientId || null,
-      direction: "outbound",
-      from: BOT_NUMBER,
-      to,
-      body: text,
-    });
   }
 }
 
@@ -985,46 +958,6 @@ async function isRateLimited(phone) {
   return false;
 }
 
-├─────────────────────────────────────────
-   ADDITIONAL RATE LIMITERS
-───────────────────────────────────────── */
-async function isMinuteRateLimited(phone) {
-  try {
-    const since = new Date(Date.now() - MINUTE_WINDOW_MS).toISOString();
-    const { count, error } = await supabase
-      .from("sms_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("direction", "inbound")
-      .eq("from_number", phone)
-      .gte("created_at", since);
-    if (error) { log.warn("Minute rate-limit check failed:", error.message); return false; }
-    if ((count || 0) >= MAX_INBOUND_PER_MINUTE) {
-      log.warn(`Minute rate limit hit for ${maskPhone(phone)}: ${count}`);
-      return true;
-    }
-    return false;
-  } catch (err) { log.warn("Minute rate-limit exception:", err.message); return false; }
-}
-
-async function isMonthlyGroomerLimited(groomerId) {
-  if (!groomerId) return false;
-  try {
-    const now = new Date();
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
-    const { count, error } = await supabase
-      .from("sms_messages")
-      .select("id", { count: "exact", head: true })
-      .eq("groomer_id", groomerId)
-      .gte("created_at", monthStart);
-    if (error) { log.warn("Monthly groomer cap check failed:", error.message); return false; }
-    if ((count || 0) >= MAX_GROOMER_MESSAGES_PER_MONTH) {
-      log.warn(`Monthly cap hit for groomer ${groomerId}: ${count}`);
-      return true;
-    }
-    return false;
-  } catch (err) { log.warn("Monthly groomer cap exception:", err.message); return false; }
-}
-
 /* ─────────────────────────────────────────
    OPT-OUT CHECK
    Checks sms_opt_in flag on clients table.
@@ -1133,16 +1066,7 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: "Opted out" };
   }
 
-  // Per-minute rate limit (prevents runaway loops)
-  if (await isMinuteRateLimited(fromPhone)) {
-    await sendSms(fromPhone, "You're sending messages too quickly. Please wait a minute and try again.");
-    return { statusCode: 200, body: "Minute rate limited" };
-  }
-
-  // Log inbound message (groomer/client IDs filled in later if unknown)
-  await writeSmsLog({ direction: "inbound", from: fromPhone, to: BOT_NUMBER, body: incomingText });
-
-  // Daily rate limit
+  // Rate limit
   if (await isRateLimited(fromPhone)) {
     await sendSms(fromPhone, "You've reached the daily message limit. Please call your groomer directly, or try again tomorrow.");
     return { statusCode: 200, body: "Rate limited" };
@@ -1155,14 +1079,6 @@ exports.handler = async (event) => {
     const cachedContext = existing?.client_context || null;
     const groomerId     = existing?.groomer_id || cachedContext?.groomer_id || null;
     const clientId      = cachedContext?.client_id || null;
-
-    // Monthly groomer cap — prevents runaway usage
-    const knownGroomerId = groomerId || null;
-    if (knownGroomerId && await isMonthlyGroomerLimited(knownGroomerId)) {
-      const capMsg = "Text booking is temporarily unavailable right now. Please call your groomer directly.";
-      await sendSms(fromPhone, capMsg, { groomerId: knownGroomerId, clientId });
-      return { statusCode: 200, body: "Monthly cap hit" };
-    }
 
     // Deduplicate: if the last user message is identical and within 30 seconds, drop it.
     // Prevents double-tap / duplicate webhook from firing twice.
@@ -1230,11 +1146,6 @@ exports.handler = async (event) => {
               groomer_time_zone: result.groomer_time_zone,
               pets:             result.pets,
             };
-            // Re-check monthly cap now that we know the groomer
-            if (await isMonthlyGroomerLimited(result.groomer_id)) {
-              finalResponse = "Text booking is temporarily unavailable right now. Please call your groomer directly.";
-              break;
-            }
           }
 
           const trimmed = trimToolResult(block.name, result);
@@ -1280,10 +1191,7 @@ exports.handler = async (event) => {
     });
 
     log.info("Final response:", finalResponse);
-    await sendSms(fromPhone, finalResponse, {
-      groomerId: groomerId || newClientContext?.groomer_id || null,
-      clientId:  clientId  || newClientContext?.client_id  || null,
-    });
+    await sendSms(fromPhone, finalResponse);
     return { statusCode: 200, body: "OK" };
 
   } catch (err) {
