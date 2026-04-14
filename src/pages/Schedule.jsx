@@ -1462,7 +1462,7 @@ export default function Schedule() {
   });
 
   return (
-    <main className="px-3 sm:px-4 py-6 space-y-6 max-w-6xl mx-auto">
+    <main className="px-2 sm:px-4 py-4 space-y-4 max-w-6xl mx-auto">
       <Link to="/" className="text-sm text-blue-600 hover:underline">
         ← Back to Home
       </Link>
@@ -1518,17 +1518,44 @@ export default function Schedule() {
         );
       })()}
 
-      <div className="card mb-6 shadow-md border border-gray-200" style={{position:"relative", zIndex:10}}>
-        <div className="card-body flex flex-col md:flex-row gap-6">
-          <div className="relative overflow-visible" style={{zIndex:50}}>
-            <DatePicker
-              selected={parseYMD(selectedDate)}
-              onChange={(d) => d && setSelectedDate(toYMD(d))}
-              dateFormat="yyyy-MM-dd"
-              className="border p-2 rounded w-full"
-              inline={typeof window !== "undefined" && window.innerWidth < 500}
-              id="schedule-date-input"
-            />
+      <div className="mb-4 flex flex-col gap-3" style={{position:"relative", zIndex:10}}>
+          {/* Date navigation — arrow buttons on mobile, date picker on desktop */}
+          <div className="flex items-center gap-2 w-full">
+            <button
+              onClick={() => {
+                const d = parseYMD(selectedDate);
+                d.setDate(d.getDate() - 1);
+                setSelectedDate(toYMD(d));
+              }}
+              className="flex-shrink-0 w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 text-lg font-bold active:bg-gray-100"
+              aria-label="Previous day"
+            >‹</button>
+
+            <div className="relative overflow-visible flex-1" style={{zIndex:50}}>
+              <DatePicker
+                selected={parseYMD(selectedDate)}
+                onChange={(d) => d && setSelectedDate(toYMD(d))}
+                dateFormat="EEE, MMM d"
+                className="border p-2 rounded w-full text-sm text-center font-semibold cursor-pointer bg-white"
+                id="schedule-date-input"
+                popperPlacement="bottom"
+              />
+            </div>
+
+            <button
+              onClick={() => {
+                const d = parseYMD(selectedDate);
+                d.setDate(d.getDate() + 1);
+                setSelectedDate(toYMD(d));
+              }}
+              className="flex-shrink-0 w-10 h-10 rounded-full border border-gray-300 bg-white flex items-center justify-center text-gray-600 hover:bg-gray-50 text-lg font-bold active:bg-gray-100"
+              aria-label="Next day"
+            >›</button>
+
+            <button
+              onClick={() => setSelectedDate(toYMD(new Date()))}
+              className="flex-shrink-0 px-3 py-2 text-xs font-semibold rounded-full border border-emerald-400 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 active:bg-emerald-200 whitespace-nowrap"
+            >Today</button>
           </div>
 
           <div className="flex-1 flex flex-col gap-3">
@@ -1537,7 +1564,7 @@ export default function Schedule() {
               placeholder="Search pet, client, tag, or service"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full md:w-72 border rounded px-3 py-2 text-sm"
+              className="w-full border rounded px-3 py-2 text-sm"
             />
 
             <div className="text-sm text-gray-600">
@@ -1556,7 +1583,7 @@ export default function Schedule() {
               )}
             </div>
 
-            <div className="schedule-legend flex flex-wrap gap-3 text-xs text-gray-600">
+            <div className="schedule-legend hidden sm:flex flex-wrap gap-3 text-xs text-gray-600">
               <span className="flex items-center gap-1">
                 <span className="inline-block w-3 h-3 rounded bg-green-200" />
                 Lightly booked
@@ -1579,7 +1606,6 @@ export default function Schedule() {
               </span>
             </div>
           </div>
-        </div>
       </div>
 
       {workingRange.length > 0 && (
@@ -1589,7 +1615,7 @@ export default function Schedule() {
               <div
                 className="grid border rounded text-xs"
                 style={{
-                  gridTemplateColumns: `80px repeat(${capacity}, minmax(0, 1fr))`,
+                  gridTemplateColumns: `60px repeat(${capacity}, minmax(0, 1fr))`,
                 }}
               >
                 {/* Header Row */}
@@ -1614,8 +1640,8 @@ export default function Schedule() {
                   return (
                     <React.Fragment key={slot}>
                       {/* TIME COLUMN */}
-                      <div className="border-t px-2 py-1 text-gray-700 font-medium">
-                        {slot}
+                      <div className="border-t px-1 py-1 text-gray-700 font-medium text-[10px] leading-tight">
+                        {slot.replace(/:00$/, "").replace(/^0/, "")}
                       </div>
 
                       {/* CAPACITY COLUMNS */}
@@ -1730,6 +1756,34 @@ export default function Schedule() {
                                     </span>
                                   </div>
                                 )}
+
+                                {/* Quick Paid toggle — tap without opening modal */}
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    const { data, error } = await supabase
+                                      .from("appointments")
+                                      .update({ paid: !appt.paid })
+                                      .eq("id", appt.id)
+                                      .eq("groomer_id", user.id)
+                                      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight,
+                                        services, notes, confirmed, no_show, paid, amount, reminder_enabled, source,
+                                        pets ( *, clients ( id, full_name, phone, email, street, city, state, zip ) )`)
+                                      .single();
+                                    if (!error && data) {
+                                      setAppointments((prev) =>
+                                        prev.map((a) => a.id === data.id ? { ...a, paid: data.paid } : a)
+                                      );
+                                    }
+                                  }}
+                                  className={`mt-1 w-full text-[9px] font-bold rounded px-1 py-0.5 leading-none border transition-colors
+                                    ${appt.paid
+                                      ? "bg-emerald-100 text-emerald-700 border-emerald-300"
+                                      : "bg-white text-gray-400 border-gray-200 hover:bg-emerald-50 hover:text-emerald-600 hover:border-emerald-300"
+                                    }`}
+                                >
+                                  {appt.paid ? "✓ Paid" : "$ Unpaid"}
+                                </button>
                               </div>
                             )}
                           </div>
@@ -1898,31 +1952,31 @@ export default function Schedule() {
                   )}
 
                   {/* Actions row */}
-                  <div className="flex flex-wrap justify-between items-center gap-3 pt-1 border-t border-gray-100 mt-1">
+                  <div className="flex flex-col gap-2 pt-2 border-t border-gray-100 mt-1">
                     <div className="flex flex-wrap gap-2 items-center">
                       <button
                         onClick={() => handleOpenEditModal(appt)}
-                        className="px-2 py-1 text-xs sm:text-sm rounded border border-gray-300 hover:bg-gray-50"
+                        className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50 flex-1 sm:flex-none"
                       >
                         ✏️ Edit
                       </button>
 
                       <button
                         onClick={() => openRebookModal(appt)}
-                        className="px-2 py-1 text-xs sm:text-sm rounded border border-blue-500 text-blue-600 hover:bg-blue-50"
+                        className="px-3 py-1.5 text-sm rounded border border-blue-500 text-blue-600 hover:bg-blue-50 flex-1 sm:flex-none"
                       >
                         🔁 Rebook 6 weeks
                       </button>
 
                       <button
                         onClick={() => handleDelete(appt.id)}
-                        className="px-2 py-1 text-xs sm:text-sm rounded border border-red-500 text-red-600 hover:bg-red-50"
+                        className="px-3 py-1.5 text-sm rounded border border-red-500 text-red-600 hover:bg-red-50 flex-1 sm:flex-none"
                       >
                         🗑 Delete
                       </button>
                     </div>
 
-                    <div className="flex flex-wrap gap-3 items-center">
+                    <div className="flex gap-4 items-center pt-1">
                       <ToggleCheckbox
                         label="Confirmed"
                         field="confirmed"
