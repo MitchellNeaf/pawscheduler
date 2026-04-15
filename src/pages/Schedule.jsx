@@ -978,6 +978,9 @@ export default function Schedule() {
   const [workingRange, setWorkingRange] = useState([]);
   const [breakSlots, setBreakSlots] = useState([]);
   const [capacity, setCapacity] = useState(1);
+  const [viewMode, setViewMode] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 640 ? "list" : "grid"
+  );
 
   const [petModalOpen, setPetModalOpen] = useState(false);
   const [modalSlot, setModalSlot] = useState(null);
@@ -1482,36 +1485,37 @@ export default function Schedule() {
         });
 
         return (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-2">
+          <div className="grid grid-cols-4 gap-1.5 mb-3">
             {/* Total appointments */}
-            <div className="stat">
-              <div className="stat-label">Appointments</div>
-              <div className="stat-value">{totalAppts}</div>
+            <div className="bg-white border border-gray-200 rounded-xl px-2 py-2 text-center shadow-sm">
+              <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wide leading-none mb-1">Appts</div>
+              <div className="text-lg font-bold text-gray-800 leading-none">{totalAppts}</div>
             </div>
 
             {/* Confirmed */}
-            <div className="stat">
-              <div className="stat-label">Confirmed</div>
-              <div className={`stat-value ${confirmed < totalAppts ? "text-amber-600" : "text-emerald-600"}`}>
-                {confirmed} / {totalAppts}
+            <div className="bg-white border border-gray-200 rounded-xl px-2 py-2 text-center shadow-sm">
+              <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wide leading-none mb-1">Conf.</div>
+              <div className={`text-lg font-bold leading-none ${confirmed < totalAppts ? "text-amber-600" : "text-emerald-600"}`}>
+                {confirmed}/{totalAppts}
               </div>
             </div>
 
             {/* Revenue */}
-            <div className="stat">
-              <div className="stat-label">Revenue</div>
-              <div className="stat-value text-emerald-700">${totalRevenue.toFixed(2)}</div>
+            <div className="bg-white border border-gray-200 rounded-xl px-2 py-2 text-center shadow-sm">
+              <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wide leading-none mb-1">Rev.</div>
+              <div className="text-sm font-bold text-emerald-700 leading-none">${totalRevenue.toFixed(0)}</div>
             </div>
 
             {/* Unpaid / Warnings */}
-            <div className={`stat ${totalUnpaidToday > 0 ? "bg-red-50 border-red-200" : hasWarnings ? "bg-amber-50 border-amber-200" : ""}`}>
-              <div className="stat-label">
+            <div className={`rounded-xl px-2 py-2 text-center shadow-sm border
+              ${totalUnpaidToday > 0 ? "bg-red-50 border-red-200" : hasWarnings ? "bg-amber-50 border-amber-200" : "bg-white border-gray-200"}`}>
+              <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wide leading-none mb-1">
                 {totalUnpaidToday > 0 ? "Unpaid" : "Alerts"}
               </div>
-              <div className={`stat-value ${totalUnpaidToday > 0 ? "text-red-600" : hasWarnings ? "text-amber-600" : "text-emerald-600"}`}>
+              <div className={`text-sm font-bold leading-none ${totalUnpaidToday > 0 ? "text-red-600" : hasWarnings ? "text-amber-600" : "text-emerald-600"}`}>
                 {totalUnpaidToday > 0
-                  ? `${totalUnpaidToday} • $${totalUnpaidAmount.toFixed(2)}`
-                  : hasWarnings ? "Vaccine ⚠️" : "All clear ✓"}
+                  ? `${totalUnpaidToday} / $${totalUnpaidAmount.toFixed(0)}`
+                  : hasWarnings ? "⚠️" : "✓"}
               </div>
             </div>
           </div>
@@ -1558,6 +1562,39 @@ export default function Schedule() {
             >Today</button>
           </div>
 
+          {/* View toggle — List/Grid */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setViewMode("list")}
+              style={{
+                padding: "6px 14px",
+                fontSize: 13,
+                fontWeight: 700,
+                borderRadius: "999px 0 0 999px",
+                border: "1px solid",
+                borderColor: viewMode === "list" ? "#059669" : "#d1d5db",
+                backgroundColor: viewMode === "list" ? "#059669" : "#ffffff",
+                color: viewMode === "list" ? "#ffffff" : "#6b7280",
+                cursor: "pointer",
+              }}
+            >☰ List</button>
+            <button
+              onClick={() => setViewMode("grid")}
+              style={{
+                padding: "6px 14px",
+                fontSize: 13,
+                fontWeight: 700,
+                borderRadius: "0 999px 999px 0",
+                border: "1px solid",
+                borderLeft: "none",
+                borderColor: viewMode === "grid" ? "#059669" : "#d1d5db",
+                backgroundColor: viewMode === "grid" ? "#059669" : "#ffffff",
+                color: viewMode === "grid" ? "#ffffff" : "#6b7280",
+                cursor: "pointer",
+              }}
+            >⊞ Grid</button>
+          </div>
+
           <div className="flex-1 flex flex-col gap-3">
             <input
               type="text"
@@ -1582,6 +1619,7 @@ export default function Schedule() {
                 "No working hours set for this weekday — update your profile schedule."
               )}
             </div>
+
 
             <div className="schedule-legend hidden sm:flex flex-wrap gap-3 text-xs text-gray-600">
               <span className="flex items-center gap-1">
@@ -1608,7 +1646,7 @@ export default function Schedule() {
           </div>
       </div>
 
-      {workingRange.length > 0 && (
+      {viewMode === "grid" && workingRange.length > 0 && (
         <div className="card mb-6" style={{position:"relative", zIndex:1}}>
           <div className="card-body">
             <div className="overflow-x-auto">
@@ -1798,8 +1836,8 @@ export default function Schedule() {
         </div>
       )}
 
-      {/* LIST VIEW BELOW GRID */}
-      {filteredAppointments.length === 0 ? (
+      {/* LIST VIEW */}
+      {viewMode === "list" && (filteredAppointments.length === 0 ? (
         <p className="text-gray-600 italic">
           No appointments for this day (or search filter).
         </p>
@@ -2005,7 +2043,7 @@ export default function Schedule() {
             );
           })}
         </div>
-      )}
+      ))}
 
       {/* Modals */}
       <PetSelectModal
