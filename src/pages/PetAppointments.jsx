@@ -3,47 +3,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import Loader from "../components/Loader";
+import ConfirmModal from "../components/ConfirmModal";
 import { sendEmail } from "../utils/sendEmail";
+import { SERVICE_OPTIONS, DEFAULT_PRICING, calcAmount } from "../utils/grooming";
 
 const toYMD = (d) => {
   const year = d.getFullYear();
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-};
-
-const SERVICE_OPTIONS = [
-  "Bath",
-  "Full Groom",
-  "Nails",
-  "Teeth",
-  "Deshed",
-  "Anal Glands",
-  "Puppy Trim",
-  "Other",
-];
-
-// Prices match Schedule.jsx service names exactly
-const DEFAULT_PRICING = {
-  "Bath":        { 1: 25, 2: 40, 3: 60 },
-  "Full Groom":  { 1: 45, 2: 65, 3: 90 },
-  "Nails":       { 1: 15, 2: 15, 3: 20 },
-  "Teeth":       { 1: 15, 2: 15, 3: 20 },
-  "Deshed":      { 1: 35, 2: 55, 3: 75 },
-  "Anal Glands": { 1: 15, 2: 15, 3: 20 },
-  "Puppy Trim":  { 1: 40, 2: 55, 3: 75 },
-  "Other":       { 1: 0,  2: 0,  3: 0  },
-};
-
-const calcAmount = (services, slotWeight, pricing) => {
-  const p = { ...DEFAULT_PRICING, ...(pricing || {}) };
-  const sz = slotWeight || 1;
-  return services
-    .filter((s) => s !== "Other")
-    .reduce((sum, svc) => {
-      const row = p[svc];
-      return sum + (row ? (row[sz] ?? row[1] ?? 0) : 0);
-    }, 0);
 };
 
 function getEndTime(start, durationMin) {
@@ -350,6 +318,9 @@ export default function PetAppointments() {
   const [editingAppt, setEditingAppt] = useState(null);
   const [editOtherService, setEditOtherService] = useState("");
 
+  // ConfirmModal state
+  const [confirmConfig, setConfirmConfig] = useState(null);
+
   // Service pricing
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
 
@@ -438,39 +409,55 @@ export default function PetAppointments() {
     resetFormToNew();
   };
 
-  const handleDeleteAppointment = async (appt) => {
+  const handleDeleteAppointment = (appt) => {
     if (!user?.id || !appt?.id) return;
 
-    const ok = window.confirm(
-      "Delete this appointment? This cannot be undone."
-    );
-    if (!ok) return;
+    setConfirmConfig({
+      title: "Delete this appointment?",
+      message: "This cannot be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+      onConfirm: async () => {
+        const { error } = await supabase
+          .from("appointments")
+          .delete()
+          .eq("id", appt.id)
+          .eq("groomer_id", user.id);
 
-    const { error } = await supabase
-      .from("appointments")
-      .delete()
-      .eq("id", appt.id)
-      .eq("groomer_id", user.id);
+        if (error) {
+          // Surface error in a non-blocking way — set a brief inline error state
+          console.error("Delete error:", error.message);
+          return;
+        }
 
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    setAppointments((prev) => prev.filter((a) => a.id !== appt.id));
+        setAppointments((prev) => prev.filter((a) => a.id !== appt.id));
+      },
+    });
   };
 
   const handleSaveNew = async (otherService) => {
     if (!user?.id || !pet?.id) return;
 
     if (!newForm.date || !newForm.time) {
-      alert("Date and time are required.");
+      setConfirmConfig({
+        title: "Missing info",
+        message: "Date and time are required before saving.",
+        confirmLabel: "OK",
+        danger: false,
+        onConfirm: () => {},
+      });
       return;
     }
 
     // Edit is only allowed for future appointments
     if (editingAppt && !isFutureAppointment(editingAppt)) {
-      alert("Only future appointments can be edited.");
+      setConfirmConfig({
+        title: "Cannot edit",
+        message: "Only future appointments can be edited.",
+        confirmLabel: "OK",
+        danger: false,
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -483,7 +470,13 @@ export default function PetAppointments() {
     });
 
     if (!allowed) {
-      alert("That time is outside your working hours.");
+      setConfirmConfig({
+        title: "Outside working hours",
+        message: "That time is outside your working hours. Please choose a time within your schedule.",
+        confirmLabel: "OK",
+        danger: false,
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -536,7 +529,13 @@ export default function PetAppointments() {
     setSavingNew(false);
 
     if (error) {
-      alert(error.message);
+      setConfirmConfig({
+        title: "Could not save",
+        message: error.message || "Something went wrong. Please try again.",
+        confirmLabel: "OK",
+        danger: false,
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -794,6 +793,11 @@ export default function PetAppointments() {
         editing={editingAppt}
         initialOtherService={editOtherService}
         pricing={pricing}
+      />
+
+      <ConfirmModal
+        config={confirmConfig}
+        onClose={() => setConfirmConfig(null)}
       />
     </main>
   );

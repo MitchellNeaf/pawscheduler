@@ -4,6 +4,189 @@ import { Link } from "react-router-dom";
 import { supabase } from "../supabase";
 import Loader from "../components/Loader";
 
+const SLOT_WEIGHT_OPTIONS = [
+  { value: 1, label: "Small / Medium" },
+  { value: 2, label: "Large" },
+  { value: 3, label: "XL" },
+];
+
+const PET_TAG_OPTIONS = [
+  "Bites", "Anxious", "Senior", "Aggressive", "Matting",
+  "Arthritis", "Blind", "Deaf", "Allergies", "Other",
+];
+
+/**
+ * ============================================================
+ *  ADD PET MODAL
+ * ============================================================
+ */
+function AddPetModal({ open, onClose, client, user, onSaved }) {
+  const [name, setName] = useState("");
+  const [breed, setBreed] = useState("");
+  const [slotWeight, setSlotWeight] = useState(1);
+  const [tags, setTags] = useState([]);
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  // Reset form when modal opens for a new client
+  useEffect(() => {
+    if (open) {
+      setName(""); setBreed(""); setSlotWeight(1);
+      setTags([]); setNotes(""); setError("");
+    }
+  }, [open, client?.id]);
+
+  if (!open || !client) return null;
+
+  const toggleTag = (tag) =>
+    setTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+
+  const handleSave = async () => {
+    if (!name.trim()) { setError("Dog name is required."); return; }
+    setSaving(true);
+    setError("");
+
+    const { error: err } = await supabase.from("pets").insert({
+      name: name.trim(),
+      breed: breed.trim() || null,
+      slot_weight: slotWeight,
+      tags: tags.length ? tags : null,
+      notes: notes.trim() || null,
+      client_id: client.id,
+      groomer_id: user.id,
+    });
+
+    setSaving(false);
+
+    if (err) { setError(err.message); return; }
+
+    onSaved();
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center px-3">
+      <div className="bg-white rounded-xl shadow-lg max-w-md w-full max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <div>
+            <h2 className="font-semibold text-gray-900">Add Pet</h2>
+            <p className="text-xs text-gray-500 mt-0.5">for {client.full_name}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-lg leading-none px-1">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="p-4 space-y-4 overflow-y-auto flex-1">
+
+          {/* Name */}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">Dog name <span className="text-red-500">*</span></span>
+            <input
+              placeholder="e.g. Buddy"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="border rounded-lg px-3 py-2 text-sm w-full"
+              autoFocus
+            />
+          </label>
+
+          {/* Breed */}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">Breed <span className="text-gray-400 font-normal">(optional)</span></span>
+            <input
+              placeholder="e.g. Golden Retriever"
+              value={breed}
+              onChange={(e) => setBreed(e.target.value)}
+              className="border rounded-lg px-3 py-2 text-sm w-full"
+            />
+          </label>
+
+          {/* Size */}
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">Size</span>
+            <div className="grid grid-cols-3 gap-2">
+              {SLOT_WEIGHT_OPTIONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setSlotWeight(value)}
+                  className={`py-2 px-2 rounded-lg border text-xs font-semibold transition-colors
+                    ${slotWeight === value
+                      ? "bg-emerald-600 border-emerald-600 text-white"
+                      : "bg-white border-gray-200 text-gray-600 hover:border-emerald-400"
+                    }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Tags */}
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">Tags <span className="text-gray-400 font-normal">(optional)</span></span>
+            <div className="flex flex-wrap gap-2">
+              {PET_TAG_OPTIONS.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => toggleTag(tag)}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors
+                    ${tags.includes(tag)
+                      ? "bg-amber-500 border-amber-500 text-white"
+                      : "bg-white border-gray-200 text-gray-600 hover:border-amber-400"
+                    }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Notes */}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">Notes <span className="text-gray-400 font-normal">(optional)</span></span>
+            <textarea
+              placeholder="Any special notes about this dog…"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="border rounded-lg px-3 py-2 text-sm w-full resize-none"
+            />
+          </label>
+
+          {error && (
+            <p className="text-sm text-red-600 font-medium">{error}</p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t flex gap-3 justify-end">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 text-sm font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Add Pet"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /**
  * ============================================================
  *  PHONE NORMALIZATION
@@ -214,6 +397,9 @@ export default function Clients() {
   const [smsSaveError, setSmsSaveError] = useState("");
   const [smsSaving, setSmsSaving] = useState(false);
 
+  // Add Pet modal state
+  const [addPetClient, setAddPetClient] = useState(null);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
@@ -309,7 +495,8 @@ export default function Clients() {
       await fetchData();
     } catch (err) {
       console.error(err);
-      alert("Could not save client. Try again.");
+      // Surface error inline via duplicateWarning so user sees it without a dialog
+      setDuplicateWarning("Could not save client. Please try again.");
     } finally {
       setQuickSaving(false);
     }
@@ -634,12 +821,13 @@ export default function Clients() {
                     View Client
                   </Link>
 
-                  <Link
-                    to={`/clients/${client.id}`}
+                  <button
+                    type="button"
                     className="btn-primary text-sm"
+                    onClick={() => setAddPetClient(client)}
                   >
                     ➕ Add Pet
-                  </Link>
+                  </button>
                 </div>
 
                 <ul className="mt-3 ml-1 space-y-1">
@@ -656,6 +844,14 @@ export default function Clients() {
           );
         })}
       </ul>
+
+      <AddPetModal
+        open={!!addPetClient}
+        onClose={() => setAddPetClient(null)}
+        client={addPetClient}
+        user={user}
+        onSaved={fetchData}
+      />
     </main>
   );
 }

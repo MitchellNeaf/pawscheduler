@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import { supabase } from "../supabase";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { SERVICE_OPTIONS, DEFAULT_PRICING, calcAmount } from "../utils/grooming";
+import ConfirmModal from "../components/ConfirmModal";
 
 /* --------------------------------------------
    TIME SLOTS
@@ -13,42 +15,6 @@ for (let hour = 6; hour <= 20; hour++) {
     TIME_SLOTS.push(`${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
   }
 }
-
-/* --------------------------------------------
-   SERVICE OPTIONS — matches Schedule + PetAppointments
--------------------------------------------- */
-const SERVICE_OPTIONS = [
-  "Bath",
-  "Full Groom",
-  "Nails",
-  "Teeth",
-  "Deshed",
-  "Anal Glands",
-  "Puppy Trim",
-  "Other",
-];
-
-const DEFAULT_PRICING = {
-  "Bath":        { 1: 25, 2: 40, 3: 60 },
-  "Full Groom":  { 1: 45, 2: 65, 3: 90 },
-  "Nails":       { 1: 15, 2: 15, 3: 20 },
-  "Teeth":       { 1: 15, 2: 15, 3: 20 },
-  "Deshed":      { 1: 35, 2: 55, 3: 75 },
-  "Anal Glands": { 1: 15, 2: 15, 3: 20 },
-  "Puppy Trim":  { 1: 40, 2: 55, 3: 75 },
-  "Other":       { 1: 0,  2: 0,  3: 0  },
-};
-
-const calcAmount = (services, slotWeight, pricing) => {
-  const p = { ...DEFAULT_PRICING, ...(pricing || {}) };
-  const sz = slotWeight || 1;
-  return services
-    .filter((s) => s !== "Other")
-    .reduce((sum, svc) => {
-      const row = p[svc];
-      return sum + (row ? (row[sz] ?? row[1] ?? 0) : 0);
-    }, 0);
-};
 
 /* --------------------------------------------
    FORMAT DATE — FIXED (UTC SAFE)
@@ -107,6 +73,9 @@ export default function BookPage() {
   const [submitted, setSubmitted] = useState(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // ConfirmModal state
+  const [confirmConfig, setConfirmConfig] = useState(null);
 
   const [unavailable, setUnavailable] = useState([]);
   const [workingRange, setWorkingRange] = useState([]);
@@ -450,7 +419,12 @@ export default function BookPage() {
     setSubmitting(true);
 
     if (!selectedPetId) {
-      alert("Please select a pet.");
+      setConfirmConfig({
+        title: "No pet selected",
+        message: "Please select a pet before booking.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
       setSubmitting(false);
       return;
     }
@@ -475,8 +449,14 @@ export default function BookPage() {
       },
     ]);
 
-    if (error) alert(error.message);
-    else {
+    if (error) {
+      setConfirmConfig({
+        title: "Booking failed",
+        message: error.message || "Something went wrong. Please try again.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+    } else {
       // Fire groomer notification email (fire-and-forget)
       if (groomer?.email) {
         fetch("/.netlify/functions/sendEmail", {
@@ -518,49 +498,60 @@ export default function BookPage() {
      CANCEL APPOINTMENT
   -------------------------------------------- */
   const handleCancel = async (apptId) => {
-    if (!window.confirm("Are you sure you want to cancel this appointment?")) return;
-    setCancelling(apptId);
+    setConfirmConfig({
+      title: "Cancel appointment?",
+      message: "This cannot be undone. You will need to rebook if you change your mind.",
+      confirmLabel: "Yes, cancel it",
+      cancelLabel: "Keep it",
+      danger: true,
+      onConfirm: async () => {
+        setCancelling(apptId);
 
-    // Grab the appt details before deleting so we can email the groomer
-    const appt = upcomingAppts.find((a) => a.id === apptId);
+        const appt = upcomingAppts.find((a) => a.id === apptId);
 
-    const { error } = await supabase
-      .from("appointments")
-      .delete()
-      .eq("id", apptId)
-      .eq("groomer_id", groomerId);
+        const { error } = await supabase
+          .from("appointments")
+          .delete()
+          .eq("id", apptId)
+          .eq("groomer_id", groomerId);
 
-    if (error) {
-      alert("Could not cancel — please call us directly.");
-    } else {
-      setUpcomingAppts((prev) => prev.filter((a) => a.id !== apptId));
+        if (error) {
+          setConfirmConfig({
+            title: "Could not cancel",
+            message: "Please call us directly to cancel this appointment.",
+            confirmLabel: "OK",
+            onConfirm: () => {},
+          });
+        } else {
+          setUpcomingAppts((prev) => prev.filter((a) => a.id !== apptId));
 
-      // Notify the groomer (fire-and-forget)
-      if (groomer?.email && appt) {
-        fetch("/.netlify/functions/sendEmail", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: groomer.email,
-            subject: `Appointment cancelled — ${appt.pets?.name || "a pet"} on ${appt.date}`,
-            template: "groomer_cancellation",
-            data: {
-              pet_name: appt.pets?.name || "—",
-              client_name: client?.full_name || "—",
-              date: appt.date,
-              time: appt.time || "",
-              duration_min: appt.duration_min || "",
-              services: Array.isArray(appt.services)
-                ? appt.services.join(", ")
-                : appt.services || "—",
-              notes: "",
-            },
-          }),
-        }).catch(() => {});
-      }
-    }
+          if (groomer?.email && appt) {
+            fetch("/.netlify/functions/sendEmail", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                to: groomer.email,
+                subject: `Appointment cancelled — ${appt.pets?.name || "a pet"} on ${appt.date}`,
+                template: "groomer_cancellation",
+                data: {
+                  pet_name: appt.pets?.name || "—",
+                  client_name: client?.full_name || "—",
+                  date: appt.date,
+                  time: appt.time || "",
+                  duration_min: appt.duration_min || "",
+                  services: Array.isArray(appt.services)
+                    ? appt.services.join(", ")
+                    : appt.services || "—",
+                  notes: "",
+                },
+              }),
+            }).catch(() => {});
+          }
+        }
 
-    setCancelling(null);
+        setCancelling(null);
+      },
+    });
   };
 
   /* --------------------------------------------
@@ -568,13 +559,20 @@ export default function BookPage() {
 -------------------------------------------- */
 
   if (error)
-    return <main className="p-4 text-center text-red-600">{error}</main>;
+    return (
+      <main className="min-h-screen flex items-center justify-center p-4">
+        <p className="text-red-600 font-semibold text-center">{error}</p>
+      </main>
+    );
 
   if (!groomerId)
-    return <main className="p-4 text-center">Loading booking page…</main>;
+    return (
+      <main className="min-h-screen flex items-center justify-center p-4">
+        <p className="text-[var(--text-3)] text-center">Loading booking page…</p>
+      </main>
+    );
 
-  const isFullVacation =
-    vacationBlocks.some((v) => v.type === "full") && form.date;
+  const isFullVacation = vacationBlocks.some((v) => v.type === "full") && form.date;
 
   const fmtTime = (t) => {
     if (!t) return "";
@@ -584,324 +582,368 @@ export default function BookPage() {
     return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
   };
 
+  // Shared label style
+  const labelCls = "block text-sm font-semibold text-[var(--text-2)] mb-1.5";
+  // Shared input style
+  const inputCls = "w-full border border-[var(--border-med)] rounded-xl px-3 py-2.5 text-sm bg-[var(--surface)] text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-transparent transition";
+
   return (
-    <main style={{ maxWidth: 480, margin: "0 auto", padding: "24px 16px" }}>
+    <main className="min-h-screen bg-[var(--bg)] py-8 px-4">
+      <div className="max-w-md mx-auto space-y-5">
 
-      {/* HEADER */}
-      {groomer && (
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
-          {groomer.logo_url && (
-            <img src={groomer.logo_url} alt="Logo"
-              style={{ width: 72, height: 72, borderRadius: "50%",
-                objectFit: "cover", margin: "0 auto 10px" }} />
-          )}
-          <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>{groomer.full_name}</div>
-        </div>
-      )}
-
-      {/* ── LOGIN VIEW ── */}
-      {view === "login" && (
-        <div>
-          <h2 style={{ textAlign: "center", marginBottom: 16, fontSize: "1.1rem", fontWeight: 700 }}>
-            Enter your info to continue
-          </h2>
-          <form onSubmit={handleClientLogin} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <input
-              name="name" placeholder="First name"
-              value={clientForm.name} onChange={handleChange}
-              className="border rounded px-2 py-1 w-full" required
-            />
-            <input
-              name="last4" placeholder="Last 4 digits of phone"
-              value={clientForm.last4} onChange={handleChange}
-              className="border rounded px-2 py-1 w-full"
-              maxLength={4} inputMode="numeric" required
-            />
-            {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{error}</p>}
-            <button type="submit"
-              style={{ marginTop: 4, padding: "10px", borderRadius: 8,
-                background: "#10b981", color: "white", fontWeight: 700,
-                border: "none", cursor: "pointer", fontSize: "0.95rem" }}>
-              Continue
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* ── HOME VIEW ── */}
-      {view === "home" && client && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <p style={{ textAlign: "center", color: "#6b7280", fontSize: "0.9rem", marginBottom: 4 }}>
-            Hi <strong>{client.full_name.split(" ")[0]}</strong>, what would you like to do?
-          </p>
-
-          {/* Success banner after booking */}
-          {submitted && (
-            <div style={{ padding: "14px 16px", borderRadius: 12,
-              background: "#ecfdf5", border: "1px solid #6ee7b7", marginBottom: 4 }}>
-              <div style={{ fontWeight: 700, color: "#065f46", marginBottom: 6 }}>
-                ✅ Appointment booked!
-              </div>
-              <div style={{ fontSize: "0.83rem", color: "#064e3b", lineHeight: 1.6 }}>
-                <div><strong>Pet:</strong> {submitted.pet}</div>
-                <div><strong>Date:</strong> {submitted.date} at {fmtTime(submitted.time)}</div>
-                <div><strong>Services:</strong> {submitted.services.join(", ")}</div>
-                {submitted.amount > 0 && (
-                  <div><strong>Estimated total:</strong> ${submitted.amount.toFixed(2)}</div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <button
-            onClick={() => { setSubmitted(null); setView("book"); }}
-            style={{ padding: "14px 16px", borderRadius: 12, border: "2px solid #10b981",
-              background: "#10b981", color: "white", fontWeight: 700,
-              fontSize: "1rem", cursor: "pointer", textAlign: "left" }}>
-            📅 Book an Appointment
-          </button>
-
-          <button
-            onClick={() => setView("cancel")}
-            style={{ padding: "14px 16px", borderRadius: 12, border: "2px solid #e5e7eb",
-              background: "white", color: "#374151", fontWeight: 700,
-              fontSize: "1rem", cursor: "pointer", textAlign: "left",
-              display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span>🗓 View / Cancel Appointments</span>
-            {upcomingAppts.length > 0 && (
-              <span style={{ background: "#10b981", color: "white", borderRadius: 99,
-                fontSize: "0.72rem", fontWeight: 800, padding: "2px 8px" }}>
-                {upcomingAppts.length}
-              </span>
-            )}
-          </button>
-        </div>
-      )}
-
-      {/* ── BOOK VIEW ── */}
-      {view === "book" && client && (
-        <div>
-          <button onClick={() => setView("home")}
-            style={{ marginBottom: 16, fontSize: "0.82rem", color: "#10b981",
-              fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-            ← Back
-          </button>
-
-          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
-            {/* PET SELECT */}
-            {pets.length > 1 && (
-              <div>
-                <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#374151",
-                  display: "block", marginBottom: 4 }}>Select pet</label>
-                <select value={selectedPetId}
-                  onChange={(e) => {
-                    const id = e.target.value;
-                    setSelectedPetId(id);
-                    const p = pets.find((pet) => pet.id === id);
-                    const weight = p?.slot_weight ?? 1;
-                    setSelectedPetWeight(weight);
-                    setForm((prev) => ({ ...prev, time: "" }));
-                  }}
-                  className="border rounded px-2 py-1 w-full">
-                  <option value="">Choose a pet</option>
-                  {pets.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* SERVICES */}
-            <div>
-              <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#374151", marginBottom: 6 }}>
-                Services
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                {SERVICE_OPTIONS.map((s) => (
-                  <label key={s} style={{ display: "flex", alignItems: "center", gap: 6,
-                    fontSize: "0.88rem", color: "#374151", cursor: "pointer" }}>
-                    <input type="checkbox" name="services" value={s}
-                      checked={form.services.includes(s)} onChange={handleChange} />
-                    {s}
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* PRICE + DURATION ESTIMATE */}
-            {form.services.filter(s => s !== "Other").length > 0 && (
-              <div style={{ padding: "10px 14px", borderRadius: 10,
-                background: "#ecfdf5", border: "1px solid #6ee7b7",
-                display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "0.85rem", color: "#065f46" }}>
-                  ⏱ {form.duration_min} min &nbsp;·&nbsp; Estimated total
-                </span>
-                <span style={{ fontWeight: 800, color: "#065f46", fontSize: "1rem" }}>
-                  ${calcAmount(form.services, selectedPetWeight, pricing).toFixed(2)}
-                </span>
-              </div>
-            )}
-
-            {/* DATE PICKER */}
-            <div>
-              <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#374151",
-                display: "block", marginBottom: 4 }}>Date</label>
-              <DatePicker
-                selected={form.date ? parseDBDate(form.date) : null}
-                onChange={(d) => {
-                  const clean = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-                  const value = formatDate(clean);
-                  setForm((p) => ({ ...p, date: value, time: "" }));
-                }}
-                dateFormat="MMM d, yyyy"
-                className="border rounded px-2 py-1 w-full"
-                placeholderText="Pick a date"
-                filterDate={(d) => {
-                  if (!workingWeekdays.length) return true;
-                  const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-                  return workingWeekdays.includes(utc.getUTCDay());
-                }}
-                dayClassName={(d) => {
-                  const clean = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-                  const f = formatDate(clean);
-                  if (vacationDates.includes(f)) return "bg-red-300 text-white";
-                  if (!workingWeekdays.includes(clean.getUTCDay())) return "bg-gray-200 text-gray-400";
-                  return "";
-                }}
-                minDate={new Date()}
+        {/* ── HEADER ── */}
+        {groomer && (
+          <div className="text-center pb-2">
+            {groomer.logo_url && (
+              <img
+                src={groomer.logo_url}
+                alt="Logo"
+                className="w-20 h-20 rounded-full object-cover mx-auto mb-3 shadow-md ring-2 ring-[var(--border)]"
               />
-            </div>
+            )}
+            <h1 className="text-xl font-bold text-[var(--text-1)]">{groomer.full_name}</h1>
+            <p className="text-xs text-[var(--text-3)] mt-1">Online Booking</p>
+          </div>
+        )}
 
-            {/* TIME SELECT */}
-            <div>
-              <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#374151",
-                display: "block", marginBottom: 4 }}>Time</label>
-              <select name="time" value={form.time} onChange={handleChange}
-                disabled={!form.date || !workingRange.length || isFullVacation}
-                className={`border rounded px-2 py-1 w-full ${isFullVacation ? "bg-red-100" : ""}`}>
-                <option value="">
-                  {isFullVacation ? "Day Off — Vacation"
-                    : workingRange.length ? "Select a time"
-                    : "Not working this day"}
-                </option>
-                {!isFullVacation && workingRange
-                  .filter((slot, idx) => {
-                    const blocks = Math.ceil(Number(form.duration_min || 0) / 15);
-                    const windowSlots = workingRange.slice(idx, idx + blocks);
-                    if (windowSlots.length < blocks) return false;
-                    if (windowSlots.some((s) => unavailable.includes(s))) return false;
-                    return true;
-                  })
-                  .map((slot) => (
-                    <option key={slot} value={slot}>{fmtTime(slot)}</option>
-                  ))}
-              </select>
-            </div>
+        {/* ── LOGIN VIEW ── */}
+        {view === "login" && (
+          <div className="card">
+            <div className="card-body space-y-4">
+              <div className="text-center">
+                <h2 className="text-base font-bold text-[var(--text-1)]">Enter your info to continue</h2>
+                <p className="text-xs text-[var(--text-3)] mt-1">We'll match you with your client record</p>
+              </div>
 
-            {/* NOTES */}
-            <div>
-              <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#374151",
-                display: "block", marginBottom: 4 }}>Notes (optional)</label>
-              <textarea name="notes" value={form.notes} onChange={handleChange}
-                placeholder="Any special requests…"
-                className="border rounded px-2 py-1 w-full" rows={2} />
-            </div>
+              <div className="space-y-3">
+                <div>
+                  <label className={labelCls}>First name</label>
+                  <input
+                    name="name"
+                    placeholder="e.g. Sarah"
+                    value={clientForm.name}
+                    onChange={handleChange}
+                    className={inputCls}
+                    required
+                    autoComplete="given-name"
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>Last 4 digits of phone</label>
+                  <input
+                    name="last4"
+                    placeholder="e.g. 4321"
+                    value={clientForm.last4}
+                    onChange={handleChange}
+                    className={inputCls}
+                    maxLength={4}
+                    inputMode="numeric"
+                    required
+                  />
+                </div>
 
-            <button type="submit" disabled={submitting || !form.date || !form.time}
-              style={{ padding: "12px", borderRadius: 10,
-                background: submitting || !form.date || !form.time ? "#d1fae5" : "#10b981",
-                color: "white", fontWeight: 700, border: "none",
-                cursor: submitting || !form.date || !form.time ? "not-allowed" : "pointer",
-                fontSize: "0.95rem" }}>
-              {submitting ? "Booking…" : "Confirm Appointment"}
+                {error && (
+                  <p className="text-sm text-red-600 font-medium text-center bg-red-50 rounded-lg py-2 px-3">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  onClick={handleClientLogin}
+                  className="w-full py-3 rounded-xl bg-[var(--brand)] text-white font-bold text-sm hover:opacity-90 active:opacity-80 transition"
+                >
+                  Continue →
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── HOME VIEW ── */}
+        {view === "home" && client && (
+          <div className="space-y-3">
+            <p className="text-center text-[var(--text-2)] text-sm">
+              Hi <strong className="text-[var(--text-1)]">{client.full_name.split(" ")[0]}</strong>, what would you like to do?
+            </p>
+
+            {/* Success banner */}
+            {submitted && (
+              <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 space-y-2">
+                <p className="font-bold text-emerald-800 text-sm">✅ Appointment booked!</p>
+                <div className="text-xs text-emerald-700 space-y-0.5 leading-relaxed">
+                  <div><span className="font-semibold">Pet:</span> {submitted.pet}</div>
+                  <div><span className="font-semibold">Date:</span> {submitted.date} at {fmtTime(submitted.time)}</div>
+                  <div><span className="font-semibold">Services:</span> {submitted.services.join(", ")}</div>
+                  {submitted.amount > 0 && (
+                    <div><span className="font-semibold">Estimated total:</span> ${submitted.amount.toFixed(2)}</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => { setSubmitted(null); setView("book"); }}
+              className="w-full flex items-center gap-3 p-4 rounded-xl bg-[var(--brand)] text-white font-bold text-sm text-left hover:opacity-90 active:opacity-80 transition shadow-sm"
+            >
+              <span className="text-xl">📅</span>
+              <span>Book an Appointment</span>
             </button>
-          </form>
-        </div>
-      )}
 
-      {/* ── CANCEL VIEW ── */}
-      {view === "cancel" && client && (
-        <div>
-          <button onClick={() => setView("home")}
-            style={{ marginBottom: 16, fontSize: "0.82rem", color: "#10b981",
-              fontWeight: 700, background: "none", border: "none", cursor: "pointer", padding: 0 }}>
-            ← Back
-          </button>
+            <button
+              onClick={() => setView("cancel")}
+              className="w-full flex items-center justify-between gap-3 p-4 rounded-xl bg-[var(--surface)] border border-[var(--border-med)] text-[var(--text-1)] font-bold text-sm text-left hover:bg-[var(--surface-2)] active:bg-[var(--surface-2)] transition"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl">🗓</span>
+                <span>View / Cancel Appointments</span>
+              </div>
+              {upcomingAppts.length > 0 && (
+                <span className="bg-[var(--brand)] text-white text-xs font-bold rounded-full px-2.5 py-0.5 shrink-0">
+                  {upcomingAppts.length}
+                </span>
+              )}
+            </button>
+          </div>
+        )}
 
-          <h2 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: 14, color: "#111827" }}>
-            Upcoming Appointments
-          </h2>
+        {/* ── BOOK VIEW ── */}
+        {view === "book" && client && (
+          <div className="space-y-4">
+            <button
+              onClick={() => setView("home")}
+              className="text-sm font-semibold text-[var(--brand)] hover:underline flex items-center gap-1"
+            >
+              ← Back
+            </button>
 
-          {upcomingAppts.length === 0 ? (
-            <div style={{ padding: "24px 16px", textAlign: "center", color: "#9ca3af",
-              borderRadius: 12, border: "1px dashed #e5e7eb", fontSize: "0.88rem" }}>
-              No upcoming appointments found.
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {upcomingAppts.map((appt) => {
-                // Check if within 24 hours
-                const [y, m, d] = appt.date.split("-").map(Number);
-                const [h = 0, min = 0] = (appt.time || "00:00").slice(0, 5).split(":").map(Number);
-                const apptMs = new Date(y, m - 1, d, h, min).getTime();
-                const withinCutoff = apptMs - Date.now() < 24 * 60 * 60 * 1000;
+            <div className="card">
+              <div className="card-body space-y-5">
 
-                return (
-                <div key={appt.id} style={{ padding: "14px 16px", borderRadius: 12,
-                  border: "1px solid #e5e7eb", background: "white" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between",
-                    alignItems: "flex-start", gap: 8 }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: "0.95rem", color: "#111827" }}>
-                        {appt.pets?.name}
-                      </div>
-                      <div style={{ fontSize: "0.83rem", color: "#6b7280", marginTop: 2 }}>
-                        {appt.date} &nbsp;·&nbsp; {fmtTime(appt.time)}
-                      </div>
-                      {appt.duration_min && (
-                        <div style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
-                          {appt.duration_min} min
-                        </div>
-                      )}
-                      {appt.services?.length > 0 && (
-                        <div style={{ fontSize: "0.78rem", color: "#6b7280", marginTop: 4 }}>
-                          {Array.isArray(appt.services) ? appt.services.join(", ") : appt.services}
-                        </div>
-                      )}
-                    </div>
+                {/* Pet select */}
+                {pets.length > 1 && (
+                  <div>
+                    <label className={labelCls}>Select pet</label>
+                    <select
+                      value={selectedPetId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setSelectedPetId(id);
+                        const p = pets.find((pet) => pet.id === id);
+                        setSelectedPetWeight(p?.slot_weight ?? 1);
+                        setForm((prev) => ({ ...prev, time: "" }));
+                      }}
+                      className={inputCls}
+                    >
+                      <option value="">Choose a pet</option>
+                      {pets.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
-                    {withinCutoff ? (
-                      <div style={{ fontSize: "0.72rem", color: "#92400e", background: "#fef3c7",
-                        border: "1px solid #fcd34d", borderRadius: 8, padding: "6px 10px",
-                        flexShrink: 0, textAlign: "center", maxWidth: 100, lineHeight: 1.4 }}>
-                        Call to cancel
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => handleCancel(appt.id)}
-                        disabled={cancelling === appt.id}
-                        style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #fca5a5",
-                          background: "#fef2f2", color: "#dc2626", fontWeight: 600,
-                          fontSize: "0.78rem", cursor: "pointer", flexShrink: 0,
-                          opacity: cancelling === appt.id ? 0.5 : 1 }}>
-                        {cancelling === appt.id ? "Cancelling…" : "Cancel"}
-                      </button>
-                    )}
+                {/* Services */}
+                <div>
+                  <label className={labelCls}>Services</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {SERVICE_OPTIONS.map((s) => {
+                      const checked = form.services.includes(s);
+                      return (
+                        <label
+                          key={s}
+                          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border cursor-pointer text-sm font-medium transition
+                            ${checked
+                              ? "bg-emerald-50 border-emerald-400 text-emerald-800"
+                              : "bg-[var(--surface)] border-[var(--border-med)] text-[var(--text-2)] hover:border-[var(--brand)]"
+                            }`}
+                        >
+                          <input
+                            type="checkbox"
+                            name="services"
+                            value={s}
+                            checked={checked}
+                            onChange={handleChange}
+                            className="accent-emerald-600 w-4 h-4 shrink-0"
+                          />
+                          {s}
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
-                );
-              })}
+
+                {/* Price + duration estimate */}
+                {form.services.filter((s) => s !== "Other").length > 0 && (
+                  <div className="flex items-center justify-between px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                    <span className="text-sm text-emerald-700">
+                      ⏱ {form.duration_min} min &nbsp;·&nbsp; Estimated total
+                    </span>
+                    <span className="font-bold text-emerald-800 text-base">
+                      ${calcAmount(form.services, selectedPetWeight, pricing).toFixed(2)}
+                    </span>
+                  </div>
+                )}
+
+                {/* Date picker */}
+                <div>
+                  <label className={labelCls}>Date</label>
+                  <DatePicker
+                    selected={form.date ? parseDBDate(form.date) : null}
+                    onChange={(d) => {
+                      const clean = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+                      setForm((p) => ({ ...p, date: formatDate(clean), time: "" }));
+                    }}
+                    dateFormat="MMM d, yyyy"
+                    className={inputCls}
+                    placeholderText="Pick a date"
+                    filterDate={(d) => {
+                      if (!workingWeekdays.length) return true;
+                      const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+                      return workingWeekdays.includes(utc.getUTCDay());
+                    }}
+                    dayClassName={(d) => {
+                      const clean = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+                      const f = formatDate(clean);
+                      if (vacationDates.includes(f)) return "bg-red-300 text-white";
+                      if (!workingWeekdays.includes(clean.getUTCDay())) return "bg-gray-200 text-gray-400";
+                      return "";
+                    }}
+                    minDate={new Date()}
+                  />
+                </div>
+
+                {/* Time select */}
+                <div>
+                  <label className={labelCls}>Time</label>
+                  <select
+                    name="time"
+                    value={form.time}
+                    onChange={handleChange}
+                    disabled={!form.date || !workingRange.length || isFullVacation}
+                    className={`${inputCls} ${isFullVacation ? "bg-red-50 border-red-300" : ""} disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    <option value="">
+                      {isFullVacation
+                        ? "Day Off — Vacation"
+                        : workingRange.length
+                        ? "Select a time"
+                        : "Not working this day"}
+                    </option>
+                    {!isFullVacation &&
+                      workingRange
+                        .filter((slot, idx) => {
+                          const blocks = Math.ceil(Number(form.duration_min || 0) / 15);
+                          const windowSlots = workingRange.slice(idx, idx + blocks);
+                          if (windowSlots.length < blocks) return false;
+                          if (windowSlots.some((s) => unavailable.includes(s))) return false;
+                          return true;
+                        })
+                        .map((slot) => (
+                          <option key={slot} value={slot}>{fmtTime(slot)}</option>
+                        ))}
+                  </select>
+                </div>
+
+                {/* Notes */}
+                <div>
+                  <label className={labelCls}>Notes <span className="font-normal text-[var(--text-3)]">(optional)</span></label>
+                  <textarea
+                    name="notes"
+                    value={form.notes}
+                    onChange={handleChange}
+                    placeholder="Any special requests…"
+                    rows={2}
+                    className={`${inputCls} resize-none`}
+                  />
+                </div>
+
+                <button
+                  onClick={handleSubmit}
+                  disabled={submitting || !form.date || !form.time}
+                  className="w-full py-3 rounded-xl bg-[var(--brand)] text-white font-bold text-sm hover:opacity-90 active:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                >
+                  {submitting ? "Booking…" : "Confirm Appointment"}
+                </button>
+              </div>
             </div>
-          )}
+          </div>
+        )}
 
-          <p style={{ marginTop: 16, fontSize: "0.75rem", color: "#9ca3af", textAlign: "center" }}>
-            Cancellations must be made at least 24 hours in advance.
-            To reschedule, cancel here and book a new time.
-          </p>
-        </div>
-      )}
+        {/* ── CANCEL VIEW ── */}
+        {view === "cancel" && client && (
+          <div className="space-y-4">
+            <button
+              onClick={() => setView("home")}
+              className="text-sm font-semibold text-[var(--brand)] hover:underline flex items-center gap-1"
+            >
+              ← Back
+            </button>
 
+            <h2 className="font-bold text-[var(--text-1)] text-base">Upcoming Appointments</h2>
+
+            {upcomingAppts.length === 0 ? (
+              <div className="text-center py-10 border border-dashed border-[var(--border-med)] rounded-xl text-[var(--text-3)] text-sm">
+                No upcoming appointments found.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {upcomingAppts.map((appt) => {
+                  const [y, m, d] = appt.date.split("-").map(Number);
+                  const [h = 0, min = 0] = (appt.time || "00:00").slice(0, 5).split(":").map(Number);
+                  const apptMs = new Date(y, m - 1, d, h, min).getTime();
+                  const withinCutoff = apptMs - Date.now() < 24 * 60 * 60 * 1000;
+
+                  return (
+                    <div key={appt.id} className="card">
+                      <div className="card-body flex items-start justify-between gap-4">
+                        <div className="space-y-0.5 min-w-0">
+                          <p className="font-bold text-[var(--text-1)] text-sm">{appt.pets?.name}</p>
+                          <p className="text-xs text-[var(--text-2)]">
+                            {appt.date} · {fmtTime(appt.time)}
+                          </p>
+                          {appt.duration_min && (
+                            <p className="text-xs text-[var(--text-3)]">{appt.duration_min} min</p>
+                          )}
+                          {appt.services?.length > 0 && (
+                            <p className="text-xs text-[var(--text-3)]">
+                              {Array.isArray(appt.services) ? appt.services.join(", ") : appt.services}
+                            </p>
+                          )}
+                        </div>
+
+                        {withinCutoff ? (
+                          <div className="shrink-0 text-xs font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-center leading-tight">
+                            Call to<br />cancel
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleCancel(appt.id)}
+                            disabled={cancelling === appt.id}
+                            className="shrink-0 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 hover:bg-red-100 disabled:opacity-50 transition"
+                          >
+                            {cancelling === appt.id ? "Cancelling…" : "Cancel"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <p className="text-xs text-[var(--text-3)] text-center pt-2">
+              Cancellations must be made at least 24 hours in advance.<br />
+              To reschedule, cancel here and book a new time.
+            </p>
+          </div>
+        )}
+
+      </div>
+
+      <ConfirmModal
+        config={confirmConfig}
+        onClose={() => setConfirmConfig(null)}
+      />
     </main>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { Link } from "react-router-dom";
 import Loader from "../components/Loader";
+import ConfirmModal from "../components/ConfirmModal";
 
 function getDaysOverdue(dateStr) {
   if (!dateStr) return 0;
@@ -30,6 +31,7 @@ export default function UnpaidAppointments() {
   const [loading, setLoading] = useState(true);
   const [totalUnpaidAmount, setTotalUnpaidAmount] = useState(0);
   const [user, setUser] = useState(null);
+  const [confirmConfig, setConfirmConfig] = useState(null);
 
   // Load logged-in groomer
   useEffect(() => {
@@ -110,7 +112,12 @@ export default function UnpaidAppointments() {
       .eq("groomer_id", user.id);
 
     if (error) {
-      alert("Error marking as paid: " + error.message);
+      setConfirmConfig({
+        title: "Could not mark as paid",
+        message: error.message || "Something went wrong. Please try again.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -228,7 +235,7 @@ export default function UnpaidAppointments() {
                   )}
 
                   {/* CLIENT CONTACT & AMOUNT */}
-                  <div className="flex flex-wrap items-center gap-4 text-sm">
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
                     {amountNum > 0 && (
                       <span className="font-semibold text-gray-800">
                         💲{amountNum.toFixed(2)}
@@ -239,15 +246,15 @@ export default function UnpaidAppointments() {
                       <>
                         <a
                           href={`tel:${appt.pets.clients.phone}`}
-                          className="text-xs text-blue-600 hover:underline"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white text-blue-600 font-medium text-sm hover:bg-blue-50 active:bg-blue-100"
                         >
                           📞 Call
                         </a>
                         <a
                           href={`sms:${appt.pets.clients.phone}`}
-                          className="text-xs text-blue-600 hover:underline"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white text-blue-600 font-medium text-sm hover:bg-blue-50 active:bg-blue-100"
                         >
-                          ✉️ Text Client
+                          💬 Text
                         </a>
                       </>
                     )}
@@ -255,16 +262,16 @@ export default function UnpaidAppointments() {
                     {appt.pets?.clients?.email && (
                       <a
                         href={`mailto:${appt.pets.clients.email}`}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white text-blue-600 font-medium text-sm hover:bg-blue-50 active:bg-blue-100 truncate max-w-[200px]"
                       >
-                        📧 {appt.pets.clients.email}
+                        📧 Email
                       </a>
                     )}
 
                     {appt.pets?.client_id && (
                       <Link
                         to={`/clients/${appt.pets.client_id}`}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-gray-200 bg-white text-blue-600 font-medium text-sm hover:bg-blue-50 active:bg-blue-100"
                       >
                         👤 View Client
                       </Link>
@@ -286,6 +293,11 @@ export default function UnpaidAppointments() {
           })}
         </div>
       )}
+
+      <ConfirmModal
+        config={confirmConfig}
+        onClose={() => setConfirmConfig(null)}
+      />
     </main>
   );
 }

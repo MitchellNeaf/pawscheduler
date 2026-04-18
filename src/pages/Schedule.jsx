@@ -3,6 +3,8 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import { Link } from "react-router-dom";
 import Loader from "../components/Loader";
+import ConfirmModal from "../components/ConfirmModal";
+import DarkModeToggle from "../components/DarkModeToggle";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -367,227 +369,45 @@ function PetSelectModal({ open, onClose, slot, date, pets, loading, onPickPet })
 }
 
 
-/* ---------------- New Appointment Modal ---------------- */
-function NewAppointmentModal({ open, onClose, pet, form, setForm, onSave, saving, pricing }) {
-  if (!open || !pet) return null;
-
-  const slotWeight = pet?.slot_weight || 1;
-
-  const handleChange = (field) => (e) => {
-    const raw = e.target.value;
-    const value =
-      field === "duration_min"
-        ? Number(raw || 0)
-        : field === "amount"
-        ? Number(raw)
-        : raw;
-    setForm((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const toggleService = (svc) => {
-    setForm((prev) => {
-      const exists = prev.services.includes(svc);
-      const newServices = exists
-        ? prev.services.filter((s) => s !== svc)
-        : [...prev.services, svc];
-      const autoAmount = calcAmount(newServices, slotWeight, pricing);
-      return {
-        ...prev,
-        services: newServices,
-        amount: autoAmount,
-      };
-    });
-  };
-
-  const rabies = getRabiesRecord(pet.shot_records);
-  const expired = isExpired(rabies?.date_expires);
-  const expSoon = isExpiringSoon(rabies?.date_expires);
-
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
-      <div className="bg-white rounded-lg shadow-lg max-w-md w-full max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h2 className="font-semibold text-gray-800">New Appointment</h2>
-          <button onClick={onClose} className="text-gray-500 text-sm">
-            ✕
-          </button>
-        </div>
-
-        <div className="p-4 space-y-3 overflow-y-auto flex-1">
-          <div className="text-sm text-gray-700">
-            <div className="font-semibold">{pet.name}</div>
-            <div className="text-xs text-gray-500">
-              {pet.clients?.full_name}
-            </div>
-          </div>
-
-          {/* Vaccine Warning */}
-          {!rabies ? (
-            <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">
-              ⚠️ No rabies record on file
-            </div>
-          ) : expired ? (
-            <div className="p-2 bg-red-100 text-red-700 text-xs rounded">
-              ⛔ Rabies expired on {rabies.date_expires}
-            </div>
-          ) : expSoon ? (
-            <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">
-              ⚠️ Rabies expires soon ({rabies.date_expires})
-            </div>
-          ) : (
-            <div className="p-2 bg-green-100 text-green-700 text-xs rounded">
-              🟢 Rabies up to date (expires {rabies.date_expires})
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <label className="flex flex-col gap-1">
-              <span className="font-medium text-gray-700">Date</span>
-              <input
-                type="date"
-                value={form.date}
-                onChange={handleChange("date")}
-                className="border rounded px-2 py-1"
-              />
-            </label>
-
-            <label className="flex flex-col gap-1">
-              <span className="font-medium text-gray-700">Time</span>
-              <input
-                type="time"
-                step={900}
-                value={form.time}
-                onChange={handleChange("time")}
-                className="border rounded px-2 py-1"
-              />
-            </label>
-          </div>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">Duration</span>
-            <select
-              value={form.duration_min}
-              onChange={handleChange("duration_min")}
-              className="border rounded px-2 py-1"
-            >
-              <option value={15}>15</option>
-              <option value={30}>30</option>
-              <option value={45}>45</option>
-              <option value={60}>60</option>
-              <option value={90}>90</option>
-              <option value={120}>120</option>
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">
-              Amount ($)
-              {form.services.length > 0 && (
-                <span className="ml-2 text-xs text-emerald-600 font-normal">
-                  auto-calculated · override anytime
-                </span>
-              )}
-            </span>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={form.amount ?? ""}
-              onChange={handleChange("amount")}
-              className="border rounded px-2 py-1"
-              placeholder="Enter price"
-            />
-          </label>
-
-          <div className="text-sm">
-            <div className="font-medium text-gray-700 mb-1">Services</div>
-            <div className="grid grid-cols-2 gap-1">
-              {SERVICE_OPTIONS.map((svc) => (
-                <label
-                  key={svc}
-                  className="flex items-center gap-2 text-xs text-gray-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.services.includes(svc)}
-                    onChange={() => toggleService(svc)}
-                  />
-                  {svc}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">Notes</span>
-            <textarea
-              value={form.notes}
-              onChange={handleChange("notes")}
-              className="border rounded px-2 py-1 min-h-[60px]"
-            />
-          </label>
-
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.reminder_enabled}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  reminder_enabled: e.target.checked,
-                }))
-              }
-            />
-            Send appointment reminder?
-          </label>
-        </div>
-
-        <div className="px-4 py-3 border-t flex justify-end gap-2">
-          <button
-            onClick={onClose}
-            disabled={saving}
-            className="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-
-          <button
-            onClick={onSave}
-            disabled={saving}
-            className="text-sm px-3 py-1 rounded bg-blue-600 text-white"
-          >
-            {saving ? "Saving..." : "Save"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- Edit Appointment Modal ---------------- */
-function EditAppointmentModal({
+/* ---------------- Unified Appointment Modal ---------------- */
+// Handles both New and Edit — pass isEdit=true for edit mode (shows Delete button).
+// For new: pass pet={...} with shot_records. For edit: pass appt={...} with shot_records.
+function AppointmentModal({
   open,
   onClose,
+  isEdit,
+  // New mode
+  pet,
+  // Edit mode
   appt,
+  onDelete,
+  // Shared
   form,
   setForm,
   onSave,
-  onDelete,
   saving,
   pricing,
+  // Working hours for the selected date (from parent Schedule state)
+  workingRange,
+  breakSlots,
 }) {
-  if (!open || !appt) return null;
+  if (!open) return null;
+  if (isEdit && !appt) return null;
+  if (!isEdit && !pet) return null;
 
-  const slotWeight = appt?.slot_weight || appt?.pets?.slot_weight || 1;
+  const subject     = isEdit ? appt : pet;
+  const petName     = isEdit ? appt.pets?.name        : pet.name;
+  const clientName  = isEdit ? appt.pets?.clients?.full_name : pet.clients?.full_name;
+  const slotWeight  = isEdit
+    ? (appt?.slot_weight || appt?.pets?.slot_weight || 1)
+    : (pet?.slot_weight || 1);
 
   const handleChange = (field) => (e) => {
     const raw = e.target.value;
     const value =
-      field === "duration_min"
-        ? Number(raw || 0)
-        : field === "amount"
-        ? Number(raw)
-        : raw;
+      field === "duration_min" ? Number(raw || 0) :
+      field === "amount"       ? Number(raw) :
+      raw;
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -597,95 +417,104 @@ function EditAppointmentModal({
       const newServices = exists
         ? prev.services.filter((s) => s !== svc)
         : [...prev.services, svc];
-      const autoAmount = calcAmount(newServices, slotWeight, pricing);
       return {
         ...prev,
         services: newServices,
-        amount: autoAmount,
+        amount: calcAmount(newServices, slotWeight, pricing),
       };
     });
   };
 
-  const rabies = getRabiesRecord(appt.shot_records);
+  const rabies  = getRabiesRecord(subject.shot_records);
   const expired = isExpired(rabies?.date_expires);
   const expSoon = isExpiringSoon(rabies?.date_expires);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-lg max-w-md w-full max-h-[90vh] flex flex-col">
+
+        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b">
-          <h2 className="font-semibold text-gray-800">Edit Appointment</h2>
-          <button onClick={onClose} className="text-gray-500 text-sm">
-            ✕
-          </button>
+          <h2 className="font-semibold text-gray-800">
+            {isEdit ? "Edit Appointment" : "New Appointment"}
+          </h2>
+          <button onClick={onClose} className="text-gray-500 text-sm">✕</button>
         </div>
 
+        {/* Body */}
         <div className="p-4 space-y-3 overflow-y-auto flex-1">
+
+          {/* Pet / client name */}
           <div className="text-sm text-gray-700">
-            <div className="font-semibold">{appt.pets?.name}</div>
-            <div className="text-xs text-gray-500">
-              {appt.pets?.clients?.full_name}
-            </div>
+            <div className="font-semibold">{petName}</div>
+            <div className="text-xs text-gray-500">{clientName}</div>
           </div>
 
-          {/* Vaccine Warning */}
+          {/* Rabies status */}
           {!rabies ? (
-            <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">
-              ⚠️ No rabies record on file
-            </div>
+            <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">⚠️ No rabies record on file</div>
           ) : expired ? (
-            <div className="p-2 bg-red-100 text-red-700 text-xs rounded">
-              ⛔ Rabies expired on {rabies.date_expires}
-            </div>
+            <div className="p-2 bg-red-100 text-red-700 text-xs rounded">⛔ Rabies expired on {rabies.date_expires}</div>
           ) : expSoon ? (
-            <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">
-              ⚠️ Rabies expires soon ({rabies.date_expires})
-            </div>
+            <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">⚠️ Rabies expires soon ({rabies.date_expires})</div>
           ) : (
-            <div className="p-2 bg-green-100 text-green-700 text-xs rounded">
-              🟢 Rabies up to date (expires {rabies.date_expires})
-            </div>
+            <div className="p-2 bg-green-100 text-green-700 text-xs rounded">🟢 Rabies up to date (expires {rabies.date_expires})</div>
           )}
 
+          {/* Date + Time */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             <label className="flex flex-col gap-1">
               <span className="font-medium text-gray-700">Date</span>
-              <input
-                type="date"
-                value={form.date}
-                onChange={handleChange("date")}
-                className="border rounded px-2 py-1"
-              />
+              <input type="date" value={form.date} onChange={handleChange("date")}
+                className="border rounded px-2 py-1" />
             </label>
-
             <label className="flex flex-col gap-1">
               <span className="font-medium text-gray-700">Time</span>
-              <input
-                type="time"
-                step={900}
-                value={form.time}
-                onChange={handleChange("time")}
-                className="border rounded px-2 py-1"
-              />
+              {workingRange && workingRange.length > 0 ? (
+                <select
+                  value={form.time}
+                  onChange={handleChange("time")}
+                  className="border rounded px-2 py-1"
+                >
+                  <option value="">Select a time</option>
+                  {workingRange
+                    .filter((slot) => !(breakSlots || []).includes(slot))
+                    .map((slot) => {
+                      const [h, m] = slot.split(":").map(Number);
+                      const ampm = h >= 12 ? "PM" : "AM";
+                      const h12 = h % 12 || 12;
+                      return (
+                        <option key={slot} value={slot}>
+                          {h12}:{String(m).padStart(2, "0")} {ampm}
+                        </option>
+                      );
+                    })}
+                </select>
+              ) : (
+                <>
+                  <input type="time" step={900} value={form.time}
+                    onChange={handleChange("time")}
+                    className="border rounded px-2 py-1" />
+                  <span className="text-[11px] text-amber-600 mt-0.5">
+                    ⚠️ No working hours set for this day — any time can be selected
+                  </span>
+                </>
+              )}
             </label>
           </div>
 
+          {/* Duration */}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">Duration</span>
-            <select
-              value={form.duration_min}
-              onChange={handleChange("duration_min")}
-              className="border rounded px-2 py-1"
-            >
-              <option value={15}>15</option>
-              <option value={30}>30</option>
-              <option value={45}>45</option>
-              <option value={60}>60</option>
-              <option value={90}>90</option>
-              <option value={120}>120</option>
+            <select value={form.duration_min} onChange={handleChange("duration_min")}
+              className="border rounded px-2 py-1">
+              {[15, 30, 45, 60, 90, 120].map((m) => (
+                <option key={m} value={m}>{m} min</option>
+              ))}
             </select>
           </label>
 
+          {/* Amount */}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">
               Amount ($)
@@ -695,82 +524,55 @@ function EditAppointmentModal({
                 </span>
               )}
             </span>
-            <input
-              type="number"
-              min="0"
-              step="1"
-              value={form.amount ?? ""}
-              onChange={handleChange("amount")}
-              className="border rounded px-2 py-1"
-            />
+            <input type="number" min="0" step="1" value={form.amount ?? ""}
+              onChange={handleChange("amount")} className="border rounded px-2 py-1"
+              placeholder="Enter price" />
           </label>
 
+          {/* Services */}
           <div className="text-sm">
             <div className="font-medium text-gray-700 mb-1">Services</div>
             <div className="grid grid-cols-2 gap-1">
               {SERVICE_OPTIONS.map((svc) => (
-                <label
-                  key={svc}
-                  className="flex items-center gap-2 text-xs text-gray-700"
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.services.includes(svc)}
-                    onChange={() => toggleService(svc)}
-                  />
+                <label key={svc} className="flex items-center gap-2 text-xs text-gray-700">
+                  <input type="checkbox" checked={form.services.includes(svc)}
+                    onChange={() => toggleService(svc)} />
                   {svc}
                 </label>
               ))}
             </div>
           </div>
 
+          {/* Notes */}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">Notes</span>
-            <textarea
-              value={form.notes}
-              onChange={handleChange("notes")}
-              className="border rounded px-2 py-1 min-h-[60px]"
-            />
+            <textarea value={form.notes} onChange={handleChange("notes")}
+              className="border rounded px-2 py-1 min-h-[60px]" />
           </label>
 
+          {/* Reminder toggle */}
           <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={form.reminder_enabled}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  reminder_enabled: e.target.checked,
-                }))
-              }
-            />
+            <input type="checkbox" checked={form.reminder_enabled}
+              onChange={(e) => setForm((prev) => ({ ...prev, reminder_enabled: e.target.checked }))} />
             Send appointment reminder?
           </label>
         </div>
 
-        <div className="px-4 py-3 border-t flex justify-between gap-2">
-          <button
-            onClick={onDelete}
-            className="text-sm px-3 py-1 rounded border border-red-500 text-red-600 hover:bg-red-50"
-            disabled={saving}
-          >
-            🗑 Delete
-          </button>
-
+        {/* Footer */}
+        <div className={`px-4 py-3 border-t flex gap-2 ${isEdit ? "justify-between" : "justify-end"}`}>
+          {isEdit && (
+            <button onClick={onDelete} disabled={saving}
+              className="text-sm px-3 py-1 rounded border border-red-500 text-red-600 hover:bg-red-50">
+              🗑 Delete
+            </button>
+          )}
           <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50"
-              disabled={saving}
-            >
+            <button onClick={onClose} disabled={saving}
+              className="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">
               Cancel
             </button>
-
-            <button
-              onClick={onSave}
-              disabled={saving}
-              className="text-sm px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-60"
-            >
+            <button onClick={onSave} disabled={saving}
+              className="text-sm px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-60">
               {saving ? "Saving..." : "Save"}
             </button>
           </div>
@@ -1016,6 +818,9 @@ export default function Schedule() {
   const [rebookModalOpen, setRebookModalOpen] = useState(false);
   const [rebookAppt, setRebookAppt] = useState(null);
 
+  // ConfirmModal state (replaces window.confirm)
+  const [confirmConfig, setConfirmConfig] = useState(null);
+
   // Service pricing loaded from groomers.service_pricing
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
 
@@ -1096,6 +901,7 @@ export default function Schedule() {
                 full_name,
                 phone,
                 email,
+                sms_opt_in,
                 street,
                 city,
                 state,
@@ -1151,21 +957,25 @@ export default function Schedule() {
   /* Delete appointment */
   const handleDelete = async (id) => {
     if (!user) return;
-    const ok = window.confirm("Delete this appointment?");
-    if (!ok) return;
 
-    const { error } = await supabase
-      .from("appointments")
-      .delete()
-      .eq("id", id)
-      .eq("groomer_id", user.id);
+    setConfirmConfig({
+      title: "Delete appointment?",
+      message: "This cannot be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+      onConfirm: async () => {
+        const { error } = await supabase
+          .from("appointments")
+          .delete()
+          .eq("id", id)
+          .eq("groomer_id", user.id);
 
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    setAppointments((prev) => prev.filter((a) => a.id !== id));
+        if (error) {
+          console.error("Delete error:", error.message);
+          return;
+        }
+      },
+    });
   };
 
   const openRebookModal = (appt) => {
@@ -1235,7 +1045,12 @@ export default function Schedule() {
   const handleSaveNew = async () => {
     if (!user || !newPet) return;
     if (!newForm.date || !newForm.time) {
-      alert("Date and time are required.");
+      setConfirmConfig({
+        title: "Missing info",
+        message: "Date and time are required before saving.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -1268,7 +1083,12 @@ export default function Schedule() {
     setSavingNew(false);
 
     if (error) {
-      alert(error.message);
+      setConfirmConfig({
+        title: "Could not save",
+        message: error.message || "Something went wrong. Please try again.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -1336,7 +1156,12 @@ export default function Schedule() {
   const handleSaveEdit = async () => {
     if (!user || !editAppt) return;
     if (!editForm.date || !editForm.time) {
-      alert("Date and time are required.");
+      setConfirmConfig({
+        title: "Missing info",
+        message: "Date and time are required before saving.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -1367,7 +1192,12 @@ export default function Schedule() {
     setSavingEdit(false);
 
     if (error) {
-      alert(error.message);
+      setConfirmConfig({
+        title: "Could not save",
+        message: error.message || "Something went wrong. Please try again.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -1392,6 +1222,84 @@ export default function Schedule() {
 
     setEditModalOpen(false);
     setEditAppt(null);
+  };
+
+  /* Send manual SMS reminder */
+  const [sendingReminder, setSendingReminder] = useState(null); // appointmentId | null
+
+  const handleSendReminder = async (appt) => {
+    const client = appt.pets?.clients;
+
+    // Guard: no phone
+    if (!client?.phone) {
+      setConfirmConfig({
+        title: "No phone number",
+        message: `${client?.full_name || "This client"} doesn't have a phone number on file. Add one from the Clients page.`,
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+      return;
+    }
+
+    // Guard: not opted in
+    if (!client?.sms_opt_in) {
+      setConfirmConfig({
+        title: "Client not opted in",
+        message: `${client?.full_name || "This client"} hasn't opted in to SMS reminders. Update their SMS settings from the Clients page.`,
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+      return;
+    }
+
+    setSendingReminder(appt.id);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/.netlify/functions/sendManualSmsReminder", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ appointmentId: appt.id }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setConfirmConfig({
+          title: "Reminder failed",
+          message: json.error || "Something went wrong. Please try again.",
+          confirmLabel: "OK",
+          onConfirm: () => {},
+        });
+      } else {
+        // Optimistically stamp sms_reminder_sent_at locally
+        setAppointments((prev) =>
+          prev.map((a) =>
+            a.id === appt.id
+              ? { ...a, sms_reminder_sent_at: new Date().toISOString() }
+              : a
+          )
+        );
+        setConfirmConfig({
+          title: "Reminder sent ✓",
+          message: `SMS reminder sent to ${client.full_name}.`,
+          confirmLabel: "OK",
+          onConfirm: () => {},
+        });
+      }
+    } catch (err) {
+      setConfirmConfig({
+        title: "Reminder failed",
+        message: "Network error. Please try again.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+    } finally {
+      setSendingReminder(null);
+    }
   };
 
   if (loading) {
@@ -1470,7 +1378,10 @@ export default function Schedule() {
         ← Back to Home
       </Link>
 
-      <h1 className="text-2xl font-bold text-gray-900">Schedule</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">Schedule</h1>
+        <DarkModeToggle />
+      </div>
 
       {user && <ScheduleTrialBanner userId={user.id} />}
 
@@ -2006,6 +1917,22 @@ export default function Schedule() {
                         🔁 Rebook 6 weeks
                       </button>
 
+                      {/* SMS reminder — only show if client has phone */}
+                      {appt.pets?.clients?.phone && (
+                        <button
+                          onClick={() => handleSendReminder(appt)}
+                          disabled={sendingReminder === appt.id}
+                          className={`px-3 py-1.5 text-sm rounded border flex-1 sm:flex-none transition-colors
+                            ${appt.pets.clients.sms_opt_in
+                              ? "border-emerald-500 text-emerald-700 hover:bg-emerald-50"
+                              : "border-gray-300 text-gray-400 cursor-not-allowed"
+                            } disabled:opacity-50`}
+                          title={appt.pets.clients.sms_opt_in ? "Send SMS reminder" : "Client not opted in to SMS"}
+                        >
+                          {sendingReminder === appt.id ? "Sending…" : "💬 Remind"}
+                        </button>
+                      )}
+
                       <button
                         onClick={() => handleDelete(appt.id)}
                         className="px-3 py-1.5 text-sm rounded border border-red-500 text-red-600 hover:bg-red-50 flex-1 sm:flex-none"
@@ -2056,20 +1983,24 @@ export default function Schedule() {
         onPickPet={handlePickPet}
       />
 
-      <NewAppointmentModal
+      <AppointmentModal
         open={newModalOpen}
         onClose={() => setNewModalOpen(false)}
+        isEdit={false}
         pet={newPet}
         form={newForm}
         setForm={setNewForm}
         onSave={handleSaveNew}
         saving={savingNew}
         pricing={pricing}
+        workingRange={workingRange}
+        breakSlots={breakSlots}
       />
 
-      <EditAppointmentModal
+      <AppointmentModal
         open={editModalOpen}
         onClose={() => setEditModalOpen(false)}
+        isEdit={true}
         appt={editAppt}
         form={editForm}
         setForm={setEditForm}
@@ -2080,6 +2011,8 @@ export default function Schedule() {
         }}
         saving={savingEdit}
         pricing={pricing}
+        workingRange={workingRange}
+        breakSlots={breakSlots}
       />
 
       <RebookWeekModal
@@ -2087,6 +2020,11 @@ export default function Schedule() {
         appt={rebookAppt}
         onClose={() => setRebookModalOpen(false)}
         onPickDate={handleRebookDatePicked}
+      />
+
+      <ConfirmModal
+        config={confirmConfig}
+        onClose={() => setConfirmConfig(null)}
       />
     </main>
   );

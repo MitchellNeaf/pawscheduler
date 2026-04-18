@@ -862,3 +862,239 @@ input[type="checkbox"]:focus {
   z-index: 9999 !important;
   position: relative;
 }
+
+/* =====================================================
+   DARK MODE OVERRIDES
+   Add this block to the bottom of index.css.
+   When the .dark class is on <html>, all CSS variables
+   switch to dark values — no component changes needed.
+===================================================== */
+
+.dark {
+  /* Surfaces */
+  --surface-0:      #111917;
+  --surface-1:      #161e1b;
+  --surface-2:      #1c2820;
+  --surface-border: rgba(52, 211, 153, 0.08);
+
+  /* Text */
+  --text-primary:   #e8f5ee;
+  --text-secondary: #9ec4b0;
+  --text-muted:     #5a8a73;
+
+  /* Shadows — softer on dark */
+  --shadow-xs:  0 1px 3px rgba(0,0,0,.25);
+  --shadow-sm:  0 4px 12px rgba(0,0,0,.30), 0 1px 3px rgba(0,0,0,.20);
+  --shadow-md:  0 8px 24px rgba(0,0,0,.40), 0 2px 6px rgba(0,0,0,.20);
+  --shadow-lg:  0 16px 48px rgba(0,0,0,.50), 0 4px 12px rgba(0,0,0,.25);
+  --shadow-glow:0 0 0 3px rgba(52,211,153,.15), 0 8px 24px rgba(52,211,153,.12);
+}
+
+/* ── Body ─────────────────────────────────────────── */
+.dark body {
+  background-color: #0e1512;
+  background-image:
+    radial-gradient(circle at 18% 22%, rgba(52,211,153,.06) 0%, transparent 38%),
+    radial-gradient(circle at 82% 8%,  rgba(16,185,129,.04) 0%, transparent 35%),
+    radial-gradient(circle at 50% 90%, rgba(52,211,153,.03) 0%, transparent 40%),
+    linear-gradient(160deg, #0f1a14 0%, #0b1510 55%, #101a13 100%);
+  color: var(--text-primary);
+}
+
+/* ── Cards ────────────────────────────────────────── */
+.dark .card {
+  background: linear-gradient(
+    170deg,
+    rgba(28, 40, 32, 0.97) 0%,
+    rgba(22, 32, 26, 0.94) 100%
+  );
+  border-color: rgba(52, 211, 153, 0.08);
+  box-shadow:
+    var(--shadow-md),
+    inset 0 1px 0 rgba(255,255,255,.04),
+    inset 0 -1px 0 rgba(52,211,153,.03);
+}
+
+.dark .card:hover {
+  box-shadow:
+    var(--shadow-lg),
+    inset 0 1px 0 rgba(255,255,255,.06),
+    inset 0 -1px 0 rgba(52,211,153,.05);
+}
+
+/* ── Stat cards ───────────────────────────────────── */
+.dark .stat {
+  background: linear-gradient(135deg, rgba(28,40,32,.97) 0%, rgba(20,32,24,.95) 100%);
+  border-color: rgba(52,211,153,.10);
+}
+
+/* ── Inputs ───────────────────────────────────────── */
+.dark input,
+.dark select,
+.dark textarea {
+  background: rgba(20, 30, 24, 0.90);
+  border-color: rgba(52, 211, 153, 0.12);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-xs), inset 0 1px 0 rgba(255,255,255,.03);
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+  background: rgba(24, 36, 28, 0.98);
+  border-color: var(--emerald-500);
+  box-shadow: var(--shadow-glow);
+}
+
+/* ── Buttons ──────────────────────────────────────── */
+.dark .btn-secondary {
+  background: rgba(28, 40, 32, 0.92);
+  color: var(--text-primary);
+  border-color: rgba(52, 211, 153, 0.14);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.dark .btn-secondary:hover {
+  background: rgba(34, 48, 38, 1);
+  border-color: rgba(52, 211, 153, 0.26);
+}
+
+/* ── Tables ───────────────────────────────────────── */
+.dark table {
+  background: rgba(20, 30, 24, 0.95);
+  border-color: rgba(52,211,153,.08);
+}
+
+.dark th {
+  background: linear-gradient(180deg, rgba(28,42,32,1) 0%, rgba(22,34,26,1) 100%);
+  color: var(--text-secondary);
+}
+
+.dark td {
+  color: var(--text-secondary);
+  border-bottom-color: rgba(52,211,153,.05);
+}
+
+.dark tr:nth-child(even) td {
+  background: rgba(52,211,153,.03);
+}
+
+.dark tr:hover td {
+  background: rgba(52,211,153,.05);
+}
+
+/* ── Chips ────────────────────────────────────────── */
+.dark .chip-brand {
+  background: linear-gradient(135deg, rgba(16,185,129,.18), rgba(52,211,153,.12));
+  color: var(--emerald-400);
+  border-color: rgba(16,185,129,.22);
+}
+
+.dark .chip-warning {
+  background: linear-gradient(135deg, rgba(245,158,11,.15), rgba(251,191,36,.10));
+  color: #fbbf24;
+  border-color: rgba(245,158,11,.22);
+}
+
+.dark .chip-danger {
+  background: linear-gradient(135deg, rgba(239,68,68,.15), rgba(248,113,113,.10));
+  color: #f87171;
+  border-color: rgba(239,68,68,.20);
+}
+
+/* ── Nav links ────────────────────────────────────── */
+.dark nav a:hover,
+.dark .nav-link:hover {
+  background: rgba(52,211,153,.08);
+  color: var(--emerald-400);
+}
+
+.dark nav a.active,
+.dark .nav-link.active {
+  background: rgba(52,211,153,.12);
+  color: var(--emerald-400);
+}
+
+/* ── Alerts ───────────────────────────────────────── */
+.dark .alert-info {
+  background: linear-gradient(135deg, rgba(16,185,129,.10), rgba(52,211,153,.06));
+  border-color: rgba(16,185,129,.22);
+  color: var(--emerald-400);
+}
+
+.dark .alert-warning {
+  background: linear-gradient(135deg, rgba(245,158,11,.10), rgba(251,191,36,.06));
+  border-color: rgba(245,158,11,.24);
+  color: #fbbf24;
+}
+
+.dark .alert-danger {
+  background: linear-gradient(135deg, rgba(239,68,68,.10), rgba(248,113,113,.06));
+  border-color: rgba(239,68,68,.24);
+  color: #f87171;
+}
+
+/* ── Schedule grid ────────────────────────────────── */
+.dark .schedule-card {
+  background: linear-gradient(
+    170deg,
+    rgba(24, 36, 28, 0.97) 0%,
+    rgba(18, 28, 22, 0.94) 100%
+  );
+  border-color: rgba(52,211,153,.08);
+}
+
+.dark .schedule-active {
+  background: linear-gradient(
+    170deg,
+    rgba(28,44,34,.99) 0%,
+    rgba(16,185,129,.08) 100%
+  ) !important;
+  border-color: rgba(52,211,153,.25) !important;
+}
+
+/* ── Form section ─────────────────────────────────── */
+.dark .form-section {
+  background: rgba(20,30,24,.70);
+  border-color: rgba(52,211,153,.08);
+}
+
+/* ── Scrollbar ────────────────────────────────────── */
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(52,211,153,.18);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(52,211,153,.32);
+}
+
+/* ── Selection ────────────────────────────────────── */
+.dark ::selection {
+  background: rgba(52,211,153,.20);
+  color: var(--text-primary);
+}
+
+/* ── Modal panels ─────────────────────────────────── */
+.dark .fixed.inset-0 > div {
+  background: var(--surface-1);
+}
+
+/* ── Inline hardcoded grays used in components ────── */
+/* These catch any bg-white / text-gray-* Tailwind classes
+   that weren't converted to CSS variables */
+.dark .bg-white        { background-color: var(--surface-1) !important; }
+.dark .bg-gray-50      { background-color: var(--surface-2) !important; }
+.dark .bg-gray-100     { background-color: rgba(255,255,255,.05) !important; }
+.dark .text-gray-900   { color: var(--text-primary) !important; }
+.dark .text-gray-800   { color: var(--text-primary) !important; }
+.dark .text-gray-700   { color: var(--text-secondary) !important; }
+.dark .text-gray-600   { color: var(--text-secondary) !important; }
+.dark .text-gray-500   { color: var(--text-muted) !important; }
+.dark .border-gray-200 { border-color: rgba(255,255,255,.08) !important; }
+.dark .border-gray-300 { border-color: rgba(255,255,255,.10) !important; }
+.dark .divide-gray-200 > * + * { border-color: rgba(255,255,255,.08) !important; }

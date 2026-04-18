@@ -2,14 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../supabase";
 import { Link } from "react-router-dom";
 import Loader from "../components/Loader";
-
-/* ── legacy service name normalization ── */
-const LEGACY_SERVICE_MAP = {
-  "Wash": "Bath", "Cut": "Full Groom", "Nail Trim": "Nails",
-  "Teeth Cleaning": "Teeth", "Deshedding": "Deshed",
-  "Bath Only": "Bath", "Ear Cleaning": "Other", "Tick Treatment": "Other",
-};
-const normalizeSvc = (s) => LEGACY_SERVICE_MAP[s] || s;
+import { normalizeServiceName as normalizeSvc } from "../utils/grooming";
 
 /* ── quick period helpers ── */
 const toYMD = (d) => d.toISOString().slice(0, 10);
@@ -132,10 +125,11 @@ export default function Revenue() {
 
   /* ── derived ── */
   const filtered = useMemo(() => appointments.filter((a) => {
-    const d = new Date(a.date);
-    if (startDate && d < new Date(startDate)) return false;
-    if (endDate   && d > new Date(endDate))   return false;
-    if (!includeUnpaid && !a.paid)             return false;
+    // Use string comparison to avoid UTC offset issues and correctly
+    // include appointments ON the end date (not just before it).
+    if (startDate && a.date < startDate) return false;
+    if (endDate   && a.date > endDate)   return false;
+    if (!includeUnpaid && !a.paid)       return false;
     return true;
   }), [appointments, startDate, endDate, includeUnpaid]);
 

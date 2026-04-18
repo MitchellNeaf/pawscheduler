@@ -1,6 +1,7 @@
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
+import ConfirmModal from "../components/ConfirmModal";
 
 const TAG_OPTIONS = [
   "Bites",
@@ -273,6 +274,9 @@ export default function ClientPets() {
   const [petEditOpen, setPetEditOpen] = useState(false);
   const [shotModalOpen, setShotModalOpen] = useState(false);
 
+  // ConfirmModal state
+  const [confirmConfig, setConfirmConfig] = useState(null);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
@@ -437,18 +441,25 @@ export default function ClientPets() {
   // Delete pet
   const handleDelete = async (id) => {
     if (!user) return;
-    if (!window.confirm("Delete this pet?")) return;
 
-    const { error } = await supabase
-      .from("pets")
-      .delete()
-      .eq("id", id)
-      .eq("groomer_id", user.id);
+    setConfirmConfig({
+      title: "Delete this pet?",
+      message: "All shot records for this pet will also be deleted. This cannot be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+      onConfirm: async () => {
+        const { error } = await supabase
+          .from("pets")
+          .delete()
+          .eq("id", id)
+          .eq("groomer_id", user.id);
 
-    if (!error) {
-      setPets((prev) => prev.filter((p) => p.id !== id));
-      if (editingId === id) resetForm();
-    }
+        if (!error) {
+          setPets((prev) => prev.filter((p) => p.id !== id));
+          if (editingId === id) resetForm();
+        }
+      },
+    });
   };
 
   if (loading) return <main className="px-4 py-6">Loading...</main>;
@@ -724,6 +735,11 @@ export default function ClientPets() {
 
       {/* SMS CONVERSATION HISTORY */}
       <SmsConversationHistory clientId={clientId} clientPhone={client?.phone} />
+
+      <ConfirmModal
+        config={confirmConfig}
+        onClose={() => setConfirmConfig(null)}
+      />
 
     </main>
   );
