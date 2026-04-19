@@ -88,7 +88,6 @@ exports.handler = async (event) => {
     city:      clientData.city?.trim() || null,
     state:     clientData.state?.trim() || null,
     zip:       clientData.zip?.trim() || null,
-    ...(emergencyNote ? { notes: emergencyNote } : {}),
   };
 
   if (existingClients?.length > 0) {
@@ -134,7 +133,10 @@ exports.handler = async (event) => {
       name:        petData.name.trim(),
       breed:       petData.breed?.trim() || null,
       slot_weight: petData.slot_weight || 1,
-      notes:       petData.notes?.trim() || null,
+      notes:       [
+        petData.notes?.trim(),
+        emergencyNote,
+      ].filter(Boolean).join(" | ") || null,
       tags:        petData.tags?.length ? petData.tags : null,
       client_id:   client.id,
       groomer_id:  groomer.id,
