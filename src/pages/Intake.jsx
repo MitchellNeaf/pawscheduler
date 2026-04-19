@@ -103,10 +103,7 @@ export default function IntakePage() {
           slug,
           client: { full_name: fullName, phone, email, street, city, state, zip },
           emergency: { name: emergName, phone: emergPhone },
-          pet: {
-            name: petName, breed: petBreed,
-            slot_weight: petSize, tags: petTags, notes: petNotes,
-          },
+          pets: pets.filter(p => p.name.trim()),
         }),
       });
 
@@ -153,7 +150,7 @@ export default function IntakePage() {
           <h1 className="text-2xl font-bold text-[var(--text-1)]">You're all set!</h1>
           <p className="text-[var(--text-2)]">
             Thanks <strong>{fullName.split(" ")[0]}</strong>! Your info and{" "}
-            <strong>{petName}</strong>'s profile have been saved.{" "}
+            <strong>{pets.filter(p => p.name.trim()).map(p => p.name).join(' & ')}</strong>'s profile have been saved.{" "}
             {groomer.full_name} will be in touch to confirm your appointment.
           </p>
           <p className="text-sm text-[var(--text-3)]">
