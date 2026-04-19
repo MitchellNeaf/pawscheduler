@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>New Client Intake</title>
+  <style>
+    body { margin:0;padding:0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;background:#f4f7f4;color:#1a2e20; }
+    .wrapper { max-width:560px;margin:32px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.08); }
+    .header { background:linear-gradient(135deg,#059669 0%,#10b981 100%);padding:32px 40px 28px;text-align:center; }
+    .header h1 { margin:0;font-size:22px;font-weight:700;color:#fff;letter-spacing:-.3px; }
+    .header p  { margin:6px 0 0;font-size:14px;color:rgba(255,255,255,.85); }
+    .body { padding:36px 40px; }
+    .greeting { font-size:16px;color:#1a2e20;margin:0 0 16px;font-weight:500; }
+    .message  { font-size:15px;color:#3d5a4a;line-height:1.65;margin:0 0 28px; }
+    .cta-wrapper { text-align:center;margin:0 0 32px; }
+    .cta-btn { display:inline-block;background:linear-gradient(135deg,#059669 0%,#10b981 100%);color:#fff!important;text-decoration:none;font-size:16px;font-weight:700;padding:14px 36px;border-radius:12px;letter-spacing:-.2px;box-shadow:0 4px 16px rgba(16,185,129,.35); }
+    .link-fallback { font-size:12px;color:#7a9e8e;text-align:center;margin:0 0 28px;word-break:break-all; }
+    .link-fallback a { color:#059669; }
+    .steps { background:#f4faf6;border-radius:12px;padding:20px 24px;margin:0 0 28px; }
+    .steps p { margin:0 0 8px;font-size:14px;color:#3d5a4a;line-height:1.6; }
+    .steps p:last-child { margin:0; }
+    .footer { background:#f4f7f4;padding:20px 40px;text-align:center;font-size:12px;color:#9eb8aa; }
+    .footer a { color:#059669;text-decoration:none; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="header">
+      {{logo_url_img}}
+      <h1>Welcome to {{groomer_name}}! 🐾</h1>
+      <p>Please complete your new client intake form</p>
+    </div>
+    <div class="body">
+      <p class="greeting">Hi {{client_first_name}},</p>
+      <p class="message">
+        We're looking forward to grooming your pup! Before your first appointment,
+        please take a moment to fill out our quick intake form. It helps us get to
+        know your dog and provide the best possible care.
+      </p>
+
+      <div class="cta-wrapper">
+        <a href="{{intake_url}}" class="cta-btn">Complete Intake Form →</a>
+      </div>
+
+      <div class="steps">
+        <p>📋 <strong>What's included:</strong></p>
+        <p>• Your contact info &amp; address</p>
+        <p>• Emergency contact</p>
+        <p>• Your dog's name, breed &amp; size</p>
+        <p>• Any behavioral notes we should know</p>
+      </div>
+
+      <p class="link-fallback">
+        If the button doesn't work, copy and paste this link:<br />
+        <a href="{{intake_url}}">{{intake_url}}</a>
+      </p>
+    </div>
+    <div class="footer">
+      Sent by {{groomer_name}} via <a href="https://pawscheduler.app">PawScheduler</a>
+    </div>
+  </div>
+</body>
+</html>

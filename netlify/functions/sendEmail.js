@@ -61,6 +61,10 @@ exports.handler = async function(event) {
       fileName = "groomer_cancellation.html";
     } else if (template === "waiver_request") {
       fileName = "waiver_request.html";
+    } else if (template === "intake_notification") {
+      fileName = "intake_notification.html";
+    } else if (template === "intake_email") {
+      fileName = "intake_email.html";
     } else {
       fileName = "confirmation.html";
     }

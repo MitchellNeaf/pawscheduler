@@ -403,7 +403,11 @@ export default function Clients() {
 
   // Waiver link state
   const [waiverSentFor, setWaiverSentFor] = useState(new Set());
-  const [waiverSignedIds, setWaiverSignedIds] = useState(new Set()); // client_ids who have signed
+  const [waiverSignedIds, setWaiverSignedIds] = useState(new Set());
+
+  // Intake state
+  const [intakeSentFor, setIntakeSentFor] = useState(new Set());
+  const [sendingIntake, setSendingIntake] = useState(null);
   const [sendingWaiver, setSendingWaiver] = useState(null); // clientId | null
 
   const copyWaiverLink = (client) => {
@@ -456,6 +460,42 @@ export default function Clients() {
       console.error("SMS waiver send failed");
     } finally {
       setSendingWaiver(null);
+    }
+  };
+
+  const sendIntakeEmail = async (client) => {
+    if (!client.email || !groomerSlug) {
+      // No email — copy link instead
+      const url = `${window.location.origin}/intake/${groomerSlug}?cid=${client.id}`;
+      navigator.clipboard.writeText(url);
+      setIntakeSentFor((prev) => new Set([...prev, client.id]));
+      return;
+    }
+    setSendingIntake(client.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/.netlify/functions/sendIntakeEmail", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ clientId: client.id }),
+      });
+      if (res.ok) {
+        setIntakeSentFor((prev) => new Set([...prev, client.id]));
+      } else {
+        // Fall back to clipboard
+        const url = `${window.location.origin}/intake/${groomerSlug}?cid=${client.id}`;
+        navigator.clipboard.writeText(url);
+        setIntakeSentFor((prev) => new Set([...prev, client.id]));
+      }
+    } catch {
+      const url = `${window.location.origin}/intake/${groomerSlug}?cid=${client.id}`;
+      navigator.clipboard.writeText(url);
+      setIntakeSentFor((prev) => new Set([...prev, client.id]));
+    } finally {
+      setSendingIntake(null);
     }
   };
 
@@ -949,6 +989,29 @@ export default function Clients() {
                         title="Copy waiver link to clipboard"
                       >
                         📋 Copy Waiver Link
+                      </button>
+                    )
+                  )}
+
+                  {/* Intake button */}
+                  {groomerSlug && (
+                    intakeSentFor.has(client.id) ? (
+                      <span className="text-sm px-3 py-1.5 rounded-xl border border-blue-200 text-blue-700 bg-blue-50 font-semibold">
+                        ✓ Intake Sent
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={sendingIntake === client.id}
+                        onClick={() => sendIntakeEmail(client)}
+                        className="text-sm px-3 py-1.5 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:border-blue-400 hover:text-blue-700 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                        title={client.email ? "Send intake form via email" : "Copy intake link to clipboard"}
+                      >
+                        {sendingIntake === client.id
+                          ? "Sending…"
+                          : client.email
+                          ? "📋 Send Intake"
+                          : "📋 Copy Intake Link"}
                       </button>
                     )
                   )}
