@@ -859,6 +859,13 @@ export default function Clients() {
                       📍 {fullAddress}
                     </a>
                   )}
+
+                  {/* Emergency contact */}
+                  {(client.emergency_contact_name || client.emergency_contact_phone) && (
+                    <div className="text-xs text-[var(--text-3)] mt-1">
+                      🚨 Emergency: {client.emergency_contact_name}{client.emergency_contact_phone ? ` — ${client.emergency_contact_phone}` : ""}
+                    </div>
+                  )}
                 </div>
 
                 {/* SMS Edit */}
@@ -977,7 +984,7 @@ export default function Clients() {
                             className="text-sm px-3 py-1.5 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
                             title="Send waiver via SMS"
                           >
-                            {sendingWaiver === `sms-${client.id}` ? "Sending…" : "📱 SMS"}
+                            {sendingWaiver === `sms-${client.id}` ? "Sending…" : "📱 SMS Waiver"}
                           </button>
                         )}
                       </div>

@@ -575,7 +575,7 @@ export default function ClientPets() {
   return (
     <main>
       <div className="mb-2">
-        <Link to="/">&larr; Back to Clients</Link>
+        <Link to="/clients">&larr; Back to Clients</Link>
       </div>
 
       <h1 className="mt-2 mb-4">{client.full_name}'s Pets</h1>
@@ -641,6 +641,29 @@ export default function ClientPets() {
             }
           />
 
+          {/* Emergency Contact */}
+          <div className="pt-2 border-t border-[var(--border-med)]">
+            <div className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide mb-2">
+              Emergency Contact
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                placeholder="Contact name"
+                value={client.emergency_contact_name || ""}
+                onChange={(e) =>
+                  setClient((prev) => ({ ...prev, emergency_contact_name: e.target.value }))
+                }
+              />
+              <input
+                placeholder="Contact phone"
+                value={client.emergency_contact_phone || ""}
+                onChange={(e) =>
+                  setClient((prev) => ({ ...prev, emergency_contact_phone: e.target.value }))
+                }
+              />
+            </div>
+          </div>
+
           <div className="flex flex-wrap gap-3">
             <button
               className="btn-primary text-sm"
@@ -656,6 +679,8 @@ export default function ClientPets() {
                     city: client.city || null,
                     state: client.state || null,
                     zip: client.zip || null,
+                    emergency_contact_name:  client.emergency_contact_name || null,
+                    emergency_contact_phone: client.emergency_contact_phone || null,
                   })
                   .eq("id", client.id)
                   .eq("groomer_id", user.id);

@@ -40,9 +40,9 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  let slug, clientData, emergencyData, petData;
+  let slug, clientData, emergencyData, petsData;
   try {
-    ({ slug, client: clientData, emergency: emergencyData, pet: petData } = JSON.parse(event.body || "{}"));
+    ({ slug, client: clientData, emergency: emergencyData, pets: petsData } = JSON.parse(event.body || "{}"));
   } catch {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON" }) };
   }
@@ -81,13 +81,15 @@ exports.handler = async (event) => {
 
   let client;
   const clientPayload = {
-    full_name: clientData.full_name.trim(),
-    phone:     normalizedPhone,
-    email:     clientData.email?.trim() || null,
-    street:    clientData.street?.trim() || null,
-    city:      clientData.city?.trim() || null,
-    state:     clientData.state?.trim() || null,
-    zip:       clientData.zip?.trim() || null,
+    full_name:               clientData.full_name.trim(),
+    phone:                   normalizedPhone,
+    email:                   clientData.email?.trim() || null,
+    street:                  clientData.street?.trim() || null,
+    city:                    clientData.city?.trim() || null,
+    state:                   clientData.state?.trim() || null,
+    zip:                     clientData.zip?.trim() || null,
+    emergency_contact_name:  emergencyData?.name?.trim() || null,
+    emergency_contact_phone: emergencyData?.phone?.trim() || null,
   };
 
   if (existingClients?.length > 0) {
@@ -119,9 +121,13 @@ exports.handler = async (event) => {
     client = created;
   }
 
-  // ── Match or create pet ─────────────────────────────────
-  let pet = null;
-  if (petData?.name?.trim()) {
+  // ── Match or create pets (supports multiple) ────────────
+  const pets = [];
+  const petsArray = Array.isArray(petsData) ? petsData : (petsData ? [petsData] : []);
+
+  for (const petData of petsArray) {
+    if (!petData?.name?.trim()) continue;
+
     const { data: existingPets } = await supabase
       .from("pets")
       .select("*")
@@ -133,34 +139,31 @@ exports.handler = async (event) => {
       name:        petData.name.trim(),
       breed:       petData.breed?.trim() || null,
       slot_weight: petData.slot_weight || 1,
-      notes:       [
-        petData.notes?.trim(),
-        emergencyNote,
-      ].filter(Boolean).join(" | ") || null,
+      notes:       petData.notes?.trim() || null,
       tags:        petData.tags?.length ? petData.tags : null,
       client_id:   client.id,
       groomer_id:  groomer.id,
     };
 
     if (existingPets?.length > 0) {
-      // Update existing pet
       const { data: updatedPet } = await supabase
         .from("pets")
         .update(petPayload)
         .eq("id", existingPets[0].id)
         .select()
         .single();
-      pet = updatedPet;
+      if (updatedPet) pets.push(updatedPet);
     } else {
-      // Create new pet
       const { data: createdPet } = await supabase
         .from("pets")
         .insert(petPayload)
         .select()
         .single();
-      pet = createdPet;
+      if (createdPet) pets.push(createdPet);
     }
   }
+
+  const pet = pets[0] || null;
 
   // ── Email groomer notification (fire-and-forget) ────────
   const groomerName = groomer.business_name || groomer.full_name || "Groomer";
@@ -182,7 +185,7 @@ exports.handler = async (event) => {
           client_email:    client.email || "—",
           client_address:  [client.street, client.city, client.state, client.zip].filter(Boolean).join(", ") || "—",
           emergency_contact: emergencyNote || "—",
-          pet_name:        pet?.name || "—",
+          pet_name:        pets.length ? pets.map(p => p.name).join(", ") : "—",
           pet_breed:       pet?.breed || "—",
           pet_size:        pet?.slot_weight === 3 ? "XL" : pet?.slot_weight === 2 ? "Large" : "Small/Medium",
           pet_tags:        pet?.tags?.join(", ") || "None",
@@ -198,7 +201,7 @@ exports.handler = async (event) => {
     body: JSON.stringify({
       ok: true,
       clientId: client.id,
-      petId: pet?.id || null,
+      petIds: pets.map(p => p.id),
       isNewClient: !existingClients?.length,
     }),
   };

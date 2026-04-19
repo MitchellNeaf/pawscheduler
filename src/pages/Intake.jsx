@@ -41,12 +41,33 @@ export default function IntakePage() {
   const [emergName, setEmergName] = useState("");
   const [emergPhone, setEmergPhone] = useState("");
 
-  // Pet fields
-  const [petName, setPetName]     = useState("");
-  const [petBreed, setPetBreed]   = useState("");
-  const [petSize, setPetSize]     = useState(1);
-  const [petTags, setPetTags]     = useState([]);
-  const [petNotes, setPetNotes]   = useState("");
+  // Pets — supports multiple
+  const [pets, setPets] = useState([
+    { name: "", breed: "", slot_weight: 1, tags: [], notes: "" }
+  ]);
+
+  const addPet = () => setPets(prev => [
+    ...prev,
+    { name: "", breed: "", slot_weight: 1, tags: [], notes: "" }
+  ]);
+
+  const removePet = (idx) => setPets(prev => prev.filter((_, i) => i !== idx));
+
+  const updatePet = (idx, field, value) => setPets(prev => {
+    const copy = [...prev];
+    copy[idx] = { ...copy[idx], [field]: value };
+    return copy;
+  });
+
+  const togglePetTag = (idx, tag) => setPets(prev => {
+    const copy = [...prev];
+    const tags = copy[idx].tags;
+    copy[idx] = {
+      ...copy[idx],
+      tags: tags.includes(tag) ? tags.filter(t => t !== tag) : [...tags, tag],
+    };
+    return copy;
+  });
 
   useEffect(() => {
     (async () => {
@@ -65,18 +86,12 @@ export default function IntakePage() {
     })();
   }, [slug]);
 
-  const toggleTag = (tag) => {
-    setPetTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-    );
-  };
-
   const handleSubmit = async () => {
     setSubmitError("");
 
     if (!fullName.trim()) { setSubmitError("Please enter your full name."); return; }
     if (!phone.trim())    { setSubmitError("Please enter your phone number."); return; }
-    if (!petName.trim())  { setSubmitError("Please enter your pet's name."); return; }
+    if (!pets[0]?.name?.trim()) { setSubmitError("Please enter at least one pet's name."); return; }
 
     setSubmitting(true);
 
@@ -242,70 +257,90 @@ export default function IntakePage() {
         </div>
 
         {/* ── SECTION 3: Pet Info ── */}
-        <div className="card">
-          <div className="card-body space-y-4">
-            <h2 className="font-bold text-[var(--text-1)] text-base">Your Pet</h2>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Dog's name <span className="text-red-500">*</span></label>
-                <input className={inputCls} placeholder="e.g. Buddy"
-                  value={petName} onChange={(e) => setPetName(e.target.value)} />
-              </div>
-              <div>
-                <label className={labelCls}>Breed <span className="text-gray-400 font-normal">(optional)</span></label>
-                <input className={inputCls} placeholder="e.g. Golden Retriever"
-                  value={petBreed} onChange={(e) => setPetBreed(e.target.value)} />
-              </div>
-            </div>
-
-            {/* Size */}
-            <div>
-              <label className={labelCls}>Size</label>
-              <div className="grid grid-cols-3 gap-2">
-                {SIZE_OPTIONS.map(({ value, label }) => (
-                  <button key={value} type="button"
-                    onClick={() => setPetSize(value)}
-                    className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-colors text-center
-                      ${petSize === value
-                        ? "bg-emerald-600 border-emerald-600 text-white"
-                        : "bg-[var(--surface)] border-[var(--border-med)] text-[var(--text-2)] hover:border-emerald-400"
-                      }`}
-                  >
-                    {label}
+        {pets.map((pet, idx) => (
+          <div key={idx} className="card">
+            <div className="card-body space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-bold text-[var(--text-1)] text-base">
+                  {pets.length > 1 ? `Dog ${idx + 1}` : "Your Dog"}
+                </h2>
+                {pets.length > 1 && (
+                  <button type="button" onClick={() => removePet(idx)}
+                    className="text-red-400 hover:text-red-600 text-sm font-semibold">
+                    Remove
                   </button>
-                ))}
+                )}
               </div>
-            </div>
 
-            {/* Tags */}
-            <div>
-              <label className={labelCls}>Behavioral notes <span className="text-gray-400 font-normal">(select all that apply)</span></label>
-              <div className="flex flex-wrap gap-2">
-                {TAG_OPTIONS.map((tag) => (
-                  <button key={tag} type="button"
-                    onClick={() => toggleTag(tag)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors
-                      ${petTags.includes(tag)
-                        ? "bg-amber-500 border-amber-500 text-white"
-                        : "bg-[var(--surface)] border-[var(--border-med)] text-[var(--text-2)] hover:border-amber-400"
-                      }`}
-                  >
-                    {tag}
-                  </button>
-                ))}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls}>
+                    Dog's name {idx === 0 && <span className="text-red-500">*</span>}
+                  </label>
+                  <input className={inputCls} placeholder="e.g. Buddy"
+                    value={pet.name} onChange={(e) => updatePet(idx, "name", e.target.value)} />
+                </div>
+                <div>
+                  <label className={labelCls}>Breed <span className="text-gray-400 font-normal">(optional)</span></label>
+                  <input className={inputCls} placeholder="e.g. Golden Retriever"
+                    value={pet.breed} onChange={(e) => updatePet(idx, "breed", e.target.value)} />
+                </div>
               </div>
-            </div>
 
-            {/* Notes */}
-            <div>
-              <label className={labelCls}>Additional notes <span className="text-gray-400 font-normal">(optional)</span></label>
-              <textarea className={`${inputCls} resize-none`} rows={3}
-                placeholder="Anything else we should know about your dog — medical conditions, fears, preferred handling, etc."
-                value={petNotes} onChange={(e) => setPetNotes(e.target.value)} />
+              {/* Size */}
+              <div>
+                <label className={labelCls}>Size</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {SIZE_OPTIONS.map(({ value, label }) => (
+                    <button key={value} type="button"
+                      onClick={() => updatePet(idx, "slot_weight", value)}
+                      className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-colors text-center
+                        ${pet.slot_weight === value
+                          ? "bg-emerald-600 border-emerald-600 text-white"
+                          : "bg-[var(--surface)] border-[var(--border-med)] text-[var(--text-2)] hover:border-emerald-400"
+                        }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Tags */}
+              <div>
+                <label className={labelCls}>Behavioral notes <span className="text-gray-400 font-normal">(select all that apply)</span></label>
+                <div className="flex flex-wrap gap-2">
+                  {TAG_OPTIONS.map((tag) => (
+                    <button key={tag} type="button"
+                      onClick={() => togglePetTag(idx, tag)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors
+                        ${pet.tags.includes(tag)
+                          ? "bg-amber-500 border-amber-500 text-white"
+                          : "bg-[var(--surface)] border-[var(--border-med)] text-[var(--text-2)] hover:border-amber-400"
+                        }`}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className={labelCls}>Additional notes <span className="text-gray-400 font-normal">(optional)</span></label>
+                <textarea className={`${inputCls} resize-none`} rows={2}
+                  placeholder="Medical conditions, fears, preferred handling, etc."
+                  value={pet.notes} onChange={(e) => updatePet(idx, "notes", e.target.value)} />
+              </div>
             </div>
           </div>
-        </div>
+        ))}
+
+        {/* Add another dog */}
+        <button type="button" onClick={addPet}
+          className="w-full py-3 rounded-xl border-2 border-dashed border-[var(--border-med)] text-[var(--text-3)] font-semibold text-sm hover:border-emerald-400 hover:text-emerald-600 transition-colors">
+          + Add another dog
+        </button>
 
         {/* Error */}
         {submitError && (
