@@ -1,31 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { supabase } from "../supabase";
 import Loader from "../components/Loader";
+import ConfirmModal from "../components/ConfirmModal";
 import VacationSection from "../components/VacationSection";
-
-const SERVICE_OPTIONS = [
-  "Bath",
-  "Full Groom",
-  "Nails",
-  "Teeth",
-  "Deshed",
-  "Anal Glands",
-  "Puppy Trim",
-  "Other",
-];
+import { SERVICE_OPTIONS, DEFAULT_PRICING } from "../utils/grooming";
 
 const SIZE_LABELS = { 1: "S/M", 2: "Large", 3: "XL" };
-
-const DEFAULT_PRICING = {
-  "Bath":        { 1: 25, 2: 40, 3: 60 },
-  "Full Groom":  { 1: 45, 2: 65, 3: 90 },
-  "Nails":       { 1: 15, 2: 15, 3: 20 },
-  "Teeth":       { 1: 15, 2: 15, 3: 20 },
-  "Deshed":      { 1: 35, 2: 55, 3: 75 },
-  "Anal Glands": { 1: 15, 2: 15, 3: 20 },
-  "Puppy Trim":  { 1: 40, 2: 55, 3: 75 },
-  "Other":       { 1: 0,  2: 0,  3: 0  },
-};
 
 const WEEKDAYS = [
   "Sunday",
@@ -70,6 +50,9 @@ export default function Profile() {
   // ---------------- PRICING ----------------
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
   const [pricingSaving, setPricingSaving] = useState(false);
+
+  // ---------------- CONFIRM MODAL ----------------
+  const [confirmConfig, setConfirmConfig] = useState(null);
 
   // ---------------- LOAD USER ----------------
   useEffect(() => {
@@ -178,7 +161,12 @@ export default function Profile() {
     if (!file || !user) return;
 
     if (file.size > 10 * 1024 * 1024) {
-      alert("Image too large. Max 10MB.");
+      setConfirmConfig({
+        title: "File too large",
+        message: "Please choose an image under 10MB.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -223,7 +211,12 @@ export default function Profile() {
       });
 
     if (uploadErr) {
-      alert("Upload failed: " + uploadErr.message);
+      setConfirmConfig({
+        title: "Upload failed",
+        message: uploadErr.message || "Something went wrong. Please try again.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
       setSaving(false);
       return;
     }
@@ -258,7 +251,14 @@ export default function Profile() {
       })
       .eq("id", user.id);
 
-    if (error) alert("Failed to save profile: " + error.message);
+    if (error) {
+      setConfirmConfig({
+        title: "Could not save",
+        message: error.message || "Something went wrong. Please try again.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+    }
 
     setSaving(false);
   };
@@ -303,7 +303,12 @@ export default function Profile() {
     }
 
     setHoursSaving(false);
-    alert("Schedule saved!");
+    setConfirmConfig({
+      title: "Schedule saved ✓",
+      message: "Your working hours have been updated.",
+      confirmLabel: "OK",
+      onConfirm: () => {},
+    });
   };
 
   // ---------------- SAVE PRICING ----------------
@@ -314,7 +319,14 @@ export default function Profile() {
       .from("groomers")
       .update({ service_pricing: pricing })
       .eq("id", user.id);
-    if (error) alert("Failed to save pricing: " + error.message);
+    if (error) {
+      setConfirmConfig({
+        title: "Could not save pricing",
+        message: error.message || "Something went wrong. Please try again.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+    }
     setPricingSaving(false);
   };
 
@@ -339,10 +351,32 @@ export default function Profile() {
 
     const json = await resp.json();
     if (json.url) window.location.href = json.url;
-    else alert("Unable to open billing portal.");
+    else {
+      setConfirmConfig({
+        title: "Could not open billing",
+        message: "Please try again or contact support.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+    }
   };
 
   if (loading || hoursLoading) return <Loader />;
+
+  // Generate 15-minute increment time options in 12-hour format
+  const generateTimeOptions = () => {
+    const options = [];
+    for (let hour = 5; hour <= 21; hour++) {
+      for (let min of [0, 15, 30, 45]) {
+        const value = `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+        const ampm = hour >= 12 ? "PM" : "AM";
+        const h12 = hour % 12 || 12;
+        const label = `${h12}:${String(min).padStart(2, "0")} ${ampm}`;
+        options.push({ value, label });
+      }
+    }
+    return options;
+  };
 
   const TABS = [
     { id: "profile",  emoji: "👤", label: "Profile"  },
@@ -359,7 +393,7 @@ export default function Profile() {
       <SubscriptionStatus userId={user?.id} onManageBilling={handleManageBilling} />
 
       {/* TAB BAR */}
-      <div className="flex mt-4 mb-6 border-b border-gray-200">
+      <div className="flex mt-4 mb-6 border-b border-[var(--border-med)]">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -369,7 +403,7 @@ export default function Profile() {
             className={`py-2.5 text-xs font-semibold transition-colors text-center border-b-2
               ${activeTab === tab.id
                 ? "border-emerald-500 text-emerald-700"
-                : "border-transparent text-gray-400 hover:text-gray-600"
+                : "border-transparent text-[var(--text-3)] hover:text-[var(--text-2)]"
               }`}
           >
             <span className="block text-base leading-none mb-0.5">{tab.emoji}</span>
@@ -385,12 +419,12 @@ export default function Profile() {
             {logoUrl ? (
               <img src={logoUrl} alt="Logo" className="w-24 h-24 object-cover rounded-full border" />
             ) : (
-              <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center text-gray-500 text-sm">
+              <div className="w-24 h-24 bg-[var(--surface-2)] rounded-full flex items-center justify-center text-[var(--text-3)] text-sm">
                 No Logo
               </div>
             )}
             <label className="cursor-pointer">
-              <span className="border rounded px-3 py-1.5 bg-white hover:bg-gray-50 text-sm font-medium">
+              <span className="border border-[var(--border-med)] rounded-xl px-3 py-1.5 bg-[var(--surface)] hover:bg-[var(--surface-2)] text-[var(--text-1)] text-sm font-medium transition-colors">
                 Upload Logo
               </span>
               <input type="file" accept="image/*" onChange={handleLogoChange} className="hidden" />
@@ -418,7 +452,7 @@ export default function Profile() {
                 <option key={tz.value} value={tz.value}>{tz.label}</option>
               ))}
             </select>
-            <p className="text-xs text-gray-500 mt-1">Controls booking times and "tomorrow" SMS reminders.</p>
+            <p className="text-xs text-[var(--text-3)] mt-1">Controls booking times and "tomorrow" SMS reminders.</p>
           </div>
 
           <button onClick={saveProfile} disabled={saving} className="btn-primary w-full mt-2">
@@ -429,69 +463,235 @@ export default function Profile() {
 
       {/* ── SCHEDULE TAB ── */}
       {activeTab === "schedule" && (
-        <div>
-          <h2 className="text-lg font-bold mb-4">Working Hours</h2>
+        <div className="space-y-3">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--text-1)]">Working Hours</h2>
+            <p className="text-sm text-[var(--text-3)] mt-0.5">
+              Set which days you work and your start/end times. Breaks block time on the booking page.
+            </p>
+          </div>
+
           {Object.keys(hours).map((key) => {
             const dayIndex = Number(key);
+            const day = hours[dayIndex];
+            const dayBreaks = breaks[dayIndex] || [];
+
             return (
-              <div key={dayIndex} className="border p-4 rounded mb-4 bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold">{WEEKDAYS[dayIndex]}</h3>
-                  <label className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={hours[dayIndex].enabled}
-                      onChange={(e) => setHours((prev) => ({ ...prev, [dayIndex]: { ...prev[dayIndex], enabled: e.target.checked } }))}
-                    />
-                    <span className="text-sm">Open</span>
-                  </label>
+              <div
+                key={dayIndex}
+                className={`rounded-2xl border transition-all overflow-hidden
+                  ${day.enabled
+                    ? "border-emerald-200 bg-[var(--surface)] shadow-sm"
+                    : "border-[var(--border-med)] bg-[var(--surface-2)] opacity-60"
+                  }`}
+              >
+                {/* Day header row */}
+                <div className="flex items-center justify-between px-4 py-3">
+                  <span className={`font-semibold text-sm ${day.enabled ? "text-[var(--text-1)]" : "text-[var(--text-3)]"}`}>
+                    {WEEKDAYS[dayIndex]}
+                  </span>
+
+                  {/* Toggle switch */}
+                  <button
+                    type="button"
+                    onClick={() => setHours((prev) => ({
+                      ...prev,
+                      [dayIndex]: { ...prev[dayIndex], enabled: !prev[dayIndex].enabled },
+                    }))}
+                    aria-label={day.enabled ? `Close ${WEEKDAYS[dayIndex]}` : `Open ${WEEKDAYS[dayIndex]}`}
+                    className="relative flex-shrink-0"
+                    style={{
+                      width: 44, height: 26, borderRadius: 999,
+                      backgroundColor: day.enabled ? "#10b981" : "#d1d5db",
+                      border: "none", padding: 3, cursor: "pointer",
+                      transition: "background-color 0.2s",
+                      display: "flex", alignItems: "center",
+                    }}
+                  >
+                    <span style={{
+                      display: "block", width: 20, height: 20,
+                      borderRadius: "50%", backgroundColor: "white",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.2)",
+                      transform: day.enabled ? "translateX(18px)" : "translateX(0px)",
+                      transition: "transform 0.2s",
+                    }} />
+                  </button>
                 </div>
-                {hours[dayIndex].enabled && (
-                  <>
-                    <div className="grid grid-cols-2 gap-4 mt-3">
+
+                {/* Expanded content when open */}
+                {day.enabled && (
+                  <div className="px-4 pb-4 space-y-4 border-t border-[var(--border-med)] pt-3">
+
+                    {/* Start / End times */}
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-sm">Start</label>
-                        <input type="time" value={hours[dayIndex].start}
-                          onChange={(e) => setHours((prev) => ({ ...prev, [dayIndex]: { ...prev[dayIndex], start: e.target.value } }))}
-                          className="border rounded w-full p-2" />
+                        <label className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide block mb-1.5">
+                          Opens
+                        </label>
+                        <select
+                          value={day.start}
+                          onChange={(e) => setHours((prev) => ({
+                            ...prev,
+                            [dayIndex]: { ...prev[dayIndex], start: e.target.value },
+                          }))}
+                          className="border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm w-full bg-[var(--surface)] text-[var(--text-1)]"
+                        >
+                          {generateTimeOptions().map((t) => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </select>
                       </div>
                       <div>
-                        <label className="text-sm">End</label>
-                        <input type="time" value={hours[dayIndex].end}
-                          onChange={(e) => setHours((prev) => ({ ...prev, [dayIndex]: { ...prev[dayIndex], end: e.target.value } }))}
-                          className="border rounded w-full p-2" />
+                        <label className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide block mb-1.5">
+                          Closes
+                        </label>
+                        <select
+                          value={day.end}
+                          onChange={(e) => setHours((prev) => ({
+                            ...prev,
+                            [dayIndex]: { ...prev[dayIndex], end: e.target.value },
+                          }))}
+                          className="border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm w-full bg-[var(--surface)] text-[var(--text-1)]"
+                        >
+                          {generateTimeOptions().map((t) => (
+                            <option key={t.value} value={t.value}>{t.label}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
-                    <div className="mt-4">
-                      <h4 className="text-sm font-medium">Breaks</h4>
-                      {breaks[dayIndex].map((b, idx) => (
-                        <div key={idx} className="grid grid-cols-3 gap-3 mt-2 items-center">
-                          <input type="time" value={b.start}
-                            onChange={(e) => setBreaks((prev) => { const c = { ...prev }; c[dayIndex][idx].start = e.target.value; return c; })}
-                            className="border rounded p-2" />
-                          <input type="time" value={b.end}
-                            onChange={(e) => setBreaks((prev) => { const c = { ...prev }; c[dayIndex][idx].end = e.target.value; return c; })}
-                            className="border rounded p-2" />
-                          <button className="text-red-600 text-sm"
-                            onClick={() => setBreaks((prev) => { const c = { ...prev }; c[dayIndex] = c[dayIndex].filter((_, i) => i !== idx); return c; })}>
-                            Delete
-                          </button>
-                        </div>
-                      ))}
-                      <button className="mt-2 text-blue-600 text-sm"
-                        onClick={() => setBreaks((prev) => ({ ...prev, [dayIndex]: [...prev[dayIndex], { start: "12:00", end: "12:30" }] }))}>
-                        ➕ Add Break
-                      </button>
+
+                    {/* Breaks */}
+                    {dayBreaks.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide">Breaks</p>
+                        {dayBreaks.map((b, idx) => (
+                          <div key={idx} className="flex items-center gap-2">
+                            <select
+                              value={b.start}
+                              onChange={(e) => setBreaks((prev) => {
+                                const c = { ...prev, [dayIndex]: [...prev[dayIndex]] };
+                                c[dayIndex][idx] = { ...c[dayIndex][idx], start: e.target.value };
+                                return c;
+                              })}
+                              className="border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm flex-1 bg-[var(--surface)] text-[var(--text-1)]"
+                            >
+                              {generateTimeOptions().map((t) => (
+                                <option key={t.value} value={t.value}>{t.label}</option>
+                              ))}
+                            </select>
+                            <span className="text-xs text-[var(--text-3)] flex-shrink-0">to</span>
+                            <select
+                              value={b.end}
+                              onChange={(e) => setBreaks((prev) => {
+                                const c = { ...prev, [dayIndex]: [...prev[dayIndex]] };
+                                c[dayIndex][idx] = { ...c[dayIndex][idx], end: e.target.value };
+                                return c;
+                              })}
+                              className="border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm flex-1 bg-[var(--surface)] text-[var(--text-1)]"
+                            >
+                              {generateTimeOptions().map((t) => (
+                                <option key={t.value} value={t.value}>{t.label}</option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => setBreaks((prev) => ({
+                                ...prev,
+                                [dayIndex]: prev[dayIndex].filter((_, i) => i !== idx),
+                              }))}
+                              className="text-red-400 hover:text-red-600 text-lg leading-none flex-shrink-0 px-1"
+                              aria-label="Remove break"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={() => setBreaks((prev) => ({
+                        ...prev,
+                        [dayIndex]: [...prev[dayIndex], { start: "12:00", end: "13:00" }],
+                      }))}
+                      className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                    >
+                      + Add break
+                    </button>
+
+                    {/* Copy to other days */}
+                    <div className="pt-3 border-t border-[var(--border-med)]">
+                      <p className="text-xs text-[var(--text-3)] font-medium mb-2">Copy these hours to:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {WEEKDAYS.map((name, idx) => {
+                          if (idx === dayIndex) return null;
+                          return (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setHours((prev) => ({
+                                  ...prev,
+                                  [idx]: {
+                                    ...prev[idx],
+                                    start: day.start,
+                                    end: day.end,
+                                    enabled: true,
+                                  },
+                                }));
+                                setBreaks((prev) => ({
+                                  ...prev,
+                                  [idx]: dayBreaks.map((b) => ({ ...b })),
+                                }));
+                              }}
+                              className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-[var(--border-med)] text-[var(--text-2)] bg-[var(--surface-2)] hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                            >
+                              {name.slice(0, 3)}
+                            </button>
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updates = {};
+                            const breakUpdates = {};
+                            for (let i = 0; i < 7; i++) {
+                              if (i === dayIndex) continue;
+                              updates[i] = {
+                                ...hours[i],
+                                start: day.start,
+                                end: day.end,
+                                enabled: true,
+                              };
+                              breakUpdates[i] = dayBreaks.map((b) => ({ ...b }));
+                            }
+                            setHours((prev) => ({ ...prev, ...updates }));
+                            setBreaks((prev) => ({ ...prev, ...breakUpdates }));
+                          }}
+                          className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-emerald-300 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                        >
+                          All days
+                        </button>
+                      </div>
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
             );
           })}
-          <button onClick={saveSchedule} disabled={hoursSaving} className="btn-primary w-full mt-2">
-            {hoursSaving ? "Saving Schedule…" : "Save Schedule"}
+
+          <button
+            onClick={saveSchedule}
+            disabled={hoursSaving}
+            className="btn-primary w-full mt-2"
+          >
+            {hoursSaving ? "Saving…" : "Save Schedule"}
           </button>
-          <div className="mt-6"><VacationSection userId={user.id} /></div>
+
+          <div className="mt-4">
+            <VacationSection userId={user.id} />
+          </div>
         </div>
       )}
 
@@ -499,27 +699,27 @@ export default function Profile() {
       {activeTab === "pricing" && (
         <div>
           <h2 className="text-lg font-bold mb-1">Service Pricing</h2>
-          <p className="text-sm text-gray-500 mb-5">
+          <p className="text-sm text-[var(--text-3)] mb-5">
             Set your default prices by service and dog size. These auto-fill when you create an appointment.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr>
-                  <th className="text-left py-2 pr-4 font-semibold text-gray-700 w-32">Service</th>
+                  <th className="text-left py-2 pr-4 font-semibold text-[var(--text-2)] w-32">Service</th>
                   {[1, 2, 3].map((size) => (
-                    <th key={size} className="text-center py-2 px-2 font-semibold text-gray-700">{SIZE_LABELS[size]}</th>
+                    <th key={size} className="text-center py-2 px-2 font-semibold text-[var(--text-2)]">{SIZE_LABELS[size]}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {SERVICE_OPTIONS.map((svc) => (
-                  <tr key={svc} className="border-t border-gray-100">
-                    <td className="py-2 pr-4 font-medium text-gray-800">{svc}</td>
+                  <tr key={svc} className="border-t border-[var(--border-med)]">
+                    <td className="py-2 pr-4 font-medium text-[var(--text-1)]">{svc}</td>
                     {[1, 2, 3].map((size) => (
                       <td key={size} className="py-2 px-2">
                         <div className="relative">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-3)] text-sm">$</span>
                           <input type="number" min="0" step="1" value={pricing[svc]?.[size] ?? 0}
                             onChange={(e) => setPricing((prev) => ({ ...prev, [svc]: { ...prev[svc], [size]: Number(e.target.value) || 0 } }))}
                             className="border rounded w-full pl-6 pr-2 py-1 text-center" style={{ maxWidth: 80 }} />
@@ -531,7 +731,7 @@ export default function Profile() {
               </tbody>
             </table>
           </div>
-          <p className="text-xs text-gray-400 mt-3">
+          <p className="text-xs text-[var(--text-3)] mt-3">
             Multiple services are summed automatically. You can always override the amount per appointment.
           </p>
           <button onClick={savePricing} disabled={pricingSaving} className="btn-primary w-full mt-5">
@@ -544,29 +744,29 @@ export default function Profile() {
       {activeTab === "smsbot" && (
         <div>
           <h2 className="text-lg font-bold mb-1">SMS AI Scheduler</h2>
-          <p className="text-sm text-gray-500 mb-5">
+          <p className="text-sm text-[var(--text-3)] mb-5">
             Let clients book, view, and cancel appointments by texting your scheduling number. Powered by AI — no app download required.
           </p>
 
-          <div className="bg-gray-50 border rounded-xl p-4 space-y-4 mb-5">
-            <h3 className="text-sm font-semibold text-gray-700">Booking Limits</h3>
+          <div className="bg-[var(--surface-2)] border border-[var(--border-med)] rounded-xl p-4 space-y-4 mb-5">
+            <h3 className="text-sm font-semibold text-[var(--text-1)]">Booking Limits</h3>
             <div>
               <label className="block text-sm font-medium mb-1">Max Dogs at Same Time</label>
               <div className="flex items-center gap-3">
-                <select value={maxParallel} onChange={(e) => setMaxParallel(Number(e.target.value))} className="border rounded p-2 w-28 bg-white">
+                <select value={maxParallel} onChange={(e) => setMaxParallel(Number(e.target.value))} className="border border-[var(--border-med)] rounded p-2 w-28 bg-[var(--surface)] text-[var(--text-1)]">
                   {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
-                <span className="text-sm text-gray-500">pets simultaneously</span>
+                <span className="text-sm text-[var(--text-3)]">pets simultaneously</span>
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">Max Appointments Per Day</label>
               <div className="flex items-center gap-3">
-                <select value={maxApptsPerDay ?? ""} onChange={(e) => setMaxApptsPerDay(e.target.value === "" ? null : Number(e.target.value))} className="border rounded p-2 w-28 bg-white">
+                <select value={maxApptsPerDay ?? ""} onChange={(e) => setMaxApptsPerDay(e.target.value === "" ? null : Number(e.target.value))} className="border border-[var(--border-med)] rounded p-2 w-28 bg-[var(--surface)] text-[var(--text-1)]">
                   <option value="">No limit</option>
                   {[2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20].map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
-                <span className="text-sm text-gray-500">SMS bot won't book beyond this</span>
+                <span className="text-sm text-[var(--text-3)]">SMS bot won't book beyond this</span>
               </div>
             </div>
             <button onClick={saveProfile} disabled={saving} className="btn-primary w-full">
@@ -577,6 +777,11 @@ export default function Profile() {
           <SmsBotSection userId={user?.id} />
         </div>
       )}
+
+      <ConfirmModal
+        config={confirmConfig}
+        onClose={() => setConfirmConfig(null)}
+      />
 
     </main>
   );
@@ -616,20 +821,20 @@ function SmsBotSection({ userId }) {
       .eq("id", userId);
     if (error) {
       setEnabled(!newVal);
-      alert("Failed to save. Please try again.");
+      console.error("Failed to save SMS bot setting:", error.message);
     }
     setToggling(false);
   };
 
-  if (loading) return <p className="text-sm text-gray-500">Loading…</p>;
+  if (loading) return <p className="text-sm text-[var(--text-3)]">Loading…</p>;
 
   // STATE 1: Trial — locked, upsell to paid
   if (subStatus === "trial" || subStatus === null) {
     return (
-      <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50 p-5 text-center">
+      <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 p-5 text-center">
         <div className="text-2xl mb-2">💬</div>
-        <div className="font-semibold text-gray-800 mb-1">AI SMS Scheduler</div>
-        <p className="text-sm text-gray-600 mb-3">
+        <div className="font-semibold text-[var(--text-1)] mb-1">AI SMS Scheduler</div>
+        <p className="text-sm text-[var(--text-2)] mb-3">
           Included with every paid plan. Upgrade to get your dedicated scheduling
           number — clients text it to book, reschedule, or cancel anytime.
         </p>
@@ -647,14 +852,14 @@ function SmsBotSection({ userId }) {
   // STATE 2: Paid but number not yet assigned
   if (!botNumber) {
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-center">
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 p-5 text-center">
         <div className="text-2xl mb-2">⏳</div>
-        <div className="font-semibold text-gray-800 mb-1">Number Being Assigned</div>
-        <p className="text-sm text-gray-600 mb-2">
+        <div className="font-semibold text-[var(--text-1)] mb-1">Number Being Assigned</div>
+        <p className="text-sm text-[var(--text-2)] mb-2">
           Your SMS scheduling number is being set up. You’ll receive an email
           within 24 hours once it’s ready.
         </p>
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-[var(--text-3)]">
           Questions?{" "}
           <a href="mailto:pawscheduler@gmail.com" className="text-emerald-600 underline">
             pawscheduler@gmail.com
@@ -669,10 +874,10 @@ function SmsBotSection({ userId }) {
     <div className="space-y-4">
 
       {/* Toggle */}
-      <div className="flex items-center justify-between p-4 bg-white border rounded-xl">
+      <div className="flex items-center justify-between p-4 bg-[var(--surface)] border border-[var(--border-med)] rounded-xl">
         <div>
-          <div className="font-semibold text-gray-800 text-sm">SMS AI Scheduler</div>
-          <div className={`text-xs mt-0.5 font-medium ${enabled ? "text-emerald-600" : "text-gray-400"}`}>
+          <div className="font-semibold text-[var(--text-1)] text-sm">SMS AI Scheduler</div>
+          <div className={`text-xs mt-0.5 font-medium ${enabled ? "text-emerald-600" : "text-[var(--text-3)]"}`}>
             {enabled ? "✅ Active — clients can text to book" : "⏸ Paused — bot will not respond"}
           </div>
         </div>
@@ -702,11 +907,11 @@ function SmsBotSection({ userId }) {
 
       {/* Read-only number */}
       <div>
-        <label className="block text-sm font-medium mb-1 text-gray-700">
+        <label className="block text-sm font-medium mb-1 text-[var(--text-2)]">
           Your Scheduling Phone Number
         </label>
-        <div className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-gray-50">
-          <span className="text-sm font-mono text-gray-800 flex-1">{botNumber}</span>
+        <div className="flex items-center gap-2 border border-[var(--border-med)] rounded-lg px-3 py-2 bg-[var(--surface-2)]">
+          <span className="text-sm font-mono text-[var(--text-1)] flex-1">{botNumber}</span>
           <button
             type="button"
             onClick={() => navigator.clipboard.writeText(botNumber)}
@@ -715,16 +920,16 @@ function SmsBotSection({ userId }) {
             Copy
           </button>
         </div>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className="text-xs text-[var(--text-3)] mt-1">
           Share this number with clients so they can text to book appointments.
         </p>
       </div>
 
       {/* Share text */}
-      <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4 text-sm text-gray-700">
+      <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4 text-sm text-[var(--text-2)]">
         <div className="font-semibold mb-2 text-emerald-800">Share this with clients:</div>
-        <p className="italic text-gray-600">
-          "Text <strong className="text-gray-800">{botNumber}</strong> to book, reschedule, or cancel
+        <p className="italic text-[var(--text-2)]">
+          "Text <strong className="text-[var(--text-1)]">{botNumber}</strong> to book, reschedule, or cancel
           your grooming appointment anytime — day or night! 🐾"
         </p>
       </div>
@@ -809,12 +1014,12 @@ function SubscriptionStatus({ userId, onManageBilling }) {
     loadStatus();
   }, [userId]);
 
-  if (loading) return <p className="text-gray-500">Loading subscription…</p>;
+  if (loading) return <p className="text-[var(--text-3)]">Loading subscription…</p>;
 
   const sub = status.subscription_status;
 
   return (
-    <div className="p-4 bg-white border rounded-xl shadow-sm mt-6">
+    <div className="p-4 bg-[var(--surface)] border border-[var(--border-med)] rounded-xl shadow-sm mt-6">
       <h3 className="text-lg font-semibold mb-2">Subscription</h3>
 
       {sub === "active" && (

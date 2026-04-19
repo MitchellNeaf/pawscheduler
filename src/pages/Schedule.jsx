@@ -1001,6 +1001,7 @@ export default function Schedule() {
         .from("pets")
         .select(`
           id, name, tags, client_id, slot_weight,
+          default_services, default_duration_min,
           clients ( id, full_name )
         `)
         .eq("groomer_id", user.id)
@@ -1031,11 +1032,14 @@ export default function Schedule() {
     setNewForm({
       date: selectedDate,
       time: modalSlot,
-      duration_min: 30,
-      services: [],
+      duration_min: pet.default_duration_min || 30,
+      services: pet.default_services || [],
       notes: "",
       reminder_enabled: true,
-      amount: null,
+      // Auto-calculate amount from default services if present
+      amount: pet.default_services?.length
+        ? calcAmount(pet.default_services, pet.slot_weight || 1, pricing)
+        : null,
     });
 
     setNewModalOpen(true);

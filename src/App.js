@@ -26,6 +26,7 @@ import Revenue from "./pages/Revenue";
 import Profile from "./pages/Profile";
 import Upgrade from "./pages/Upgrade";
 import Help from "./pages/Help";
+import Waiver from "./pages/Waiver";
 
 // Legal pages
 import Terms from "./pages/legal/Terms";
@@ -270,6 +271,7 @@ function AppShell() {
 
   const hideNav =
     location.pathname.startsWith("/book/") ||
+    location.pathname.startsWith("/waiver/") ||
     location.pathname === "/auth" ||
     location.pathname === "/signup" ||
     location.pathname === "/upgrade" ||
@@ -277,6 +279,7 @@ function AppShell() {
 
   const hideFooter =
     location.pathname.startsWith("/book/") ||
+    location.pathname.startsWith("/waiver/") ||
     location.pathname === "/auth" ||
     location.pathname === "/signup" ||
     location.pathname === "/onboarding";
@@ -424,6 +427,7 @@ function AppShell() {
         <Route path="/upgrade" element={<Upgrade />} />
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/book/:slug" element={<Book />} />
+        <Route path="/waiver/:slug" element={<Waiver />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
         <Route

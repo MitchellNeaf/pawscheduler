@@ -1,7 +1,9 @@
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
+import Loader from "../components/Loader";
 import ConfirmModal from "../components/ConfirmModal";
+import { SERVICE_OPTIONS } from "../utils/grooming";
 
 const TAG_OPTIONS = [
   "Bites",
@@ -114,6 +116,77 @@ function PetEditModal({
             <option value={2}>Large (2)</option>
             <option value={3}>XL / Special Care (3)</option>
           </select>
+
+          {/* DEFAULT SERVICES */}
+          <div className="mt-4">
+            <label className="font-medium block mb-2">
+              Default Services
+              <span className="ml-2 text-xs font-normal text-gray-500">
+                — pre-fill when booking this pet
+              </span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {SERVICE_OPTIONS.map((svc) => {
+                const checked = (form.default_services || []).includes(svc);
+                return (
+                  <label
+                    key={svc}
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-xl border cursor-pointer text-sm font-medium transition
+                      ${checked
+                        ? "bg-emerald-50 border-emerald-400 text-emerald-800"
+                        : "bg-white border-gray-200 text-gray-600 hover:border-emerald-300"
+                      }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => {
+                        setForm((prev) => {
+                          const curr = prev.default_services || [];
+                          return {
+                            ...prev,
+                            default_services: curr.includes(svc)
+                              ? curr.filter((s) => s !== svc)
+                              : [...curr, svc],
+                          };
+                        });
+                      }}
+                      className="accent-emerald-600 w-4 h-4 shrink-0"
+                    />
+                    {svc}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* DEFAULT DURATION */}
+          <div className="mt-3">
+            <label className="font-medium block mb-1">
+              Default Duration
+              <span className="ml-2 text-xs font-normal text-gray-500">
+                — pre-fill when booking this pet
+              </span>
+            </label>
+            <select
+              value={form.default_duration_min || ""}
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  default_duration_min: e.target.value ? Number(e.target.value) : null,
+                }))
+              }
+              className="border rounded-xl w-full p-2 text-sm"
+            >
+              <option value="">No default (use auto)</option>
+              <option value={15}>15 min</option>
+              <option value={30}>30 min</option>
+              <option value={45}>45 min</option>
+              <option value={60}>60 min</option>
+              <option value={90}>90 min</option>
+              <option value={120}>120 min</option>
+            </select>
+          </div>
 
           <div className="flex gap-3 pt-2 justify-end">
             <button type="button" className="btn-secondary" onClick={onClose}>
@@ -265,6 +338,8 @@ export default function ClientPets() {
     notes: "",
     tags: [],
     slot_weight: 1,
+    default_services: [],
+    default_duration_min: null,
   });
 
   const [otherTag, setOtherTag] = useState("");
@@ -341,6 +416,8 @@ export default function ClientPets() {
       notes: "",
       tags: [],
       slot_weight: 1,
+      default_services: [],
+      default_duration_min: null,
     });
     setOtherTag("");
     setEditingId(null);
@@ -354,6 +431,8 @@ export default function ClientPets() {
       notes: "",
       tags: [],
       slot_weight: 1,
+      default_services: [],
+      default_duration_min: null,
     });
     setOtherTag("");
     setEditingId(null);
@@ -377,6 +456,8 @@ export default function ClientPets() {
           notes: form.notes,
           tags: finalTags,
           slot_weight: form.slot_weight,
+          default_services: form.default_services.length ? form.default_services : null,
+          default_duration_min: form.default_duration_min || null,
         })
         .eq("id", editingId)
         .eq("groomer_id", user.id)
@@ -399,6 +480,8 @@ export default function ClientPets() {
             notes: form.notes,
             tags: finalTags,
             slot_weight: form.slot_weight,
+            default_services: form.default_services.length ? form.default_services : null,
+            default_duration_min: form.default_duration_min || null,
           },
         ])
         .select()
@@ -421,6 +504,8 @@ export default function ClientPets() {
         ? [...pet.tags, "Other"]
         : pet.tags || [],
       slot_weight: pet.slot_weight ?? 1,
+      default_services: pet.default_services || [],
+      default_duration_min: pet.default_duration_min || null,
     });
 
     if (pet.tags?.some((t) => !TAG_OPTIONS.includes(t))) {
@@ -462,7 +547,29 @@ export default function ClientPets() {
     });
   };
 
-  if (loading) return <main className="px-4 py-6">Loading...</main>;
+  if (loading) return (
+    <main className="px-4 py-6 space-y-4 max-w-2xl mx-auto">
+      {/* Back link skeleton */}
+      <div className="h-4 w-24 bg-gray-200 animate-pulse rounded" />
+
+      {/* Client info card skeleton */}
+      <div className="card space-y-3">
+        <div className="h-5 w-40 bg-gray-200 animate-pulse rounded" />
+        <div className="h-10 bg-gray-100 animate-pulse rounded-xl" />
+        <div className="h-10 bg-gray-100 animate-pulse rounded-xl" />
+        <div className="h-10 bg-gray-100 animate-pulse rounded-xl" />
+        <div className="h-10 bg-gray-100 animate-pulse rounded-xl" />
+        <div className="flex gap-2">
+          <div className="h-9 w-28 bg-gray-200 animate-pulse rounded-xl" />
+          <div className="h-9 w-24 bg-gray-200 animate-pulse rounded-xl" />
+        </div>
+      </div>
+
+      {/* Pet card skeletons */}
+      <Loader />
+      <Loader />
+    </main>
+  );
   if (!client) return <main className="px-4 py-6">Client not found</main>;
 
   return (
@@ -635,6 +742,19 @@ export default function ClientPets() {
                       : "XL / Special Care (3)"}
                   </strong>
                 </div>
+
+                {/* Default services + duration */}
+                {(pet.default_services?.length > 0 || pet.default_duration_min) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                    <span className="text-gray-500 font-medium">Defaults:</span>
+                    {pet.default_services?.map((svc) => (
+                      <span key={svc} className="chip chip-brand">{svc}</span>
+                    ))}
+                    {pet.default_duration_min && (
+                      <span className="chip chip-neutral">⏱ {pet.default_duration_min} min</span>
+                    )}
+                  </div>
+                )}
 
                 {/* SHOT RECORDS */}
                 <div className="mt-4">

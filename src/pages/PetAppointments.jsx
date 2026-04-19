@@ -621,7 +621,23 @@ export default function PetAppointments() {
 
   if (loading) {
     return (
-      <main className="px-4 py-6 space-y-4">
+      <main className="px-4 py-6 space-y-4 max-w-2xl mx-auto">
+        {/* Back button skeleton */}
+        <div className="h-4 w-28 bg-gray-200 animate-pulse rounded" />
+
+        {/* Header card skeleton */}
+        <div className="card">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="space-y-2">
+              <div className="h-6 w-56 bg-gray-200 animate-pulse rounded" />
+              <div className="h-4 w-36 bg-gray-100 animate-pulse rounded" />
+            </div>
+            <div className="h-10 w-36 bg-gray-200 animate-pulse rounded-xl" />
+          </div>
+        </div>
+
+        {/* Appointment card skeletons */}
+        <Loader />
         <Loader />
         <Loader />
       </main>

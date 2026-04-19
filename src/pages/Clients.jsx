@@ -382,6 +382,7 @@ export default function Clients() {
   const [search, setSearch] = useState("");
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [groomerSlug, setGroomerSlug] = useState("");
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -399,6 +400,64 @@ export default function Clients() {
 
   // Add Pet modal state
   const [addPetClient, setAddPetClient] = useState(null);
+
+  // Waiver link state
+  const [waiverSentFor, setWaiverSentFor] = useState(new Set());
+  const [waiverSignedIds, setWaiverSignedIds] = useState(new Set()); // client_ids who have signed
+  const [sendingWaiver, setSendingWaiver] = useState(null); // clientId | null
+
+  const copyWaiverLink = (client) => {
+    const waiverUrl = `${window.location.origin}/waiver/${groomerSlug}?cid=${client.id}`;
+    navigator.clipboard.writeText(waiverUrl).then(() => {
+      setWaiverSentFor((prev) => new Set([...prev, client.id]));
+    });
+  };
+
+  const sendWaiverEmail = async (client) => {
+    setSendingWaiver(client.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/.netlify/functions/sendWaiverEmail", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ clientId: client.id }),
+      });
+      if (res.ok) {
+        setWaiverSentFor((prev) => new Set([...prev, client.id]));
+      } else {
+        copyWaiverLink(client);
+      }
+    } catch {
+      copyWaiverLink(client);
+    } finally {
+      setSendingWaiver(null);
+    }
+  };
+
+  const sendWaiverViaSms = async (client) => {
+    setSendingWaiver(`sms-${client.id}`);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/.netlify/functions/sendWaiverSms", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ clientId: client.id }),
+      });
+      if (res.ok) {
+        setWaiverSentFor((prev) => new Set([...prev, `sms-${client.id}`]));
+      }
+    } catch {
+      console.error("SMS waiver send failed");
+    } finally {
+      setSendingWaiver(null);
+    }
+  };
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
@@ -422,6 +481,26 @@ export default function Clients() {
         .from("pets")
         .select("*")
         .eq("groomer_id", authUser.id);
+
+      // Load groomer slug for waiver link
+      const { data: groomerData } = await supabase
+        .from("groomers")
+        .select("slug")
+        .eq("id", authUser.id)
+        .single();
+
+      if (groomerData?.slug) setGroomerSlug(groomerData.slug);
+
+      // Load waiver signatures to show signed status
+      const { data: sigData } = await supabase
+        .from("waiver_signatures")
+        .select("client_id")
+        .eq("groomer_id", authUser.id)
+        .not("client_id", "is", null);
+
+      if (sigData) {
+        setWaiverSignedIds(new Set(sigData.map((s) => s.client_id)));
+      }
 
       setClients(clientData || []);
       setPets(petData || []);
@@ -828,6 +907,51 @@ export default function Clients() {
                   >
                     ➕ Add Pet
                   </button>
+
+                  {/* Waiver — signed badge, or send options */}
+                  {groomerSlug && (
+                    waiverSignedIds.has(client.id) ? (
+                      <span className="text-sm px-3 py-1.5 rounded-xl border border-emerald-300 text-emerald-700 bg-emerald-50 font-semibold">
+                        ✅ Waiver Signed
+                      </span>
+                    ) : waiverSentFor.has(client.id) ? (
+                      <span className="text-sm px-3 py-1.5 rounded-xl border border-emerald-300 text-emerald-700 bg-emerald-50 font-semibold">
+                        ✓ Waiver Sent
+                      </span>
+                    ) : client.email ? (
+                      <div className="flex gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          disabled={sendingWaiver === client.id}
+                          onClick={() => sendWaiverEmail(client)}
+                          className="text-sm px-3 py-1.5 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                          title="Send waiver via email"
+                        >
+                          {sendingWaiver === client.id ? "Sending…" : "📧 Email Waiver"}
+                        </button>
+                        {client.phone && client.sms_opt_in && (
+                          <button
+                            type="button"
+                            disabled={sendingWaiver === `sms-${client.id}`}
+                            onClick={() => sendWaiverViaSms(client)}
+                            className="text-sm px-3 py-1.5 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+                            title="Send waiver via SMS"
+                          >
+                            {sendingWaiver === `sms-${client.id}` ? "Sending…" : "📱 SMS"}
+                          </button>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => copyWaiverLink(client)}
+                        className="text-sm px-3 py-1.5 rounded-xl border border-gray-200 text-gray-600 font-semibold hover:border-emerald-400 hover:text-emerald-700 hover:bg-emerald-50 transition-colors"
+                        title="Copy waiver link to clipboard"
+                      >
+                        📋 Copy Waiver Link
+                      </button>
+                    )
+                  )}
                 </div>
 
                 <ul className="mt-3 ml-1 space-y-1">
