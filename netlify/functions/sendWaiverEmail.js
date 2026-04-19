@@ -86,6 +86,9 @@ exports.handler = async (event) => {
           client_first_name: firstName,
           waiver_url:        waiverUrl,
           logo_url:          groomer.logo_url || "",
+          logo_url_img:      groomer.logo_url
+            ? `<img src="${groomer.logo_url}" alt="${groomerName}" width="64" height="64" style="width:64px;height:64px;border-radius:50%;object-fit:cover;margin-bottom:12px;border:3px solid rgba(255,255,255,0.4);display:block;margin-left:auto;margin-right:auto;" />`
+            : "",
         },
       }),
     }

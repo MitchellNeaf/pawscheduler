@@ -227,10 +227,13 @@ export default function WaiverPage() {
             <button
               onClick={handleSign}
               disabled={submitting || !signerName.trim() || !agreed}
-              className="w-full py-3 rounded-xl bg-[var(--brand)] text-white font-bold text-sm
-                hover:opacity-90 active:opacity-80 disabled:opacity-40 disabled:cursor-not-allowed transition"
+              className="w-full py-3.5 rounded-xl font-bold text-sm transition
+                bg-emerald-600 text-white border-2 border-emerald-600
+                hover:bg-emerald-700 hover:border-emerald-700
+                active:bg-emerald-800
+                disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
             >
-              {submitting ? "Signing…" : "✍️ Sign Waiver"}
+              {submitting ? "Signing…" : "Sign Waiver"}
             </button>
 
             <p className="text-xs text-[var(--text-3)] text-center">
