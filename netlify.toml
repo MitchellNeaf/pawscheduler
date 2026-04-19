@@ -1,7 +1,6 @@
 [build]
   command = "npm run build"
   publish = "build"
-  # This line can stay or be removed
   functions = "netlify/functions"
 
 [[redirects]]
@@ -10,10 +9,15 @@
   status = 200
 
 [functions]
-  directory = "netlify/functions"   # 👈 THIS IS THE MISSING PIECE
+  directory = "netlify/functions"
   included_files = ["netlify/email_templates/*"]
 
 [[scheduled]]
   name = "nightly-reminders"
   cron = "50 1 * * *"
   function = "nightlyReminders"
+
+[[scheduled]]
+  name = "nightly-vaccine-alerts"
+  cron = "0 10 * * *"
+  function = "nightlyVaccineAlerts"
