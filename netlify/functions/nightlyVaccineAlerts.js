@@ -70,7 +70,13 @@ async function sendAlert({ phone, petName, clientFirstName, shotType, expiresDat
   return true;
 }
 
-exports.handler = async () => {
+exports.handler = async (event) => {
+  // ── Security — matches sendSmsReminders pattern ─────────
+  const secret =
+    event.headers["x-cron-secret"] || event.headers["X-Cron-Secret"];
+  if (secret !== process.env.CRON_SECRET) {
+    return { statusCode: 401, body: "Unauthorized" };
+  }
   console.log("nightlyVaccineAlerts: starting run at", new Date().toISOString());
 
   const target30 = dateInDays(30);

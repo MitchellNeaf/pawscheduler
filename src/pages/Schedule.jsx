@@ -369,6 +369,225 @@ function PetSelectModal({ open, onClose, slot, date, pets, loading, onPickPet })
 }
 
 
+/* ---------------- Multi-Pet New Appointment Modal ---------------- */
+// Used only for creating new appointments — supports 1 or more pets.
+// Each pet gets its own services/duration/amount.
+// Shared fields: date, time, notes, reminder_enabled.
+function MultiPetAppointmentModal({
+  open, onClose,
+  newPets, setNewPets,
+  form, setForm,
+  onSave, saving,
+  onAddPet,   // opens PetSelectModal again to add another pet
+  pricing,
+  workingRange, breakSlots,
+}) {
+  if (!open || !newPets.length) return null;
+
+  const updatePetForm = (petId, field, value) => {
+    setNewPets((prev) => prev.map((entry) =>
+      entry.pet.id === petId
+        ? { ...entry, form: { ...entry.form, [field]: value } }
+        : entry
+    ));
+  };
+
+  const togglePetService = (petId, svc) => {
+    setNewPets((prev) => prev.map((entry) => {
+      if (entry.pet.id !== petId) return entry;
+      const exists = entry.form.services.includes(svc);
+      const newServices = exists
+        ? entry.form.services.filter((s) => s !== svc)
+        : [...entry.form.services, svc];
+      const slotWeight = entry.pet.slot_weight || 1;
+      return {
+        ...entry,
+        form: {
+          ...entry.form,
+          services: newServices,
+          amount: calcAmount(newServices, slotWeight, pricing),
+        },
+      };
+    }));
+  };
+
+  const removePet = (petId) => {
+    setNewPets((prev) => prev.filter((e) => e.pet.id !== petId));
+  };
+
+  const fmtTime = (slot) => {
+    if (!slot) return slot;
+    const [h, m] = slot.split(":").map(Number);
+    const ampm = h >= 12 ? "PM" : "AM";
+    return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+      <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[90vh] flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b">
+          <div>
+            <h2 className="font-semibold text-gray-800">New Appointment</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {newPets.length} dog{newPets.length > 1 ? "s" : ""} —{" "}
+              {newPets.map(e => e.pet.name).join(" & ")}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-gray-500 text-sm">✕</button>
+        </div>
+
+        <div className="p-4 space-y-4 overflow-y-auto flex-1">
+
+          {/* Shared: Date + Time */}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <label className="flex flex-col gap-1">
+              <span className="font-medium text-gray-700">Date</span>
+              <input type="date" value={form.date}
+                onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))}
+                className="border rounded px-2 py-1" />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="font-medium text-gray-700">Time</span>
+              {workingRange?.length > 0 ? (
+                <select value={form.time}
+                  onChange={(e) => setForm((p) => ({ ...p, time: e.target.value }))}
+                  className="border rounded px-2 py-1">
+                  <option value="">Select a time</option>
+                  {workingRange
+                    .filter((slot) => !(breakSlots || []).includes(slot))
+                    .map((slot) => (
+                      <option key={slot} value={slot}>{fmtTime(slot)}</option>
+                    ))}
+                </select>
+              ) : (
+                <input type="time" step={900} value={form.time}
+                  onChange={(e) => setForm((p) => ({ ...p, time: e.target.value }))}
+                  className="border rounded px-2 py-1" />
+              )}
+            </label>
+          </div>
+
+          {/* Per-pet sections */}
+          {newPets.map(({ pet, form: petForm }, idx) => {
+            const rabies = getRabiesRecord(pet.shot_records || []);
+            const expired = isExpired(rabies?.date_expires);
+            const expSoon = isExpiringSoon(rabies?.date_expires);
+
+            return (
+              <div key={pet.id} className="border rounded-xl overflow-hidden">
+                {/* Pet header */}
+                <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b">
+                  <div>
+                    <span className="font-semibold text-sm text-gray-800">{pet.name}</span>
+                    <span className="text-xs text-gray-500 ml-2">{pet.clients?.full_name}</span>
+                  </div>
+                  {newPets.length > 1 && (
+                    <button onClick={() => removePet(pet.id)}
+                      className="text-red-400 hover:text-red-600 text-xs font-semibold">
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                <div className="p-3 space-y-3">
+                  {/* Vaccine warning */}
+                  {!rabies ? (
+                    <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">⚠️ No rabies record on file</div>
+                  ) : expired ? (
+                    <div className="p-2 bg-red-100 text-red-700 text-xs rounded">⛔ Rabies expired on {rabies.date_expires}</div>
+                  ) : expSoon ? (
+                    <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">⚠️ Rabies expires soon ({rabies.date_expires})</div>
+                  ) : null}
+
+                  {/* Duration + Amount */}
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <label className="flex flex-col gap-1">
+                      <span className="font-medium text-gray-700">Duration</span>
+                      <select value={petForm.duration_min}
+                        onChange={(e) => updatePetForm(pet.id, "duration_min", Number(e.target.value))}
+                        className="border rounded px-2 py-1">
+                        {[15, 30, 45, 60, 90, 120].map((m) => (
+                          <option key={m} value={m}>{m} min</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex flex-col gap-1">
+                      <span className="font-medium text-gray-700">Amount ($)</span>
+                      <input type="number" min="0" step="1"
+                        value={petForm.amount ?? ""}
+                        onChange={(e) => updatePetForm(pet.id, "amount", Number(e.target.value))}
+                        className="border rounded px-2 py-1" placeholder="0" />
+                    </label>
+                  </div>
+
+                  {/* Services */}
+                  <div className="text-sm">
+                    <div className="font-medium text-gray-700 mb-1">Services</div>
+                    <div className="grid grid-cols-2 gap-1">
+                      {SERVICE_OPTIONS.map((svc) => (
+                        <label key={svc} className="flex items-center gap-2 text-xs text-gray-700">
+                          <input type="checkbox"
+                            checked={petForm.services.includes(svc)}
+                            onChange={() => togglePetService(pet.id, svc)} />
+                          {svc}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Add another pet button */}
+          <button type="button" onClick={onAddPet}
+            className="w-full py-2 rounded-xl border-2 border-dashed border-gray-200 text-gray-500 text-sm font-semibold hover:border-emerald-400 hover:text-emerald-600 transition-colors">
+            + Add another dog
+          </button>
+
+          {/* Shared: Notes + Reminder */}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">Notes (shared)</span>
+            <textarea value={form.notes}
+              onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
+              className="border rounded px-2 py-1 min-h-[50px]" />
+          </label>
+
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={form.reminder_enabled}
+              onChange={(e) => setForm((p) => ({ ...p, reminder_enabled: e.target.checked }))} />
+            Send appointment reminder?
+          </label>
+
+          {/* Total summary */}
+          {newPets.some(e => e.form.amount) && (
+            <div className="flex items-center justify-between px-3 py-2 bg-emerald-50 rounded-xl text-sm">
+              <span className="text-emerald-700 font-medium">Total for all pets</span>
+              <span className="font-bold text-emerald-800">
+                ${newPets.reduce((sum, e) => sum + (e.form.amount || 0), 0).toFixed(2)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t flex justify-end gap-2">
+          <button onClick={onClose} disabled={saving}
+            className="text-sm px-3 py-1 rounded border border-gray-300 hover:bg-gray-50">
+            Cancel
+          </button>
+          <button onClick={onSave} disabled={saving}
+            className="text-sm px-3 py-1 rounded bg-blue-600 text-white disabled:opacity-60">
+            {saving ? "Saving..." : `Save ${newPets.length > 1 ? `${newPets.length} Appointments` : "Appointment"}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Unified Appointment Modal ---------------- */
 // Handles both New and Edit — pass isEdit=true for edit mode (shows Delete button).
 // For new: pass pet={...} with shot_records. For edit: pass appt={...} with shot_records.
@@ -790,15 +1009,12 @@ export default function Schedule() {
   const [loadingPets, setLoadingPets] = useState(false);
 
   const [newModalOpen, setNewModalOpen] = useState(false);
-  const [newPet, setNewPet] = useState(null);
+  const [newPets, setNewPets] = useState([]); // array: { pet, form: { duration_min, services, amount } }
   const [newForm, setNewForm] = useState({
     date: "",
     time: "",
-    duration_min: 30,
-    services: [],
     notes: "",
     reminder_enabled: true,
-    amount: null,
   });
   const [savingNew, setSavingNew] = useState(false);
 
@@ -893,7 +1109,7 @@ export default function Schedule() {
           .from("appointments")
           .select(`
             id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-            services, notes, confirmed, no_show, paid, amount, reminder_enabled, source,
+            services, notes, confirmed, no_show, paid, amount, reminder_enabled, source, appointment_group_id,
             pets (
               id, name, tags, client_id,
               clients (
@@ -992,7 +1208,17 @@ export default function Schedule() {
 
   /* Open empty slot → pick pet */
   const openSlot = async (slot) => {
-    setModalSlot(slot);
+    // Only update slot if opening fresh (not adding a second pet)
+    if (!newPets.length) {
+      setModalSlot(slot);
+      // Reset shared form for a fresh booking
+      setNewForm({
+        date: selectedDate,
+        time: slot,
+        notes: "",
+        reminder_enabled: true,
+      });
+    }
     setPetModalOpen(true);
 
     if (!pets.length && user) {
@@ -1024,30 +1250,40 @@ export default function Schedule() {
       .eq("pet_id", pet.id)
       .order("date_expires", { ascending: false });
 
-    setNewPet({
-      ...pet,
-      shot_records: shots || [],
+    const petWithShots = { ...pet, shot_records: shots || [] };
+
+    // Add this pet to the newPets array with its own form defaults
+    setNewPets((prev) => {
+      // Don't add same pet twice
+      if (prev.find((p) => p.pet.id === pet.id)) return prev;
+      return [
+        ...prev,
+        {
+          pet: petWithShots,
+          form: {
+            duration_min: pet.default_duration_min || 30,
+            services: pet.default_services || [],
+            amount: pet.default_services?.length
+              ? calcAmount(pet.default_services, pet.slot_weight || 1, pricing)
+              : null,
+          },
+        },
+      ];
     });
 
-    setNewForm({
+    // Set shared form fields only on first pet pick
+    setNewForm((prev) => ({
+      ...prev,
       date: selectedDate,
       time: modalSlot,
-      duration_min: pet.default_duration_min || 30,
-      services: pet.default_services || [],
-      notes: "",
-      reminder_enabled: true,
-      // Auto-calculate amount from default services if present
-      amount: pet.default_services?.length
-        ? calcAmount(pet.default_services, pet.slot_weight || 1, pricing)
-        : null,
-    });
+    }));
 
     setNewModalOpen(true);
   };
 
-  /* Save new appointment */
+  /* Save new appointment(s) — supports multiple pets with shared group_id */
   const handleSaveNew = async () => {
-    if (!user || !newPet) return;
+    if (!user || !newPets.length) return;
     if (!newForm.date || !newForm.time) {
       setConfirmConfig({
         title: "Missing info",
@@ -1059,30 +1295,39 @@ export default function Schedule() {
     }
 
     setSavingNew(true);
-    const { data, error } = await supabase
+
+    // Generate a shared group_id for multi-pet appointments
+    const groupId = newPets.length > 1
+      ? crypto.randomUUID()
+      : null;
+
+    const insertRows = newPets.map(({ pet, form }) => ({
+      groomer_id:           user.id,
+      pet_id:               pet.id,
+      date:                 newForm.date,
+      time:                 newForm.time,
+      duration_min:         form.duration_min || 30,
+      services:             form.services,
+      notes:                newForm.notes,
+      slot_weight:          pet.slot_weight || 1,
+      reminder_enabled:     newForm.reminder_enabled,
+      reminder_sent:        false,
+      amount:               form.amount ?? null,
+      appointment_group_id: groupId,
+    }));
+
+    const { data: savedAppts, error } = await supabase
       .from("appointments")
-      .insert({
-        groomer_id: user.id,
-        pet_id: newPet.id,
-        date: newForm.date,
-        time: newForm.time,
-        duration_min: newForm.duration_min || 30,
-        services: newForm.services,
-        notes: newForm.notes,
-        slot_weight: newPet.slot_weight || 1,
-        reminder_enabled: newForm.reminder_enabled,
-        reminder_sent: false,
-        amount: newForm.amount ?? null,
-      })
+      .insert(insertRows)
       .select(`
         id, pet_id, groomer_id, date, time, duration_min, slot_weight,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled,
+        appointment_group_id,
         pets (
           id, name, tags, client_id,
           clients ( id, full_name, phone, email )
         )
-      `)
-      .single();
+      `);
 
     setSavingNew(false);
 
@@ -1096,27 +1341,22 @@ export default function Schedule() {
       return;
     }
 
-    // fire-and-forget confirmation email if toggle on
-    if (newForm.reminder_enabled) {
-      sendConfirmationEmail({ appointment: data, groomerId: user.id });
+    // Fire confirmation email for first pet if reminder enabled
+    if (newForm.reminder_enabled && savedAppts?.[0]) {
+      sendConfirmationEmail({ appointment: savedAppts[0], groomerId: user.id });
     }
 
-    const { data: shots } = await supabase
-      .from("pet_shot_records")
-      .select("*")
-      .eq("pet_id", newPet.id)
-      .order("date_expires", { ascending: false });
-
-    const withShots = { ...data, shot_records: shots || [] };
+    // Attach shot records to each saved appointment
+    const withShots = await attachShotRecords(savedAppts || []);
 
     setAppointments((prev) =>
-      [...prev, withShots].sort((a, b) =>
+      [...prev, ...withShots].sort((a, b) =>
         (a.time || "").localeCompare(b.time || "")
       )
     );
 
     setNewModalOpen(false);
-    setNewPet(null);
+    setNewPets([]);
     setModalSlot(null);
   };
 
@@ -1188,7 +1428,7 @@ export default function Schedule() {
       .eq("groomer_id", user.id)
       .select(`
         id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-        services, notes, confirmed, no_show, paid, amount, reminder_enabled,
+        services, notes, confirmed, no_show, paid, amount, reminder_enabled, appointment_group_id,
         pets ( id, name, tags, client_id, clients ( id, full_name, phone, email ) )
       `)
       .single();
@@ -1321,6 +1561,39 @@ export default function Schedule() {
   const filteredAppointments = appointments.filter((appt) =>
     matchesSearch(appt, search)
   );
+
+  // Group appointments by appointment_group_id for display
+  // Returns array of "display groups" — each is either a single appt or an array of linked appts
+  const groupedAppointments = (() => {
+    const seen = new Set();
+    const groups = [];
+    for (const appt of filteredAppointments) {
+      if (seen.has(appt.id)) continue;
+      seen.add(appt.id);
+      if (appt.appointment_group_id) {
+        const siblings = filteredAppointments.filter(
+          (a) => a.appointment_group_id === appt.appointment_group_id
+        );
+        siblings.forEach((s) => seen.add(s.id));
+        groups.push(siblings); // array = multi-pet group
+      } else {
+        groups.push([appt]); // single-element array = solo appt
+      }
+    }
+    return groups;
+  })();
+
+  // Helper: get display name for a group
+  const groupPetNames = (group) => {
+    const names = group.map((a) => a.pets?.name).filter(Boolean);
+    if (names.length === 1) return names[0];
+    if (names.length === 2) return names.join(" & ");
+    return `${names[0]} +${names.length - 1}`;
+  };
+
+  // Helper: get total amount for a group
+  const groupTotal = (group) =>
+    group.reduce((sum, a) => sum + (a.amount || 0), 0);
 
   const unpaidToday =
     selectedDate === todayStr
@@ -1662,7 +1935,15 @@ export default function Schedule() {
                                 {/* Pet name + vaccine icon */}
                                 <div className="flex items-center justify-between gap-1">
                                   <span className="font-semibold text-[11px] text-gray-900 truncate leading-tight">
-                                    {appt.pets?.name || "Pet"}
+                                    {(() => {
+                                      if (!appt.appointment_group_id) return appt.pets?.name || "Pet";
+                                      const siblings = appointments.filter(a => a.appointment_group_id === appt.appointment_group_id);
+                                      if (siblings.length <= 1) return appt.pets?.name || "Pet";
+                                      const idx = siblings.findIndex(a => a.id === appt.id);
+                                      return idx === 0
+                                        ? `${appt.pets?.name} +${siblings.length - 1}`
+                                        : appt.pets?.name || "Pet";
+                                    })()}
                                   </span>
                                   {vaccineIcon && (
                                     <span className="text-[11px] flex-shrink-0">{vaccineIcon}</span>
@@ -1720,7 +2001,7 @@ export default function Schedule() {
                                       .eq("id", appt.id)
                                       .eq("groomer_id", user.id)
                                       .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-                                        services, notes, confirmed, no_show, paid, amount, reminder_enabled, source,
+                                        services, notes, confirmed, no_show, paid, amount, reminder_enabled, source, appointment_group_id,
                                         pets ( *, clients ( id, full_name, phone, email, street, city, state, zip ) )`)
                                       .single();
                                     if (!error && data) {
@@ -1758,10 +2039,14 @@ export default function Schedule() {
         </p>
       ) : (
         <div className="grid gap-4">
-          {filteredAppointments.map((appt) => {
+          {groupedAppointments.map((group) => {
+            const appt = group[0]; // primary appointment for shared fields
+            const isMulti = group.length > 1;
             const start = (appt.time || "00:00").slice(0, 5);
-            const end = getEndTime(start, appt.duration_min || 15);
+            const end = getEndTime(start, Math.max(...group.map(a => a.duration_min || 15)));
             const size = sizeBadge(appt.slot_weight || 1);
+            const displayName = groupPetNames(group);
+            const totalAmount = groupTotal(group);
 
             const rabies = getRabiesRecord(appt.shot_records || []);
             let vaccineIcon = null;
@@ -1774,13 +2059,13 @@ export default function Schedule() {
             const localStart = new Date(y, m - 1, d, H, M);
             const isPast = localStart < new Date();
 
-            const servicesText = Array.isArray(appt.services)
-              ? appt.services.join(", ")
-              : appt.services || "";
+            const servicesText = isMulti
+              ? group.map(a => `${a.pets?.name}: ${(Array.isArray(a.services) ? a.services : [a.services || ""]).join(", ")}`).join(" | ")
+              : Array.isArray(appt.services) ? appt.services.join(", ") : appt.services || "";
 
             return (
               <div
-                key={appt.id}
+                key={isMulti ? appt.appointment_group_id : appt.id}
                 className={`card relative pt-2 transition-all ${
                   search.trim().length > 0 && matchesSearch(appt, search)
                     ? "search-match"
@@ -1809,9 +2094,10 @@ export default function Schedule() {
 
                     <div className="text-sm text-gray-500 text-right">
                       {appt.duration_min} min
-                      {typeof appt.amount === "number" && (
+                      {totalAmount > 0 && (
                         <div className="font-semibold text-gray-800">
-                          ${appt.amount.toFixed(2)}
+                          ${totalAmount.toFixed(2)}
+                          {isMulti && <span className="text-xs text-gray-400 ml-1">total</span>}
                         </div>
                       )}
                     </div>
@@ -1821,10 +2107,9 @@ export default function Schedule() {
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
                       <div className="font-semibold text-gray-900">
-                        {appt.pets?.name || "Pet"}{" "}
-                        <span className="text-xs text-gray-500">
-                          {size.label}
-                        </span>
+                        {displayName}{" "}
+                        {isMulti && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">Multi</span>}
+                        {!isMulti && <span className="text-xs text-gray-500">{size.label}</span>}
                       </div>
                       <div className="text-sm text-gray-700">
                         {appt.pets?.clients?.full_name || "Client"}
@@ -1987,15 +2272,16 @@ export default function Schedule() {
         onPickPet={handlePickPet}
       />
 
-      <AppointmentModal
+      <MultiPetAppointmentModal
         open={newModalOpen}
-        onClose={() => setNewModalOpen(false)}
-        isEdit={false}
-        pet={newPet}
+        onClose={() => { setNewModalOpen(false); setNewPets([]); setModalSlot(null); }}
+        newPets={newPets}
+        setNewPets={setNewPets}
         form={newForm}
         setForm={setNewForm}
         onSave={handleSaveNew}
         saving={savingNew}
+        onAddPet={() => { setNewModalOpen(false); setPetModalOpen(true); }}
         pricing={pricing}
         workingRange={workingRange}
         breakSlots={breakSlots}
