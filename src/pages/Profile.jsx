@@ -332,6 +332,9 @@ export default function Profile() {
 
   // ---------------- TABS ----------------
   const [activeTab, setActiveTab] = useState("profile");
+  const [stripeConnecting, setStripeConnecting] = useState(false);
+  const [stripeConnected, setStripeConnected] = useState(false);
+  const [stripeError, setStripeError] = useState("");
 
   // ---------------- BILLING PORTAL ----------------
   const handleManageBilling = async () => {
@@ -361,6 +364,17 @@ export default function Profile() {
     }
   };
 
+  // Check for stripe=success in URL (returned from Stripe onboarding)
+  // Must be before any early returns to satisfy React hooks rules
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("stripe") === "success") {
+      setStripeConnected(true);
+      setActiveTab("payments");
+      window.history.replaceState({}, "", "/profile");
+    }
+  }, []);
+
   if (loading || hoursLoading) return <Loader />;
 
   // Generate 15-minute increment time options in 12-hour format
@@ -383,7 +397,31 @@ export default function Profile() {
     { id: "schedule", emoji: "🗓", label: "Schedule" },
     { id: "pricing",  emoji: "💲", label: "Pricing"  },
     { id: "smsbot",   emoji: "💬", label: "SMS Bot"  },
+    { id: "payments", emoji: "💳", label: "Payments" },
   ];
+
+  const handleConnectStripe = async () => {
+    if (!user) return;
+    setStripeConnecting(true);
+    setStripeError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/.netlify/functions/createConnectAccount", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      const json = await res.json();
+      if (res.ok && json.url) {
+        window.location.href = json.url;
+      } else {
+        setStripeError(json.error || "Could not connect Stripe. Please try again.");
+      }
+    } catch {
+      setStripeError("Network error. Please try again.");
+    } finally {
+      setStripeConnecting(false);
+    }
+  };
 
   return (
     <main className="max-w-lg mx-auto p-4">
@@ -741,6 +779,81 @@ export default function Profile() {
       )}
 
       {/* ── SMS BOT TAB ── */}
+      {activeTab === "payments" && (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-lg font-bold mb-1">Client Payments</h2>
+            <p className="text-sm text-[var(--text-3)] mb-5">
+              Connect your Stripe account to request payment from clients after appointments. 
+              Payments go directly to your Stripe account — PawScheduler takes no cut.
+            </p>
+          </div>
+
+          {stripeConnected ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+                <div className="text-2xl">✅</div>
+                <div>
+                  <div className="font-semibold text-emerald-800">Stripe Connected</div>
+                  <div className="text-sm text-emerald-700">You can now request payment from clients directly from the Schedule page.</div>
+                </div>
+              </div>
+              <div className="rounded-xl border bg-[var(--surface)] p-4 space-y-3">
+                <p className="font-semibold text-sm text-[var(--text-1)]">How it works</p>
+                <ol className="text-sm text-[var(--text-2)] space-y-2 list-decimal ml-4">
+                  <li>After an appointment, tap <strong>💳 Request Payment</strong> on the appointment card in Schedule.</li>
+                  <li>PawScheduler sends the client a text + email with a secure Stripe payment link.</li>
+                  <li>Client pays with card, Apple Pay, or Google Pay.</li>
+                  <li>The appointment is automatically marked as paid when payment completes.</li>
+                </ol>
+              </div>
+              <button
+                type="button"
+                onClick={handleConnectStripe}
+                disabled={stripeConnecting}
+                className="w-full py-2.5 rounded-xl border border-[var(--border-med)] text-sm font-semibold text-[var(--text-2)] hover:bg-[var(--surface-2)] transition disabled:opacity-50"
+              >
+                {stripeConnecting ? "Loading…" : "Update Stripe Account Settings"}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="rounded-xl border bg-[var(--surface)] p-4 space-y-3">
+                <p className="font-semibold text-sm text-[var(--text-1)]">What you get</p>
+                <ul className="text-sm text-[var(--text-2)] space-y-2">
+                  {["Send payment requests via text + email", "Clients pay with card, Apple Pay, or Google Pay", "Payments go directly to your bank", "Appointments auto-mark as paid on payment", "No extra fees from PawScheduler"].map((item) => (
+                    <li key={item} className="flex items-center gap-2">
+                      <span className="text-emerald-500 font-bold">✓</span> {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <strong>Note:</strong> Stripe charges a standard processing fee (typically 2.9% + 30¢ per transaction). 
+                This goes to Stripe, not PawScheduler.
+              </div>
+
+              {stripeError && (
+                <p className="text-sm text-red-600 bg-red-50 rounded-xl px-4 py-3">{stripeError}</p>
+              )}
+
+              <button
+                type="button"
+                onClick={handleConnectStripe}
+                disabled={stripeConnecting}
+                className="w-full py-3.5 rounded-xl bg-[#635BFF] text-white font-bold text-sm hover:bg-[#4F46E5] transition disabled:opacity-50"
+              >
+                {stripeConnecting ? "Connecting…" : "💳 Connect Stripe Account"}
+              </button>
+              <p className="text-xs text-center text-[var(--text-3)]">
+                You'll be redirected to Stripe to set up your account. Takes about 2 minutes.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {activeTab === "smsbot" && (
         <div>
           <h2 className="text-lg font-bold mb-1">SMS AI Scheduler</h2>

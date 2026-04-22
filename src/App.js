@@ -28,6 +28,8 @@ import Upgrade from "./pages/Upgrade";
 import Help from "./pages/Help";
 import Waiver from "./pages/Waiver";
 import Intake from "./pages/Intake";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentCancelled from "./pages/PaymentCancelled";
 
 // Legal pages
 import Terms from "./pages/legal/Terms";
@@ -274,6 +276,8 @@ function AppShell() {
     location.pathname.startsWith("/book/") ||
     location.pathname.startsWith("/waiver/") ||
     location.pathname.startsWith("/intake/") ||
+    location.pathname === "/payment-success" ||
+    location.pathname === "/payment-cancelled" ||
     location.pathname === "/auth" ||
     location.pathname === "/signup" ||
     location.pathname === "/upgrade" ||
@@ -283,6 +287,8 @@ function AppShell() {
     location.pathname.startsWith("/book/") ||
     location.pathname.startsWith("/waiver/") ||
     location.pathname.startsWith("/intake/") ||
+    location.pathname === "/payment-success" ||
+    location.pathname === "/payment-cancelled" ||
     location.pathname === "/auth" ||
     location.pathname === "/signup" ||
     location.pathname === "/onboarding";
@@ -432,6 +438,8 @@ function AppShell() {
         <Route path="/book/:slug" element={<Book />} />
         <Route path="/waiver/:slug" element={<Waiver />} />
         <Route path="/intake/:slug" element={<Intake />} />
+        <Route path="/payment-success" element={<PaymentSuccess />} />
+        <Route path="/payment-cancelled" element={<PaymentCancelled />} />
         <Route path="/reset-password" element={<ResetPassword />} />
 
         <Route

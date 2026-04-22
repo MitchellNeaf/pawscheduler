@@ -65,6 +65,8 @@ exports.handler = async function(event) {
       fileName = "intake_notification.html";
     } else if (template === "intake_email") {
       fileName = "intake_email.html";
+    } else if (template === "payment_request") {
+      fileName = "payment_request.html";
     } else {
       fileName = "confirmation.html";
     }

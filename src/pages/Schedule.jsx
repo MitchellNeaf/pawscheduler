@@ -1017,6 +1017,8 @@ export default function Schedule() {
     reminder_enabled: true,
   });
   const [savingNew, setSavingNew] = useState(false);
+  const [requestingPayment, setRequestingPayment] = useState(null); // appt.id | null
+  const [paymentSentFor, setPaymentSentFor] = useState(new Set());
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editAppt, setEditAppt] = useState(null);
@@ -1470,6 +1472,46 @@ export default function Schedule() {
 
   /* Send manual SMS reminder */
   const [sendingReminder, setSendingReminder] = useState(null); // appointmentId | null
+
+  const handleRequestPayment = async (appt) => {
+    if (!user) return;
+    setRequestingPayment(appt.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/.netlify/functions/sendPaymentRequest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ appointmentId: appt.id }),
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setPaymentSentFor((prev) => new Set([...prev, appt.id]));
+        // If no SMS/email, copy link to clipboard
+        if (!json.smsSent && !json.emailSent && json.paymentUrl) {
+          navigator.clipboard.writeText(json.paymentUrl).catch(() => {});
+        }
+      } else {
+        setConfirmConfig({
+          title: "Payment Request Failed",
+          message: json.error || "Could not send payment request. Please try again.",
+          confirmLabel: "OK",
+          onConfirm: () => {},
+        });
+      }
+    } catch {
+      setConfirmConfig({
+        title: "Network Error",
+        message: "Could not send payment request. Please check your connection.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+    } finally {
+      setRequestingPayment(null);
+    }
+  };
 
   const handleSendReminder = async (appt) => {
     const client = appt.pets?.clients;
@@ -2219,6 +2261,26 @@ export default function Schedule() {
                           title={appt.pets.clients.sms_opt_in ? "Send SMS reminder" : "Client not opted in to SMS"}
                         >
                           {sendingReminder === appt.id ? "Sending…" : "💬 Remind"}
+                        </button>
+                      )}
+
+                      {/* Request Payment button */}
+                      {!appt.paid && appt.amount > 0 && (
+                        <button
+                          onClick={() => handleRequestPayment(appt)}
+                          disabled={requestingPayment === appt.id}
+                          className={`px-3 py-1.5 text-sm rounded border flex-1 sm:flex-none transition-colors disabled:opacity-50
+                            ${paymentSentFor.has(appt.id)
+                              ? "border-emerald-300 text-emerald-700 bg-emerald-50"
+                              : "border-blue-500 text-blue-700 hover:bg-blue-50"
+                            }`}
+                          title="Send payment request to client"
+                        >
+                          {requestingPayment === appt.id
+                            ? "Sending…"
+                            : paymentSentFor.has(appt.id)
+                            ? "✓ Payment Sent"
+                            : "💳 Request Payment"}
                         </button>
                       )}
 
