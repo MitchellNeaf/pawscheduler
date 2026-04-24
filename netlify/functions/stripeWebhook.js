@@ -1,93 +1,151 @@
-// netlify/functions/stripeWebhook.js
+/**
+ * stripeWebhook.js — Netlify function
+ *
+ * Handles Stripe subscription webhook events.
+ * Sets subscription_status and plan_tier on groomers table.
+ *
+ * Price IDs:
+ *   Starter Monthly: price_1TPYnd1RxmPJHwWbqJYQub43
+ *   Starter Yearly:  price_1TPYo91RxmPJHwWb5qSpBQcV
+ *   Pro Monthly:     price_1TPYoh1RxmPJHwWbPV02049p
+ *   Pro Yearly:      price_1TPYp11RxmPJHwWbHbkYTZwq
+ */
+
 const Stripe = require("stripe");
 const { createClient } = require("@supabase/supabase-js");
 
-// Tell Netlify NOT to parse the body
-exports.config = {
-  type: "raw",
-};
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+// ── Price ID → plan tier mapping ────────────────────────────
+const PRO_PRICE_IDS = new Set([
+  "price_1TPYoh1RxmPJHwWbPV02049p", // Pro Monthly
+  "price_1TPYp11RxmPJHwWbHbkYTZwq", // Pro Yearly
+]);
+
+const STARTER_PRICE_IDS = new Set([
+  "price_1TPYnd1RxmPJHwWbqJYQub43", // Starter Monthly
+  "price_1TPYo91RxmPJHwWb5qSpBQcV", // Starter Yearly
+]);
+
+function getPlanTier(priceId) {
+  if (PRO_PRICE_IDS.has(priceId)) return "pro";
+  if (STARTER_PRICE_IDS.has(priceId)) return "starter";
+  return "starter"; // safe default
+}
 
 exports.handler = async (event) => {
-  const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-  const signature = event.headers["stripe-signature"];
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: "Method Not Allowed" };
+  }
 
-  let payload;
+  const sig = event.headers["stripe-signature"];
+
+  let stripeEvent;
   try {
-    payload = stripe.webhooks.constructEvent(
-      event.body,                    // raw body
-      signature,
+    stripeEvent = stripe.webhooks.constructEvent(
+      event.body,
+      sig,
       process.env.STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
-    console.error("❌ Webhook signature verification failed:", err.message);
-    return { statusCode: 400, body: "Invalid signature" };
+    console.error("Webhook signature error:", err.message);
+    return { statusCode: 400, body: `Webhook Error: ${err.message}` };
   }
 
-  console.log("✅ Stripe event received:", payload.type);
+  const { type, data } = stripeEvent;
+  console.log("Stripe webhook event:", type);
 
-  // Setup Supabase
-  const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  // ── checkout.session.completed ───────────────────────────
+  if (type === "checkout.session.completed") {
+    const session = data.object;
+    const customerId = session.customer;
+    const subscriptionId = session.subscription;
 
-  // ------------------------------------------------------
-  // 1️⃣ HANDLE SUCCESSFUL CHECKOUT
-  // ------------------------------------------------------
-  if (payload.type === "checkout.session.completed") {
-    const session = payload.data.object;
-    const userId = session.metadata.userId;
+    if (!customerId || !subscriptionId) {
+      console.log("No customer or subscription in session — skipping");
+      return { statusCode: 200, body: "ok" };
+    }
 
-    console.log("➡ Activating subscription for:", userId);
-    console.log("➡ Saving stripe customer:", session.customer);
+    // Load subscription to get price ID
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+    const priceId = subscription.items.data[0]?.price?.id;
+    const planTier = getPlanTier(priceId);
 
     const { error } = await supabase
       .from("groomers")
       .update({
-        subscription_status: "active",
-        stripe_customer_id: session.customer // ⭐ REQUIRED for Billing Portal
+        subscription_status:     "active",
+        stripe_customer_id:      customerId,
+        stripe_subscription_id:  subscriptionId,
+        plan_tier:               planTier,
+        // Enable AI bot only for Pro
+        sms_bot_enabled:         planTier === "pro",
       })
-      .eq("id", userId);
+      .eq("stripe_customer_id", customerId);
 
     if (error) {
-      console.error("❌ Failed to update subscription:", error);
-      return { statusCode: 500, body: "Supabase error" };
-    }
-
-    console.log("🎉 Subscription activated for:", userId);
-  }
-
-  // ------------------------------------------------------
-  // 2️⃣ HANDLE SUBSCRIPTION CANCELLATION
-  // ------------------------------------------------------
-  if (
-    payload.type === "customer.subscription.deleted" ||
-    payload.type === "customer.subscription.updated"
-  ) {
-    const subscription = payload.data.object;
-
-    if (subscription.cancel_at_period_end || subscription.status === "canceled") {
-      const customerId = subscription.customer;
-
-      console.log("⚠ Canceling subscription for Stripe customer:", customerId);
-
-      // Lookup groomer by stripe_customer_id
-      const { data: groomer } = await supabase
-        .from("groomers")
-        .select("id")
-        .eq("stripe_customer_id", customerId)
-        .single();
-
-      if (groomer) {
+      // Try matching by email if customer_id not set yet
+      const customer = await stripe.customers.retrieve(customerId);
+      if (customer.email) {
         await supabase
           .from("groomers")
-          .update({ subscription_status: "expired" })
-          .eq("id", groomer.id);
-
-        console.log("🛑 Subscription expired for:", groomer.id);
+          .update({
+            subscription_status:    "active",
+            stripe_customer_id:     customerId,
+            stripe_subscription_id: subscriptionId,
+            plan_tier:              planTier,
+            sms_bot_enabled:        planTier === "pro",
+          })
+          .eq("email", customer.email);
       }
     }
+
+    console.log(`Subscription activated: ${planTier} plan for customer ${customerId}`);
   }
 
-  return { statusCode: 200, body: "OK" };
+  // ── customer.subscription.updated ───────────────────────
+  // Handles upgrades, downgrades, and renewals
+  if (type === "customer.subscription.updated") {
+    const subscription = data.object;
+    const customerId = subscription.customer;
+    const priceId = subscription.items.data[0]?.price?.id;
+    const planTier = getPlanTier(priceId);
+
+    const status = subscription.status === "active" ? "active" : "expired";
+
+    await supabase
+      .from("groomers")
+      .update({
+        subscription_status: status,
+        plan_tier:           planTier,
+        sms_bot_enabled:     planTier === "pro" && status === "active",
+        cancel_at_period_end: subscription.cancel_at_period_end,
+      })
+      .eq("stripe_customer_id", customerId);
+
+    console.log(`Subscription updated: ${planTier} / ${status} for customer ${customerId}`);
+  }
+
+  // ── customer.subscription.deleted ───────────────────────
+  if (type === "customer.subscription.deleted") {
+    const subscription = data.object;
+    const customerId = subscription.customer;
+
+    await supabase
+      .from("groomers")
+      .update({
+        subscription_status: "expired",
+        plan_tier:           "starter",
+        sms_bot_enabled:     false,
+      })
+      .eq("stripe_customer_id", customerId);
+
+    console.log(`Subscription cancelled for customer ${customerId}`);
+  }
+
+  return { statusCode: 200, body: JSON.stringify({ received: true }) };
 };

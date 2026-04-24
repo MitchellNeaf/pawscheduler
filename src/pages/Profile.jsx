@@ -335,6 +335,7 @@ export default function Profile() {
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
   const [stripeError, setStripeError] = useState("");
+  const [planTier, setPlanTier] = useState("starter");
 
   // ---------------- BILLING PORTAL ----------------
   const handleManageBilling = async () => {
@@ -396,8 +397,7 @@ export default function Profile() {
     { id: "profile",  emoji: "👤", label: "Profile"  },
     { id: "schedule", emoji: "🗓", label: "Schedule" },
     { id: "pricing",  emoji: "💲", label: "Pricing"  },
-    { id: "smsbot",   emoji: "💬", label: "SMS Bot"  },
-    { id: "payments", emoji: "💳", label: "Payments" },
+    { id: "smsbot",   emoji: "💬", label: planTier === "pro" ? "SMS Bot" : "SMS Bot 🔒" },
   ];
 
   const handleConnectStripe = async () => {
@@ -860,6 +860,22 @@ export default function Profile() {
           <p className="text-sm text-[var(--text-3)] mb-5">
             Let clients book, view, and cancel appointments by texting your scheduling number. Powered by AI — no app download required.
           </p>
+
+          {planTier !== "pro" && (
+            <div className="mb-6 rounded-2xl bg-violet-50 border border-violet-200 p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🔒</span>
+                <div>
+                  <p className="font-bold text-violet-900">Pro Plan Required</p>
+                  <p className="text-sm text-violet-700">The AI SMS bot is available on the Pro plan ($79/mo or $799/yr).</p>
+                </div>
+              </div>
+              <a href="/upgrade"
+                className="block w-full py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold text-center hover:bg-violet-700 transition">
+                Upgrade to Pro →
+              </a>
+            </div>
+          )}
 
           <div className="bg-[var(--surface-2)] border border-[var(--border-med)] rounded-xl p-4 space-y-4 mb-5">
             <h3 className="text-sm font-semibold text-[var(--text-1)]">Booking Limits</h3>

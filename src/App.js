@@ -167,7 +167,7 @@ function ProtectedRoute({ children }) {
     <>
       {showBanner && (
         <div className="bg-yellow-100 text-yellow-800 text-center py-2 font-semibold">
-          ⏳ Your trial ends soon — upgrade to keep using PawScheduler.
+          ⏳ Your trial ends soon — all Starter features are available during your trial. The AI SMS bot requires the Pro plan. <a href="/upgrade" style={{color:"#065f46",fontWeight:700}}>Choose a plan →</a>
         </div>
       )}
       {children}
