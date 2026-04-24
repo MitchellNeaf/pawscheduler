@@ -190,7 +190,6 @@ export default function Upgrade() {
         <div className="grid md:grid-cols-2 gap-6">
           {PLANS.map((plan) => {
             const isCurrentPlan = isActive && currentPlan === plan.key;
-            const price = billing === "yearly" ? plan.yearly : plan.monthly;
             const perMonth = billing === "yearly"
               ? (plan.yearly / 12).toFixed(2)
               : plan.monthly.toFixed(2);

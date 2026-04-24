@@ -71,6 +71,7 @@ export default function Profile() {
         .single();
 
       if (data) {
+        if (data.plan_tier) setPlanTier(data.plan_tier);
         setFullName(data.full_name || "");
         setSlug(data.slug || "");
         setLogoUrl(data.logo_url || null);
