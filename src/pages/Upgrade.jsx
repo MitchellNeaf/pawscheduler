@@ -228,7 +228,7 @@ export default function Upgrade() {
 
                   <div className="mt-3 flex items-end gap-1">
                     <span className="text-4xl font-black text-[var(--text-1)]">
-                      ${billing === "yearly" ? plan.yearly.toFixed(0) : plan.monthly.toFixed(0)}
+                      ${billing === "yearly" ? plan.yearly.toFixed(2) : plan.monthly.toFixed(2)}
                     </span>
                     <span className="text-[var(--text-3)] text-sm mb-1.5">
                       /{billing === "yearly" ? "yr" : "mo"}
