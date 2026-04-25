@@ -147,5 +147,42 @@ exports.handler = async (event) => {
     console.log(`Subscription cancelled for customer ${customerId}`);
   }
 
+  // ── invoice.payment_failed ───────────────────────────────
+  // Fires when a renewal payment fails — lock the account
+  if (type === "invoice.payment_failed") {
+    const invoice = data.object;
+    const customerId = invoice.customer;
+
+    // Only lock if this is a subscription renewal (not first payment)
+    if (invoice.billing_reason === "subscription_cycle") {
+      await supabase
+        .from("groomers")
+        .update({
+          subscription_status: "expired",
+          sms_bot_enabled:     false,
+        })
+        .eq("stripe_customer_id", customerId);
+
+      console.log(`Payment failed — account locked for customer ${customerId}`);
+    }
+  }
+
+  // ── invoice.payment_action_required ─────────────────────
+  // Fires when card needs 3D Secure authentication
+  if (type === "invoice.payment_action_required") {
+    const invoice = data.object;
+    const customerId = invoice.customer;
+
+    await supabase
+      .from("groomers")
+      .update({
+        subscription_status: "expired",
+        sms_bot_enabled:     false,
+      })
+      .eq("stripe_customer_id", customerId);
+
+    console.log(`Payment action required — account locked for customer ${customerId}`);
+  }
+
   return { statusCode: 200, body: JSON.stringify({ received: true }) };
 };
