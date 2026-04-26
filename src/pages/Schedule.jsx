@@ -1017,7 +1017,7 @@ export default function Schedule() {
     reminder_enabled: true,
   });
   const [savingNew, setSavingNew] = useState(false);
-  const [planTier, setPlanTier] = useState("starter"); // loaded from groomers table
+  const [planTier, setPlanTier] = useState("starter");
   const FREE_LIMIT = 50;
   const [requestingPayment, setRequestingPayment] = useState(null); // appt.id | null
   const [paymentSentFor, setPaymentSentFor] = useState(new Set());
@@ -1095,7 +1095,7 @@ export default function Schedule() {
       ] = await Promise.all([
         supabase
           .from("groomers")
-          .select("max_parallel, service_pricing")
+          .select("max_parallel, service_pricing, plan_tier")
           .eq("id", user.id)
           .maybeSingle(),
         supabase
@@ -1138,6 +1138,9 @@ export default function Schedule() {
       setCapacity(groomer?.max_parallel || 1);
       if (groomer?.service_pricing) {
         setPricing({ ...DEFAULT_PRICING, ...groomer.service_pricing });
+      }
+      if (groomer?.plan_tier) {
+        setPlanTier(groomer.plan_tier);
       }
 
       if (!hours) {

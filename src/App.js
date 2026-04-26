@@ -54,7 +54,7 @@ function ProtectedRoute({ children }) {
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [showBanner, setShowBanner] = useState(false);
+  const showBanner = false;
 
   const pilot = searchParams.get("pilot");
 
