@@ -88,7 +88,13 @@ export default function Revenue() {
   const [sortAsc, setSortAsc] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user || null);
+      if (data.user) {
+        supabase.from("groomers").select("plan_tier").eq("id", data.user.id).single()
+          .then(({ data: g }) => { if (g?.plan_tier) setPlanTier(g.plan_tier); });
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -213,6 +219,39 @@ export default function Revenue() {
   };
 
   if (loading) return <main className="p-6 space-y-6"><Loader /><Loader /></main>;
+
+  if (planTier === "free") return (
+    <main className="px-4 py-6 max-w-4xl mx-auto">
+      <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-10 text-center space-y-4">
+        <div className="text-5xl">📊</div>
+        <h2 className="text-xl font-bold text-[var(--text-1)]">Revenue tracking requires Basic or higher</h2>
+        <p className="text-sm text-[var(--text-2)] max-w-md mx-auto">
+          See your total revenue, monthly trends, service breakdowns, paid vs. unpaid, and full appointment history.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 justify-center mt-4">
+          <a href="/upgrade"
+            className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
+            Upgrade to Basic — $9.99/mo →
+          </a>
+          <a href="/upgrade"
+            className="px-6 py-3 rounded-xl border border-[var(--border-med)] text-[var(--text-2)] font-semibold text-sm hover:bg-[var(--surface-2)] transition">
+            See all plans
+          </a>
+        </div>
+        {/* Blurred preview */}
+        <div className="mt-8 rounded-xl overflow-hidden border border-[var(--border-med)] select-none pointer-events-none" style={{filter:"blur(4px)", opacity:0.4}}>
+          <div className="bg-[var(--surface)] p-4 grid grid-cols-3 gap-3">
+            {["$2,840.00", "$94.67", "30 appts"].map((v, i) => (
+              <div key={i} className="rounded-xl bg-[var(--bg)] p-4 text-center">
+                <div className="text-xl font-black text-[var(--text-1)]">{v}</div>
+                <div className="text-xs text-[var(--text-3)] mt-1">{["Total Revenue", "Avg per Appt", "This Month"][i]}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </main>
+  );
 
   return (
     <main className="px-4 py-6 max-w-4xl mx-auto space-y-6">
@@ -464,7 +503,6 @@ export default function Revenue() {
           </div>
         )}
       </div>
-
     </main>
   );
 }

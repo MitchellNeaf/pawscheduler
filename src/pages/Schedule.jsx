@@ -1351,7 +1351,7 @@ export default function Schedule() {
       services:             form.services,
       notes:                newForm.notes,
       slot_weight:          pet.slot_weight || 1,
-      reminder_enabled:     newForm.reminder_enabled,
+      reminder_enabled:     planTier !== "free" && newForm.reminder_enabled,
       reminder_sent:        false,
       amount:               form.amount ?? null,
       appointment_group_id: groupId,
@@ -1383,7 +1383,7 @@ export default function Schedule() {
     }
 
     // Fire confirmation email for first pet if reminder enabled
-    if (newForm.reminder_enabled && savedAppts?.[0]) {
+    if (planTier !== "free" && newForm.reminder_enabled && savedAppts?.[0]) {
       sendConfirmationEmail({ appointment: savedAppts[0], groomerId: user.id });
     }
 
@@ -1487,7 +1487,7 @@ export default function Schedule() {
     }
 
     // fire-and-forget confirmation email if toggle on
-    if (editForm.reminder_enabled) {
+    if (planTier !== "free" && editForm.reminder_enabled) {
       sendConfirmationEmail({ appointment: data, groomerId: user.id });
     }
 
@@ -1676,6 +1676,15 @@ export default function Schedule() {
   const groupTotal = (group) =>
     group.reduce((sum, a) => sum + (a.amount || 0), 0);
 
+  // Free tier appointment count for banner
+  const [monthlyCount, setMonthlyCount] = useState(null);
+  useEffect(() => {
+    if (planTier !== "free" || !user) return;
+    supabase
+      .rpc("get_monthly_appointment_count", { p_groomer_id: user.id })
+      .then(({ data }) => { if (data !== null) setMonthlyCount(data); });
+  }, [planTier, user, appointments]);
+
   const unpaidToday =
     selectedDate === todayStr
       ? appointments.filter((appt) => {
@@ -1742,6 +1751,27 @@ export default function Schedule() {
       </div>
 
       {user && <ScheduleTrialBanner userId={user.id} />}
+
+      {/* Free tier appointment counter banner */}
+      {planTier === "free" && monthlyCount !== null && (
+        <div className={`mx-4 mt-3 rounded-xl px-4 py-3 flex items-center justify-between text-sm
+          ${monthlyCount >= 50
+            ? "bg-red-50 border border-red-200 text-red-800"
+            : monthlyCount >= 40
+            ? "bg-amber-50 border border-amber-200 text-amber-800"
+            : "bg-blue-50 border border-blue-200 text-blue-800"
+          }`}>
+          <span className="font-semibold">
+            {monthlyCount >= 50
+              ? `⛔ Monthly limit reached — ${monthlyCount}/50 appointments used`
+              : `📅 ${monthlyCount}/50 free appointments used this month`}
+          </span>
+          <a href="/upgrade"
+            className="ml-3 text-xs font-bold px-3 py-1.5 rounded-full bg-white border border-current hover:opacity-80 transition whitespace-nowrap">
+            Upgrade for unlimited →
+          </a>
+        </div>
+      )}
 
       {/* ── DAY-AT-A-GLANCE SUMMARY BAR ── */}
       {appointments.length > 0 && (() => {
@@ -2287,8 +2317,14 @@ export default function Schedule() {
                         🔁 Rebook 6 weeks
                       </button>
 
-                      {/* SMS reminder — basic+ only, only if client has phone */}
-                      {(planTier === "basic" || planTier === "starter" || planTier === "pro") && appt.pets?.clients?.phone && (
+                      {/* SMS reminder — basic+ active, free users see locked version */}
+                      {planTier === "free" ? (
+                        <a href="/upgrade"
+                          className="px-3 py-1.5 text-sm rounded border border-gray-200 text-gray-400 bg-gray-50 flex-1 sm:flex-none text-center opacity-70 hover:opacity-100 hover:border-emerald-400 hover:text-emerald-600 transition-all"
+                          title="Upgrade to Basic to send reminders">
+                          🔒 Remind
+                        </a>
+                      ) : appt.pets?.clients?.phone && (
                         <button
                           onClick={() => handleSendReminder(appt)}
                           disabled={sendingReminder === appt.id}

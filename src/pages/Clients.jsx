@@ -1002,12 +1002,19 @@ export default function Clients() {
                     )
                   )}
 
-                  {/* Upgrade nudge for free/basic users */}
+                  {/* Grayed locked buttons for free/basic users */}
                   {(planTier === "free" || planTier === "basic") && (
                     <a href="/upgrade"
-                      className="text-xs px-3 py-1.5 rounded-xl border border-dashed border-[var(--border-med)] text-[var(--text-3)] hover:border-emerald-400 hover:text-emerald-600 transition-colors"
-                      title="Upgrade to Starter for intake forms and waivers">
-                      🔒 Intake & Waiver — Starter+
+                      className="text-sm px-3 py-1.5 rounded-xl border border-[var(--border-med)] text-[var(--text-3)] bg-gray-50 opacity-70 hover:opacity-100 hover:border-emerald-400 hover:text-emerald-600 transition-all"
+                      title="Upgrade to Starter to send intake forms">
+                      🔒 Send Intake
+                    </a>
+                  )}
+                  {(planTier === "free" || planTier === "basic") && (
+                    <a href="/upgrade"
+                      className="text-sm px-3 py-1.5 rounded-xl border border-[var(--border-med)] text-[var(--text-3)] bg-gray-50 opacity-70 hover:opacity-100 hover:border-emerald-400 hover:text-emerald-600 transition-all"
+                      title="Upgrade to Starter to send waivers">
+                      🔒 Send Waiver
                     </a>
                   )}
 
