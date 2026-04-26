@@ -454,6 +454,10 @@ export default function Profile() {
       {/* ── PROFILE TAB ── */}
       {activeTab === "profile" && (
         <div className="space-y-4">
+
+          {/* ── Account Info Card ── */}
+          <AccountInfoCard userId={user?.id} planTier={planTier} onManageBilling={handleBillingPortal} />
+
           <div className="flex flex-col items-center gap-3">
             {logoUrl ? (
               <img src={logoUrl} alt="Logo" className="w-24 h-24 object-cover rounded-full border" />
@@ -1070,6 +1074,97 @@ function SmsBotSection({ userId }) {
 
 
 /* ---------------- TRIAL BANNER ---------------- */
+/* ---------------- ACCOUNT INFO CARD ---------------- */
+function AccountInfoCard({ userId, planTier, onManageBilling }) {
+  const [info, setInfo] = useState(null);
+
+  useEffect(() => {
+    if (!userId) return;
+    supabase
+      .from("groomers")
+      .select("full_name, email, subscription_status, plan_tier, current_period_end, cancel_at_period_end, stripe_customer_id, trial_end_date")
+      .eq("id", userId)
+      .single()
+      .then(({ data }) => setInfo(data));
+  }, [userId]);
+
+  if (!info) return null;
+
+  const planLabels = {
+    free:    { label: "Free",    color: "bg-gray-100 text-gray-600" },
+    basic:   { label: "Basic",   color: "bg-blue-100 text-blue-700" },
+    starter: { label: "Starter", color: "bg-emerald-100 text-emerald-700" },
+    pro:     { label: "Pro",     color: "bg-violet-100 text-violet-700" },
+  };
+
+  const plan = planLabels[info.plan_tier || "free"];
+
+  // Days until next bill
+  let billingNote = null;
+  if (info.subscription_status === "active" && info.current_period_end) {
+    const daysLeft = Math.ceil((new Date(info.current_period_end) - new Date()) / 86400000);
+    if (info.cancel_at_period_end) {
+      billingNote = `Cancels in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`;
+    } else if (daysLeft >= 0) {
+      billingNote = `Next bill in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`;
+    }
+  } else if (info.subscription_status === "trial" && info.trial_end_date) {
+    const daysLeft = Math.ceil((new Date(info.trial_end_date) - new Date()) / 86400000);
+    if (daysLeft > 0) {
+      billingNote = `Trial ends in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`;
+    }
+  } else if (info.subscription_status === "free") {
+    billingNote = "Free plan — no billing";
+  }
+
+  return (
+    <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="font-bold text-[var(--text-1)]">My Account</h3>
+        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${plan.color}`}>
+          {plan.label}
+        </span>
+      </div>
+
+      <div className="space-y-2 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--text-3)]">Name</span>
+          <span className="font-medium text-[var(--text-1)]">{info.full_name || "—"}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--text-3)]">Email</span>
+          <span className="font-medium text-[var(--text-1)]">{info.email || "—"}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-[var(--text-3)]">Plan</span>
+          <span className="font-medium text-[var(--text-1)] capitalize">{info.plan_tier || "free"}</span>
+        </div>
+        {billingNote && (
+          <div className="flex items-center justify-between">
+            <span className="text-[var(--text-3)]">Billing</span>
+            <span className={`font-medium ${info.cancel_at_period_end ? "text-amber-600" : "text-[var(--text-1)]"}`}>
+              {billingNote}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <a href="/upgrade"
+          className="flex-1 py-2 rounded-xl border border-[var(--border-med)] text-xs font-semibold text-center text-[var(--text-2)] hover:bg-[var(--surface-2)] transition">
+          {info.plan_tier === "free" ? "Upgrade Plan" : "Change Plan"}
+        </a>
+        {info.stripe_customer_id && info.subscription_status === "active" && (
+          <button onClick={onManageBilling}
+            className="flex-1 py-2 rounded-xl border border-[var(--border-med)] text-xs font-semibold text-[var(--text-2)] hover:bg-[var(--surface-2)] transition">
+            Manage Billing
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TrialBanner({ userId }) {
   const [daysLeft, setDaysLeft] = useState(null);
   const [status, setStatus] = useState(null);
