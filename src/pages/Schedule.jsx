@@ -617,6 +617,7 @@ function AppointmentModal({
   // Working hours for the selected date (from parent Schedule state)
   workingRange,
   breakSlots,
+  planTier,
 }) {
   if (!open) return null;
   if (isEdit && !appt) return null;
