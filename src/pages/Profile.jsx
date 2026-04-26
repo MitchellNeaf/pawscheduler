@@ -456,7 +456,7 @@ export default function Profile() {
         <div className="space-y-4">
 
           {/* ── Account Info Card ── */}
-          <AccountInfoCard userId={user?.id} planTier={planTier} onManageBilling={handleBillingPortal} />
+          <AccountInfoCard userId={user?.id} planTier={planTier} onManageBilling={handleManageBilling} />
 
           <div className="flex flex-col items-center gap-3">
             {logoUrl ? (
