@@ -378,9 +378,10 @@ function MultiPetAppointmentModal({
   newPets, setNewPets,
   form, setForm,
   onSave, saving,
-  onAddPet,   // opens PetSelectModal again to add another pet
+  onAddPet,
   pricing,
   workingRange, breakSlots,
+  planTier,
 }) {
   if (!open || !newPets.length) return null;
 
@@ -555,11 +556,18 @@ function MultiPetAppointmentModal({
               className="border rounded px-2 py-1 min-h-[50px]" />
           </label>
 
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.reminder_enabled}
-              onChange={(e) => setForm((p) => ({ ...p, reminder_enabled: e.target.checked }))} />
-            Send appointment reminder?
-          </label>
+          {(planTier === "basic" || planTier === "starter" || planTier === "pro") && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.reminder_enabled}
+                onChange={(e) => setForm((p) => ({ ...p, reminder_enabled: e.target.checked }))} />
+              Send appointment reminder?
+            </label>
+          )}
+          {planTier === "free" && (
+            <p className="text-xs text-[var(--text-3)]">
+              🔒 Automatic reminders require Basic or higher. <a href="/upgrade" className="text-emerald-600 font-semibold">Upgrade →</a>
+            </p>
+          )}
 
           {/* Total summary */}
           {newPets.some(e => e.form.amount) && (
@@ -770,11 +778,18 @@ function AppointmentModal({
           </label>
 
           {/* Reminder toggle */}
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={form.reminder_enabled}
-              onChange={(e) => setForm((prev) => ({ ...prev, reminder_enabled: e.target.checked }))} />
-            Send appointment reminder?
-          </label>
+          {(planTier === "basic" || planTier === "starter" || planTier === "pro") && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.reminder_enabled}
+                onChange={(e) => setForm((prev) => ({ ...prev, reminder_enabled: e.target.checked }))} />
+              Send appointment reminder?
+            </label>
+          )}
+          {planTier === "free" && (
+            <p className="text-xs text-[var(--text-3)]">
+              🔒 Automatic reminders require Basic or higher. <a href="/upgrade" className="text-emerald-600 font-semibold">Upgrade →</a>
+            </p>
+          )}
         </div>
 
         {/* Footer */}
@@ -2370,6 +2385,7 @@ export default function Schedule() {
         pricing={pricing}
         workingRange={workingRange}
         breakSlots={breakSlots}
+        planTier={planTier}
       />
 
       <AppointmentModal
@@ -2377,6 +2393,7 @@ export default function Schedule() {
         onClose={() => setEditModalOpen(false)}
         isEdit={true}
         appt={editAppt}
+        planTier={planTier}
         form={editForm}
         setForm={setEditForm}
         onSave={handleSaveEdit}
