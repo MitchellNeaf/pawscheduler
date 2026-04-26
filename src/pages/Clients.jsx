@@ -383,6 +383,7 @@ export default function Clients() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [groomerSlug, setGroomerSlug] = useState("");
+  const [planTier, setPlanTier] = useState("free");
 
   // Quick add state
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -522,14 +523,15 @@ export default function Clients() {
         .select("*")
         .eq("groomer_id", authUser.id);
 
-      // Load groomer slug for waiver link
+      // Load groomer slug and plan tier
       const { data: groomerData } = await supabase
         .from("groomers")
-        .select("slug")
+        .select("slug, plan_tier")
         .eq("id", authUser.id)
         .single();
 
       if (groomerData?.slug) setGroomerSlug(groomerData.slug);
+      if (groomerData?.plan_tier) setPlanTier(groomerData.plan_tier);
 
       // Load waiver signatures to show signed status
       const { data: sigData } = await supabase
@@ -955,8 +957,8 @@ export default function Clients() {
                     ➕ Add Pet
                   </button>
 
-                  {/* Waiver — signed badge, or send options */}
-                  {groomerSlug && (
+                  {/* Waiver — starter+ only */}
+                  {groomerSlug && (planTier === "starter" || planTier === "pro") && (
                     waiverSignedIds.has(client.id) ? (
                       <span className="text-sm px-3 py-1.5 rounded-xl border border-emerald-300 text-emerald-700 bg-emerald-50 font-semibold">
                         ✅ Waiver Signed
@@ -1000,8 +1002,17 @@ export default function Clients() {
                     )
                   )}
 
-                  {/* Intake button */}
-                  {groomerSlug && (
+                  {/* Upgrade nudge for free/basic users */}
+                  {(planTier === "free" || planTier === "basic") && (
+                    <a href="/upgrade"
+                      className="text-xs px-3 py-1.5 rounded-xl border border-dashed border-[var(--border-med)] text-[var(--text-3)] hover:border-emerald-400 hover:text-emerald-600 transition-colors"
+                      title="Upgrade to Starter for intake forms and waivers">
+                      🔒 Intake & Waiver — Starter+
+                    </a>
+                  )}
+
+                  {/* Intake button — starter+ only */}
+                  {groomerSlug && (planTier === "starter" || planTier === "pro") && (
                     intakeSentFor.has(client.id) ? (
                       <span className="text-sm px-3 py-1.5 rounded-xl border border-blue-200 text-blue-700 bg-blue-50 font-semibold">
                         ✓ Intake Sent

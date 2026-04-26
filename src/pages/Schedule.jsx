@@ -1014,7 +1014,7 @@ export default function Schedule() {
     date: "",
     time: "",
     notes: "",
-    reminder_enabled: true,
+    reminder_enabled: false,
   });
   const [savingNew, setSavingNew] = useState(false);
   const [planTier, setPlanTier] = useState("starter");
@@ -1223,7 +1223,7 @@ export default function Schedule() {
         date: selectedDate,
         time: slot,
         notes: "",
-        reminder_enabled: true,
+        reminder_enabled: false,
       });
     }
     setPetModalOpen(true);
@@ -2271,8 +2271,8 @@ export default function Schedule() {
                         🔁 Rebook 6 weeks
                       </button>
 
-                      {/* SMS reminder — only show if client has phone */}
-                      {appt.pets?.clients?.phone && (
+                      {/* SMS reminder — basic+ only, only if client has phone */}
+                      {(planTier === "basic" || planTier === "starter" || planTier === "pro") && appt.pets?.clients?.phone && (
                         <button
                           onClick={() => handleSendReminder(appt)}
                           disabled={sendingReminder === appt.id}
