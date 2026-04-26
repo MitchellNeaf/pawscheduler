@@ -31,10 +31,15 @@ const STARTER_PRICE_IDS = new Set([
   "price_1TPYo91RxmPJHwWb5qSpBQcV", // Starter Yearly
 ]);
 
+const BASIC_PRICE_IDS = new Set([
+  "price_1TQX0t1RxmPJHwWbVt2rKvfr", // Basic Monthly
+]);
+
 function getPlanTier(priceId) {
   if (PRO_PRICE_IDS.has(priceId)) return "pro";
   if (STARTER_PRICE_IDS.has(priceId)) return "starter";
-  return "starter"; // safe default
+  if (BASIC_PRICE_IDS.has(priceId)) return "basic";
+  return "basic"; // safe default
 }
 
 exports.handler = async (event) => {
@@ -138,13 +143,13 @@ exports.handler = async (event) => {
     await supabase
       .from("groomers")
       .update({
-        subscription_status: "expired",
-        plan_tier:           "starter",
+        subscription_status: "free",
+        plan_tier:           "free",
         sms_bot_enabled:     false,
       })
       .eq("stripe_customer_id", customerId);
 
-    console.log(`Subscription cancelled for customer ${customerId}`);
+    console.log(`Subscription cancelled — downgraded to free for customer ${customerId}`);
   }
 
   // ── invoice.payment_failed ───────────────────────────────
@@ -158,12 +163,13 @@ exports.handler = async (event) => {
       await supabase
         .from("groomers")
         .update({
-          subscription_status: "expired",
+          subscription_status: "free",
+          plan_tier:           "free",
           sms_bot_enabled:     false,
         })
         .eq("stripe_customer_id", customerId);
 
-      console.log(`Payment failed — account locked for customer ${customerId}`);
+      console.log(`Payment failed — downgraded to free for customer ${customerId}`);
     }
   }
 
@@ -176,12 +182,13 @@ exports.handler = async (event) => {
     await supabase
       .from("groomers")
       .update({
-        subscription_status: "expired",
+        subscription_status: "free",
+        plan_tier:           "free",
         sms_bot_enabled:     false,
       })
       .eq("stripe_customer_id", customerId);
 
-    console.log(`Payment action required — account locked for customer ${customerId}`);
+    console.log(`Payment action required — downgraded to free for customer ${customerId}`);
   }
 
   return { statusCode: 200, body: JSON.stringify({ received: true }) };

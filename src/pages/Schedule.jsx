@@ -1017,6 +1017,8 @@ export default function Schedule() {
     reminder_enabled: true,
   });
   const [savingNew, setSavingNew] = useState(false);
+  const [planTier, setPlanTier] = useState("starter"); // loaded from groomers table
+  const FREE_LIMIT = 50;
   const [requestingPayment, setRequestingPayment] = useState(null); // appt.id | null
   const [paymentSentFor, setPaymentSentFor] = useState(new Set());
 
@@ -1297,6 +1299,24 @@ export default function Schedule() {
     }
 
     setSavingNew(true);
+
+    // ── Free tier appointment limit check ──────────────────
+    if (planTier === "free") {
+      const { data: countData } = await supabase
+        .rpc("get_monthly_appointment_count", { p_groomer_id: user.id });
+
+      if (countData >= FREE_LIMIT) {
+        setSavingNew(false);
+        setConfirmConfig({
+          title: "Monthly limit reached",
+          message: `You've reached the ${FREE_LIMIT} appointment limit for the free plan this month. Upgrade to Basic or higher for unlimited appointments.`,
+          confirmLabel: "Upgrade",
+          cancelLabel: "Not now",
+          onConfirm: () => { window.location.href = "/upgrade"; },
+        });
+        return;
+      }
+    }
 
     // Generate a shared group_id for multi-pet appointments
     const groupId = newPets.length > 1

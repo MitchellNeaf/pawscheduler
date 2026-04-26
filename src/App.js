@@ -128,26 +128,16 @@ function ProtectedRoute({ children }) {
         ? new Date(groomer.trial_end_date)
         : null;
 
-      if (
-        groomer.subscription_status === "trial" &&
-        trialEnd &&
-        now <= trialEnd
-      ) {
-        const daysLeft = Math.ceil((trialEnd - now) / 86400000);
-        if (daysLeft <= 5) setShowBanner(true);
-      }
-
+      // Legacy trial handling — convert expired trials to free
       if (groomer.subscription_status === "trial" && trialEnd && now > trialEnd) {
         await supabase
           .from("groomers")
-          .update({ subscription_status: "expired" })
+          .update({ subscription_status: "free", plan_tier: "free" })
           .eq("id", groomer.id);
-
-        navigate("/upgrade", { replace: true });
-        setLoading(false);
-        return;
+        // Let them in on free tier — no redirect needed
       }
 
+      // Hard expired accounts still get redirected
       if (groomer.subscription_status === "expired") {
         navigate("/upgrade", { replace: true });
         setLoading(false);
@@ -167,7 +157,7 @@ function ProtectedRoute({ children }) {
     <>
       {showBanner && (
         <div className="bg-yellow-100 text-yellow-800 text-center py-2 font-semibold">
-          ⏳ Your trial ends soon — all Starter features are available during your trial. The AI SMS bot requires the Pro plan. <a href="/upgrade" style={{color:"#065f46",fontWeight:700}}>Choose a plan →</a>
+          ✨ You're on the Free plan — upgrade anytime to unlock reminders, intake forms, waivers, payments and more. <a href="/upgrade" style={{color:"#065f46",fontWeight:700}}>See plans →</a>
         </div>
       )}
       {children}
