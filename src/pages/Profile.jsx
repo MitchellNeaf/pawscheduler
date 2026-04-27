@@ -336,7 +336,7 @@ export default function Profile() {
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
   const [stripeError, setStripeError] = useState("");
-  const [planTier, setPlanTier] = useState("starter");
+  const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
 
   // ---------------- BILLING PORTAL ----------------
   const handleManageBilling = async () => {

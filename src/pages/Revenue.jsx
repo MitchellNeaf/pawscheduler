@@ -86,7 +86,7 @@ export default function Revenue() {
 
   const [sortCol, setSortCol] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
-  const [planTier, setPlanTier] = useState("starter");
+  const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {

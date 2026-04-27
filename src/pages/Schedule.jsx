@@ -1040,7 +1040,7 @@ export default function Schedule() {
     reminder_enabled: false,
   });
   const [savingNew, setSavingNew] = useState(false);
-  const [planTier, setPlanTier] = useState("starter");
+  const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
   const FREE_LIMIT = 50;
   const [monthlyCount, setMonthlyCount] = useState(null);
   const [requestingPayment, setRequestingPayment] = useState(null); // appt.id | null
