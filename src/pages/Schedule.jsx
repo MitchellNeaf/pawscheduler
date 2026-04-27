@@ -1035,6 +1035,7 @@ export default function Schedule() {
   const [savingNew, setSavingNew] = useState(false);
   const [planTier, setPlanTier] = useState("starter");
   const FREE_LIMIT = 50;
+  const [monthlyCount, setMonthlyCount] = useState(null);
   const [requestingPayment, setRequestingPayment] = useState(null); // appt.id | null
   const [paymentSentFor, setPaymentSentFor] = useState(new Set());
 
@@ -1228,6 +1229,14 @@ export default function Schedule() {
     setRebookModalOpen(false);
     setRebookAppt(null);
   };
+
+  // Monthly appointment count for free tier banner
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .rpc("get_monthly_appointment_count", { p_groomer_id: user.id })
+      .then(({ data }) => { if (data !== null) setMonthlyCount(data); });
+  }, [user, appointments]);
 
   /* Open empty slot → pick pet */
   const openSlot = async (slot) => {
@@ -1642,15 +1651,6 @@ export default function Schedule() {
   const filteredAppointments = appointments.filter((appt) =>
     matchesSearch(appt, search)
   );
-
-  // Free tier appointment count for banner — must be before any conditional returns
-  const [monthlyCount, setMonthlyCount] = useState(null);
-  useEffect(() => {
-    if (planTier !== "free" || !user) return;
-    supabase
-      .rpc("get_monthly_appointment_count", { p_groomer_id: user.id })
-      .then(({ data }) => { if (data !== null) setMonthlyCount(data); });
-  }, [planTier, user, appointments]);
 
   // Group appointments by appointment_group_id for display
   // Returns array of "display groups" — each is either a single appt or an array of linked appts
