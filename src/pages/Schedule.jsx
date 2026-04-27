@@ -542,11 +542,18 @@ function MultiPetAppointmentModal({
             );
           })}
 
-          {/* Add another pet button */}
-          <button type="button" onClick={onAddPet}
-            className="w-full py-2 rounded-xl border-2 border-dashed border-gray-200 text-gray-500 text-sm font-semibold hover:border-emerald-400 hover:text-emerald-600 transition-colors">
-            + Add another dog
-          </button>
+          {/* Add another pet button — Starter+ only */}
+          {(planTier === "starter" || planTier === "pro") ? (
+            <button type="button" onClick={onAddPet}
+              className="w-full py-2 rounded-xl border-2 border-dashed border-gray-200 text-gray-500 text-sm font-semibold hover:border-emerald-400 hover:text-emerald-600 transition-colors">
+              + Add another dog
+            </button>
+          ) : (
+            <a href="/upgrade"
+              className="w-full py-2 rounded-xl border-2 border-dashed border-gray-200 text-gray-400 text-sm font-semibold text-center block opacity-60 hover:opacity-100 hover:border-emerald-400 hover:text-emerald-600 transition-colors">
+              🔒 Multi-pet bookings — Starter+ only
+            </a>
+          )}
 
           {/* Shared: Notes + Reminder */}
           <label className="flex flex-col gap-1 text-sm">
@@ -1327,6 +1334,19 @@ export default function Schedule() {
     }
 
     setSavingNew(true);
+
+    // ── Multi-pet plan check ────────────────────────────────
+    if (newPets.length > 1 && (planTier === "free" || planTier === "basic")) {
+      setSavingNew(false);
+      setConfirmConfig({
+        title: "Multi-pet bookings require Starter",
+        message: "Upgrade to Starter or Pro to book multiple dogs in one appointment.",
+        confirmLabel: "Upgrade",
+        cancelLabel: "Not now",
+        onConfirm: () => { window.location.href = "/upgrade"; },
+      });
+      return;
+    }
 
     // ── Free tier appointment limit check ──────────────────
     if (planTier === "free") {
