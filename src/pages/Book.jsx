@@ -432,6 +432,29 @@ export default function BookPage() {
     const slotWeight = selectedPetWeight ?? 1;
     const autoAmount = calcAmount(form.services, slotWeight, pricing);
 
+    // ── Server-side free tier limit check ──────────────────
+    const { data: planData } = await supabase
+      .from("groomers")
+      .select("plan_tier")
+      .eq("id", groomerId)
+      .single();
+
+    if (planData?.plan_tier === "free") {
+      const { data: countData } = await supabase
+        .rpc("get_monthly_appointment_count", { p_groomer_id: groomerId });
+
+      if (countData >= 50) {
+        setConfirmConfig({
+          title: "Booking unavailable",
+          message: "This groomer's calendar is fully booked for this month. Please contact them directly to schedule.",
+          confirmLabel: "OK",
+          onConfirm: () => {},
+        });
+        setSubmitting(false);
+        return;
+      }
+    }
+
     const { error } = await supabase.from("appointments").insert([
       {
         groomer_id: groomerId,

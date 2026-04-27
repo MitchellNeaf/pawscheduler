@@ -1754,21 +1754,29 @@ export default function Schedule() {
 
       {/* Free tier appointment counter banner */}
       {planTier === "free" && monthlyCount !== null && (
-        <div className={`mx-4 mt-3 rounded-xl px-4 py-3 flex items-center justify-between text-sm
+        <div className={`mx-4 mt-3 rounded-xl px-4 py-3 flex items-center justify-between text-sm gap-3
           ${monthlyCount >= 50
             ? "bg-red-50 border border-red-200 text-red-800"
             : monthlyCount >= 40
             ? "bg-amber-50 border border-amber-200 text-amber-800"
             : "bg-blue-50 border border-blue-200 text-blue-800"
           }`}>
-          <span className="font-semibold">
-            {monthlyCount >= 50
-              ? `⛔ Monthly limit reached — ${monthlyCount}/50 appointments used`
-              : `📅 ${monthlyCount}/50 free appointments used this month`}
-          </span>
+          <div className="flex items-center gap-3 flex-1 min-w-0">
+            <span className="font-semibold whitespace-nowrap">
+              {monthlyCount >= 50 ? "⛔ Limit reached" : `📅 ${50 - monthlyCount} of 50 left`}
+            </span>
+            {/* Progress bar */}
+            <div className="flex-1 h-2 rounded-full bg-current opacity-20 overflow-hidden min-w-0">
+              <div
+                className="h-full rounded-full bg-current opacity-100"
+                style={{width: `${Math.min((monthlyCount / 50) * 100, 100)}%`}}
+              />
+            </div>
+            <span className="text-xs opacity-70 whitespace-nowrap">{monthlyCount}/50</span>
+          </div>
           <a href="/upgrade"
-            className="ml-3 text-xs font-bold px-3 py-1.5 rounded-full bg-white border border-current hover:opacity-80 transition whitespace-nowrap">
-            Upgrade for unlimited →
+            className="ml-1 text-xs font-bold px-3 py-1.5 rounded-full bg-white border border-current hover:opacity-80 transition whitespace-nowrap flex-shrink-0">
+            Upgrade →
           </a>
         </div>
       )}

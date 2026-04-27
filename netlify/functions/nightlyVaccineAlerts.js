@@ -122,8 +122,9 @@ exports.handler = async (event) => {
   const groomerIds = [...new Set(records.map(r => r.pets?.groomer_id).filter(Boolean))];
   const { data: groomers } = await supabase
     .from("groomers")
-    .select("id, full_name, business_name")
-    .in("id", groomerIds);
+    .select("id, full_name, business_name, plan_tier")
+    .in("id", groomerIds)
+    .in("plan_tier", ["starter", "pro"]);
 
   const groomerMap = {};
   (groomers || []).forEach(g => {
@@ -153,6 +154,11 @@ exports.handler = async (event) => {
       continue;
     }
 
+    // Skip if groomer not on starter/pro (groomerMap won't have them)
+    if (!groomerMap[pet.groomer_id]) {
+      skipped++;
+      continue;
+    }
     const groomerName   = groomerMap[pet.groomer_id] || "your groomer";
     const clientFirst   = client.full_name.split(" ")[0];
 
