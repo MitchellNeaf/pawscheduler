@@ -1643,6 +1643,15 @@ export default function Schedule() {
     matchesSearch(appt, search)
   );
 
+  // Free tier appointment count for banner — must be before any conditional returns
+  const [monthlyCount, setMonthlyCount] = useState(null);
+  useEffect(() => {
+    if (planTier !== "free" || !user) return;
+    supabase
+      .rpc("get_monthly_appointment_count", { p_groomer_id: user.id })
+      .then(({ data }) => { if (data !== null) setMonthlyCount(data); });
+  }, [planTier, user, appointments]);
+
   // Group appointments by appointment_group_id for display
   // Returns array of "display groups" — each is either a single appt or an array of linked appts
   const groupedAppointments = (() => {
@@ -1675,15 +1684,6 @@ export default function Schedule() {
   // Helper: get total amount for a group
   const groupTotal = (group) =>
     group.reduce((sum, a) => sum + (a.amount || 0), 0);
-
-  // Free tier appointment count for banner
-  const [monthlyCount, setMonthlyCount] = useState(null);
-  useEffect(() => {
-    if (planTier !== "free" || !user) return;
-    supabase
-      .rpc("get_monthly_appointment_count", { p_groomer_id: user.id })
-      .then(({ data }) => { if (data !== null) setMonthlyCount(data); });
-  }, [planTier, user, appointments]);
 
   const unpaidToday =
     selectedDate === todayStr
