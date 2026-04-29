@@ -2221,7 +2221,12 @@ export default function Schedule() {
                   {/* Top row: time + size + vaccine */}
                   <div className="flex justify-between items-center flex-wrap gap-2">
                     <div>
-                      <div className="text-sm text-gray-500">{appt.date}</div>
+                      <div className="text-sm text-gray-500">
+                        {(() => {
+                          const [y, mo, d] = appt.date.split("-").map(Number);
+                          return new Date(y, mo - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                        })()}
+                      </div>
                       <div className="text-lg font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
                         {start} – {end}
                         <span>{size.icon}</span>
@@ -2328,73 +2333,91 @@ export default function Schedule() {
                     </div>
                   )}
 
-                  {/* Actions row */}
-                  <div className="flex flex-col gap-2 pt-2 border-t border-gray-100 mt-1">
-                    <div className="flex flex-wrap gap-2 items-center">
+                  {/* ── Actions ── */}
+                  <div className="pt-2 border-t border-gray-100 space-y-2">
+
+                    {/* Row 1: Edit + Rebook + Delete */}
+                    <div className="grid grid-cols-3 gap-2">
                       <button
                         onClick={() => handleOpenEditModal(appt)}
-                        className="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-50 flex-1 sm:flex-none"
+                        className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-700 text-xs font-semibold transition"
                       >
-                        ✏️ Edit
+                        <span className="text-base">✏️</span>
+                        Edit
                       </button>
 
                       <button
                         onClick={() => openRebookModal(appt)}
-                        className="px-3 py-1.5 text-sm rounded border border-blue-500 text-blue-600 hover:bg-blue-50 flex-1 sm:flex-none"
+                        className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold transition"
                       >
-                        🔁 Rebook 6 weeks
+                        <span className="text-base">🔁</span>
+                        Rebook
                       </button>
-
-                      {/* SMS reminder — basic+ active, free users see locked version */}
-                      {planTier === "free" ? (
-                        <a href="/upgrade"
-                          className="px-3 py-1.5 text-sm rounded border border-gray-200 text-gray-400 bg-gray-50 flex-1 sm:flex-none text-center opacity-70 hover:opacity-100 hover:border-emerald-400 hover:text-emerald-600 transition-all"
-                          title="Upgrade to Basic to send reminders">
-                          🔒 Remind
-                        </a>
-                      ) : appt.pets?.clients?.phone && (
-                        <button
-                          onClick={() => handleSendReminder(appt)}
-                          disabled={sendingReminder === appt.id}
-                          className={`px-3 py-1.5 text-sm rounded border flex-1 sm:flex-none transition-colors
-                            ${appt.pets.clients.sms_opt_in
-                              ? "border-emerald-500 text-emerald-700 hover:bg-emerald-50"
-                              : "border-gray-300 text-gray-400 cursor-not-allowed"
-                            } disabled:opacity-50`}
-                          title={appt.pets.clients.sms_opt_in ? "Send SMS reminder" : "Client not opted in to SMS"}
-                        >
-                          {sendingReminder === appt.id ? "Sending…" : "💬 Remind"}
-                        </button>
-                      )}
-
-                      {/* Request Payment button */}
-                      {!appt.paid && appt.amount > 0 && (
-                        <button
-                          onClick={() => handleRequestPayment(appt)}
-                          disabled={requestingPayment === appt.id}
-                          className={`px-3 py-1.5 text-sm rounded border flex-1 sm:flex-none transition-colors disabled:opacity-50
-                            ${paymentSentFor.has(appt.id)
-                              ? "border-emerald-300 text-emerald-700 bg-emerald-50"
-                              : "border-blue-500 text-blue-700 hover:bg-blue-50"
-                            }`}
-                          title="Send payment request to client"
-                        >
-                          {requestingPayment === appt.id
-                            ? "Sending…"
-                            : paymentSentFor.has(appt.id)
-                            ? "✓ Payment Sent"
-                            : "💳 Request Payment"}
-                        </button>
-                      )}
 
                       <button
                         onClick={() => handleDelete(appt.id)}
-                        className="px-3 py-1.5 text-sm rounded border border-red-500 text-red-600 hover:bg-red-50 flex-1 sm:flex-none"
+                        className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-semibold transition"
                       >
-                        🗑 Delete
+                        <span className="text-base">🗑</span>
+                        Delete
                       </button>
                     </div>
 
+                    {/* Row 2: Remind + Pay (conditional) */}
+                    {(planTier !== "free" || (!appt.paid && appt.amount > 0)) && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {/* Remind */}
+                        {planTier === "free" ? (
+                          <a href="/upgrade"
+                            className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl border border-dashed border-gray-200 text-gray-400 text-xs font-semibold opacity-60 hover:opacity-90 hover:border-emerald-400 hover:text-emerald-600 transition">
+                            <span className="text-base">🔒</span>
+                            Remind
+                          </a>
+                        ) : appt.pets?.clients?.phone ? (
+                          <button
+                            onClick={() => handleSendReminder(appt)}
+                            disabled={sendingReminder === appt.id}
+                            className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl border text-xs font-semibold transition disabled:opacity-50
+                              ${appt.pets.clients.sms_opt_in
+                                ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700"
+                                : "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+                              }`}
+                            title={appt.pets.clients.sms_opt_in ? "Send SMS reminder" : "Client not opted in to SMS"}
+                          >
+                            <span className="text-base">💬</span>
+                            {sendingReminder === appt.id ? "Sending…" : "Remind"}
+                          </button>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl border border-gray-100 text-gray-300 text-xs">
+                            <span className="text-base">💬</span>
+                            No phone
+                          </div>
+                        )}
+
+                        {/* Request Payment */}
+                        {!appt.paid && appt.amount > 0 ? (
+                          <button
+                            onClick={() => handleRequestPayment(appt)}
+                            disabled={requestingPayment === appt.id}
+                            className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl border text-xs font-semibold transition disabled:opacity-50
+                              ${paymentSentFor.has(appt.id)
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border-violet-200 bg-violet-50 hover:bg-violet-100 text-violet-700"
+                              }`}
+                          >
+                            <span className="text-base">💳</span>
+                            {requestingPayment === appt.id ? "Sending…" : paymentSentFor.has(appt.id) ? "Sent ✓" : "Pay"}
+                          </button>
+                        ) : planTier === "free" ? null : (
+                          <div className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl border border-gray-100 text-gray-300 text-xs">
+                            <span className="text-base">💳</span>
+                            {appt.paid ? "Paid ✓" : "No amount"}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Row 3: Status toggles */}
                     <div className="flex gap-4 items-center pt-1">
                       <ToggleCheckbox
                         label="Confirmed"
