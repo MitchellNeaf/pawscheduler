@@ -408,7 +408,7 @@ export default function SmsInbox() {
               </button>
             </div>
             <p className="text-[10px] text-[var(--text-3)] mt-1.5 px-1">
-              Shift+Enter for new line · Enter to send
+              Shift+Enter for new line · Enter to send.
             </p>
           </div>
         </div>
