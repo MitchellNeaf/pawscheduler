@@ -23,6 +23,7 @@ import Schedule from "./pages/Schedule";
 import UnpaidAppointments from "./pages/UnpaidAppointments";
 import Book from "./pages/Book";
 import Revenue from "./pages/Revenue";
+import SmsInbox from "./pages/SmsInbox";
 import Profile from "./pages/Profile";
 import Upgrade from "./pages/Upgrade";
 import Help from "./pages/Help";
@@ -296,6 +297,7 @@ function AppShell() {
     () => [
       { to: "/schedule", label: "Schedule" },
       { to: "/clients", label: "Clients" },
+      { to: "/inbox", label: "Inbox" },
       { to: "/unpaid", label: "Unpaid" },
       { to: "/revenue", label: "Revenue" },
       { to: "/profile", label: "Profile" },
@@ -485,6 +487,14 @@ function AppShell() {
           element={
             <ProtectedRoute>
               <Revenue />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/inbox"
+          element={
+            <ProtectedRoute>
+              <SmsInbox />
             </ProtectedRoute>
           }
         />

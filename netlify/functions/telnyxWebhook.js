@@ -1,78 +1,134 @@
 // netlify/functions/telnyxWebhook.js
-const { createClient } = require("@supabase/supabase-js");
-const fetch = require("node-fetch");
+// Handles inbound SMS from Telnyx
+// Stores messages in sms_messages table
+// Handles STOP opt-outs
 
-const STOP_KEYWORDS  = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"]);
-const START_KEYWORDS = new Set(["START", "UNSTOP"]);
+const { createClient } = require("@supabase/supabase-js");
 
 exports.handler = async (event) => {
-  let body;
+  if (event.httpMethod !== "POST") {
+    return { statusCode: 405, body: "Method not allowed" };
+  }
+
+  let payload;
   try {
-    body = JSON.parse(event.body || "{}");
+    payload = JSON.parse(event.body);
   } catch {
-    return { statusCode: 200, body: "Ignored" };
+    return { statusCode: 400, body: "Invalid JSON" };
   }
 
-  const text = body?.data?.payload?.text?.trim() || "";
-  const from = body?.data?.payload?.from?.phone_number;
-  const to   = body?.data?.payload?.to?.[0]?.phone_number;
+  const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
 
-  if (!from) {
-    return { statusCode: 200, body: "Ignored" };
-  }
+  const eventType = payload?.data?.event_type;
 
-  const upper = text.toUpperCase();
+  // ── Handle inbound messages ──────────────────────────────
+  if (eventType === "message.received") {
+    const msg = payload.data.payload;
+    const fromPhone = msg?.from?.phone_number;
+    const toPhone   = msg?.to?.[0]?.phone_number;
+    const body      = msg?.text || "";
+    const telnyxMsgId = payload.data.id;
 
-  // ── STOP opt-out (handle all carrier-required keywords) ──
-  if (STOP_KEYWORDS.has(upper)) {
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-
-    await supabase
-      .from("clients")
-      .update({ sms_opt_in: false })
-      .eq("phone", from);
-
-    console.log(`STOP received from ${from} — opted out`);
-    return { statusCode: 200, body: "STOP processed" };
-  }
-
-  // ── START opt-in ──
-  if (START_KEYWORDS.has(upper)) {
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-
-    await supabase
-      .from("clients")
-      .update({ sms_opt_in: true })
-      .eq("phone", from);
-
-    console.log(`START received from ${from} — opted back in`);
-    // smsBot will send the re-opt-in confirmation reply when it processes this message
-  }
-
-  // ── Route to SMS bot if message came to the bot number ──
-  const botNumber = process.env.TELNYX_BOT_PHONE_NUMBER;
-  const baseUrl   = process.env.URL || "https://app.pawscheduler.app";
-
-  if (botNumber && to === botNumber) {
-    try {
-      const res = await fetch(`${baseUrl}/.netlify/functions/smsBot`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: event.body,
-      });
-      console.log("smsBot response status:", res.status);
-    } catch (err) {
-      console.error("Failed to forward to smsBot:", err.message);
+    if (!fromPhone || !toPhone) {
+      return { statusCode: 200, body: "Missing phone numbers" };
     }
 
-    return { statusCode: 200, body: "Routed to smsBot" };
+    // ── STOP opt-out handling ────────────────────────────────
+    const normalized = body.trim().toUpperCase();
+    if (["STOP", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"].includes(normalized)) {
+      await supabase
+        .from("clients")
+        .update({ sms_opt_in: false })
+        .eq("phone", fromPhone);
+
+      console.log(`STOP received from ${fromPhone} — opted out`);
+      return { statusCode: 200, body: "Opt-out processed" };
+    }
+
+    // ── Find which groomer owns this number ─────────────────
+    // Check groomer's dedicated number first, fall back to shared number
+    let groomerId = null;
+
+    const { data: groomerByDedicatedNum } = await supabase
+      .from("groomers")
+      .select("id")
+      .eq("sms_number", toPhone)
+      .single();
+
+    if (groomerByDedicatedNum) {
+      groomerId = groomerByDedicatedNum.id;
+    } else {
+      // Shared number — try to find groomer by matching client phone
+      const { data: clientMatch } = await supabase
+        .from("clients")
+        .select("groomer_id")
+        .eq("phone", fromPhone)
+        .single();
+
+      if (clientMatch) {
+        groomerId = clientMatch.groomer_id;
+      }
+    }
+
+    if (!groomerId) {
+      console.log(`Could not find groomer for inbound message from ${fromPhone} to ${toPhone}`);
+      return { statusCode: 200, body: "No groomer found" };
+    }
+
+    // ── Find client record ───────────────────────────────────
+    const { data: client } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("phone", fromPhone)
+      .eq("groomer_id", groomerId)
+      .single();
+
+    // ── Deduplicate ──────────────────────────────────────────
+    if (telnyxMsgId) {
+      const { data: existing } = await supabase
+        .from("sms_messages")
+        .select("id")
+        .eq("telnyx_msg_id", telnyxMsgId)
+        .single();
+
+      if (existing) {
+        return { statusCode: 200, body: "Duplicate — already stored" };
+      }
+    }
+
+    // ── Store message ────────────────────────────────────────
+    const { error: insertError } = await supabase
+      .from("sms_messages")
+      .insert({
+        groomer_id:   groomerId,
+        client_phone: fromPhone,
+        client_id:    client?.id || null,
+        direction:    "inbound",
+        body:         body,
+        telnyx_msg_id: telnyxMsgId || null,
+        media_url:    msg?.media?.[0]?.url || null,
+      });
+
+    if (insertError) {
+      console.error("Failed to store inbound SMS:", insertError);
+      return { statusCode: 500, body: "Failed to store message" };
+    }
+
+    console.log(`Stored inbound SMS from ${fromPhone} to groomer ${groomerId}`);
+    return { statusCode: 200, body: "Message stored" };
   }
 
-  return { statusCode: 200, body: "OK" };
+  // ── Handle delivery receipts (just log) ──────────────────
+  if (eventType === "message.finalized") {
+    const status = payload.data.payload?.to?.[0]?.status;
+    const msgId  = payload.data.id;
+    console.log(`Message ${msgId} finalized with status: ${status}`);
+    return { statusCode: 200, body: "Receipt acknowledged" };
+  }
+
+  // All other event types
+  return { statusCode: 200, body: "Event acknowledged" };
 };
