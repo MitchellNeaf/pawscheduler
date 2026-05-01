@@ -2269,27 +2269,30 @@ export default function Schedule() {
 
                 <div className="card-body space-y-3">
                   {/* Pending approval banner */}
-                  {!appt.confirmed && groomer?.booking_requires_approval && (
+                  {!appt.confirmed && appt.source === "booking_page" && groomer?.booking_requires_approval && (
                     <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-1">
-                      <span className="text-xs font-semibold text-amber-800">⏳ Awaiting your approval</span>
-                      <div className="flex gap-2">
+                      <div>
+                        <span className="text-xs font-bold text-amber-800">⏳ Booking Request</span>
+                        <p className="text-xs text-amber-700 mt-0.5">Client requested this appointment — approve or decline below</p>
+                      </div>
+                      <div className="flex gap-2 ml-2">
                         <button
                           onClick={async () => {
                             await supabase.from("appointments").update({ confirmed: true }).eq("id", appt.id);
                             setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, confirmed: true } : a));
                           }}
-                          className="text-xs px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition"
+                          className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition"
                         >
                           ✓ Approve
                         </button>
                         <button
                           onClick={async () => {
-                            if (window.confirm("Decline this booking request?")) {
+                            if (window.confirm("Decline this booking request? The appointment will be deleted.")) {
                               await supabase.from("appointments").delete().eq("id", appt.id);
                               setAppointments(prev => prev.filter(a => a.id !== appt.id));
                             }
                           }}
-                          className="text-xs px-2.5 py-1 rounded-lg bg-red-100 text-red-700 font-bold hover:bg-red-200 transition"
+                          className="text-xs px-3 py-1.5 rounded-lg bg-red-100 text-red-700 font-bold hover:bg-red-200 transition"
                         >
                           ✕ Decline
                         </button>
