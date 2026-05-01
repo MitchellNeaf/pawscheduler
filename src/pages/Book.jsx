@@ -466,7 +466,7 @@ export default function BookPage() {
         time: form.time,
         duration_min: Number(form.duration_min),
         services: form.services,
-        confirmed: requiresApproval ? false : false,
+        confirmed: false,
         no_show: false,
         amount: autoAmount > 0 ? autoAmount : null,
         paid: false,
