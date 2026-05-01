@@ -52,7 +52,7 @@ exports.handler = async (event) => {
   }
 
   // Plan gate — basic+ can use SMS inbox
-  const allowedPlans = ["basic", "starter", "pro"];
+  const allowedPlans = ["starter", "pro"];
   if (!allowedPlans.includes(groomer.plan_tier)) {
     return { statusCode: 403, body: "SMS inbox requires Basic plan or higher" };
   }

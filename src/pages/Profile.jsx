@@ -764,6 +764,17 @@ export default function Profile() {
       {/* ── PRICING TAB ── */}
       {activeTab === "pricing" && (
         <div className="space-y-4">
+          {planTier === "free" && (
+            <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-6 text-center space-y-3">
+              <div className="text-3xl">💲</div>
+              <h3 className="font-bold text-[var(--text-1)]">Editable services require Basic or higher</h3>
+              <p className="text-sm text-[var(--text-2)]">Upgrade to customize your service names, add new services, and set prices by dog size.</p>
+              <a href="/upgrade" className="inline-block px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
+                Upgrade to Basic — $29.99/mo →
+              </a>
+            </div>
+          )}
+          {planTier !== "free" && (
           <div>
             <h2 className="text-lg font-bold text-[var(--text-1)] mb-1">Services & Pricing</h2>
             <p className="text-sm text-[var(--text-3)]">
@@ -878,6 +889,8 @@ export default function Profile() {
           >
             Save Services & Pricing
           </button>
+          </div>
+          )}
         </div>
       )}
 

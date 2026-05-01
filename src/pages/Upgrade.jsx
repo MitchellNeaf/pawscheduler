@@ -31,18 +31,21 @@ const PLANS = [
   {
     key:         "basic",
     name:        "Basic",
-    price:       9.99,
+    price:       29.99,
     description: "Unlimited scheduling with reminders.",
     color:       "blue",
     features: [
       "Everything in Free",
       "Unlimited appointments",
+      "Editable services & pricing",
       "SMS & email reminders",
-      "Manual reminder button",
       "Self-booking link for clients",
+      "Booking approve/deny",
       "Revenue tracking",
+      "Customizable reminder message",
     ],
     excluded: [
+      "Two-way SMS inbox",
       "Intake forms",
       "Grooming waivers",
       "Vaccine tracking & alerts",
@@ -59,12 +62,13 @@ const PLANS = [
     badge:       "Most Popular",
     features: [
       "Everything in Basic",
+      "Two-way SMS inbox",
+      "Dedicated business SMS number",
       "Digital intake forms",
       "Grooming waivers (digital signature)",
       "Vaccine tracking & expiration alerts",
       "Client payments via Stripe",
       "Multi-pet bookings",
-      "Auto-fill service pricing",
       "Unpaid appointment tracking",
     ],
     excluded: [

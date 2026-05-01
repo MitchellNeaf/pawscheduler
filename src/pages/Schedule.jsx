@@ -2479,7 +2479,7 @@ export default function Schedule() {
                         )}
 
                         {/* Request Payment */}
-                        {!appt.paid && appt.amount > 0 ? (
+                        {!appt.paid && appt.amount > 0 && (planTier === "starter" || planTier === "pro") ? (
                           <button
                             onClick={() => handleRequestPayment(appt)}
                             disabled={requestingPayment === appt.id}
