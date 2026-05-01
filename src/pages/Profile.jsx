@@ -88,7 +88,8 @@ export default function Profile() {
         setMaxApptsPerDay(data.max_appts_per_day ?? null);
 
         // Load service pricing — merge with defaults so new services always have a price
-        if (data.service_pricing) {
+        // (custom_services handles the editor, this is legacy support)
+
         // ✅ Load timezone; if missing, auto-detect and save once
         if (data.time_zone) {
           setTimeZone(data.time_zone);
