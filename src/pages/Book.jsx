@@ -49,6 +49,7 @@ export default function BookPage() {
   const [groomerId, setGroomerId] = useState(null);
   const [maxParallel, setMaxParallel] = useState(1);
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
+  const [serviceOptions, setServiceOptions] = useState(SERVICE_OPTIONS);
 
   const [clientForm, setClientForm] = useState({ name: "", last4: "" });
   const [client, setClient] = useState(null);
@@ -94,7 +95,7 @@ export default function BookPage() {
     (async () => {
       const { data, error: gErr } = await supabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, max_parallel, service_pricing")
+        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, booking_requires_approval, custom_services")
         .eq("slug", slug)
         .single();
 
@@ -102,10 +103,16 @@ export default function BookPage() {
         setGroomer(data);
         setGroomerId(data.id);
         setRequiresApproval(data.booking_requires_approval || false);
-        setMaxParallel(data.max_parallel ?? 1);
-        if (data.service_pricing) {
+        if (data.custom_services && data.custom_services.length > 0) {
+          setServiceOptions(data.custom_services.map(s => s.name));
+          const pricingObj = Object.fromEntries(
+            data.custom_services.map(s => [s.name, s.pricing])
+          );
+          setPricing({ ...DEFAULT_PRICING, ...pricingObj });
+        } else if (data.service_pricing) {
           setPricing({ ...DEFAULT_PRICING, ...data.service_pricing });
         }
+        setMaxParallel(data.max_parallel ?? 1);
       } else {
         setError("Booking page not found.");
       }
@@ -777,7 +784,7 @@ export default function BookPage() {
                 <div>
                   <label className={labelCls}>Services</label>
                   <div className="grid grid-cols-2 gap-2">
-                    {SERVICE_OPTIONS.map((s) => {
+                    {serviceOptions.map((s) => {
                       const checked = form.services.includes(s);
                       return (
                         <label

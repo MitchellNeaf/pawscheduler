@@ -527,7 +527,7 @@ function MultiPetAppointmentModal({
                   <div className="text-sm">
                     <div className="font-medium text-gray-700 mb-1">Services</div>
                     <div className="grid grid-cols-2 gap-1">
-                      {SERVICE_OPTIONS.map((svc) => (
+                      {serviceOptions.map((svc) => (
                         <label key={svc} className="flex items-center gap-2 text-xs text-gray-700">
                           <input type="checkbox"
                             checked={petForm.services.includes(svc)}
@@ -768,7 +768,7 @@ function AppointmentModal({
           <div className="text-sm">
             <div className="font-medium text-gray-700 mb-1">Services</div>
             <div className="grid grid-cols-2 gap-1">
-              {SERVICE_OPTIONS.map((svc) => (
+              {serviceOptions.map((svc) => (
                 <label key={svc} className="flex items-center gap-2 text-xs text-gray-700">
                   <input type="checkbox" checked={form.services.includes(svc)}
                     onChange={() => toggleService(svc)} />
@@ -1068,6 +1068,7 @@ export default function Schedule() {
 
   // Service pricing loaded from groomers.service_pricing
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
+  const [serviceOptions, setServiceOptions] = useState(SERVICE_OPTIONS);
   const [groomer, setGroomer] = useState(null);
 
   /* Load user */
@@ -1121,7 +1122,7 @@ export default function Schedule() {
       ] = await Promise.all([
         supabase
           .from("groomers")
-          .select("max_parallel, service_pricing, plan_tier, booking_requires_approval")
+          .select("max_parallel, service_pricing, plan_tier, booking_requires_approval, custom_services")
           .eq("id", user.id)
           .maybeSingle(),
         supabase
@@ -1162,7 +1163,14 @@ export default function Schedule() {
       ]);
 
       setCapacity(groomer?.max_parallel || 1);
-      if (groomer?.service_pricing) {
+      if (groomer?.custom_services && groomer.custom_services.length > 0) {
+        // Use groomer's custom services
+        setServiceOptions(groomer.custom_services.map(s => s.name));
+        const pricingObj = Object.fromEntries(
+          groomer.custom_services.map(s => [s.name, s.pricing])
+        );
+        setPricing({ ...DEFAULT_PRICING, ...pricingObj });
+      } else if (groomer?.service_pricing) {
         setPricing({ ...DEFAULT_PRICING, ...groomer.service_pricing });
       }
       setGroomer(groomer);

@@ -73,3 +73,38 @@ const LEGACY_SERVICE_MAP = {
 export function normalizeServiceName(s) {
   return LEGACY_SERVICE_MAP[s] || s;
 }
+
+// ─── Get effective services for a groomer ────────────────────────────────────
+/**
+ * Returns the groomer's custom services if set, otherwise the default list.
+ * Each service is { name, pricing: { 1: price, 2: price, 3: price } }
+ *
+ * @param {object|null} customServices - groomer.custom_services from DB
+ * @param {object}      servicePricing - groomer.service_pricing from DB
+ * @returns {{ name: string, pricing: object }[]}
+ */
+export function getEffectiveServices(customServices, servicePricing) {
+  if (customServices && Array.isArray(customServices) && customServices.length > 0) {
+    return customServices;
+  }
+  // Build from defaults merged with groomer's pricing overrides
+  const merged = { ...DEFAULT_PRICING, ...(servicePricing || {}) };
+  return SERVICE_OPTIONS.map(name => ({
+    name,
+    pricing: merged[name] || { 1: 0, 2: 0, 3: 0 },
+  }));
+}
+
+/**
+ * Get just the service names from effective services.
+ */
+export function getServiceNames(customServices, servicePricing) {
+  return getEffectiveServices(customServices, servicePricing).map(s => s.name);
+}
+
+/**
+ * Build a pricing object from effective services for use with calcAmount.
+ */
+export function buildPricingFromServices(services) {
+  return Object.fromEntries(services.map(s => [s.name, s.pricing]));
+}

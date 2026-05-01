@@ -73,6 +73,16 @@ export default function Profile() {
       if (data) {
         if (data.plan_tier) setPlanTier(data.plan_tier);
         if (data.reminder_message_template) setReminderTemplate(data.reminder_message_template || "");
+        if (data.custom_services) {
+          setCustomServices(data.custom_services);
+        } else {
+          // Initialize from defaults
+          const merged = { ...DEFAULT_PRICING, ...(data.service_pricing || {}) };
+          setCustomServices(SERVICE_OPTIONS.map(name => ({
+            name,
+            pricing: merged[name] || { 1: 0, 2: 0, 3: 0 },
+          })));
+        }
         setBookingRequiresApproval(data.booking_requires_approval || false);
         setFullName(data.full_name || "");
         setSlug(data.slug || "");
@@ -338,6 +348,7 @@ export default function Profile() {
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
   const [reminderTemplate, setReminderTemplate] = useState("");
+  const [customServices, setCustomServices] = useState(null);
   const [bookingRequiresApproval, setBookingRequiresApproval] = useState(false);
   const [stripeError, setStripeError] = useState("");
   const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
@@ -481,6 +492,95 @@ export default function Profile() {
           <div>
             <label className="block text-sm font-medium mb-1">Business Name</label>
             <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="border rounded w-full p-2" />
+          </div>
+
+          {/* ── Services & Pricing Editor ── */}
+          <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-[var(--text-1)] text-sm">Services & Pricing</h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomServices(prev => [...(prev || []), {
+                    name: "",
+                    pricing: { 1: 0, 2: 0, 3: 0 }
+                  }]);
+                }}
+                className="text-xs px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
+              >
+                + Add Service
+              </button>
+            </div>
+
+            <div className="grid grid-cols-4 gap-1 text-xs font-semibold text-[var(--text-3)] px-1">
+              <span className="col-span-1">Service</span>
+              <span className="text-center">S/M</span>
+              <span className="text-center">Large</span>
+              <span className="text-center">XL</span>
+            </div>
+
+            <div className="space-y-2">
+              {(customServices || []).map((svc, i) => (
+                <div key={i} className="grid grid-cols-4 gap-1 items-center">
+                  <input
+                    type="text"
+                    value={svc.name}
+                    onChange={e => {
+                      const updated = [...customServices];
+                      updated[i] = { ...updated[i], name: e.target.value };
+                      setCustomServices(updated);
+                    }}
+                    placeholder="Service name"
+                    className="col-span-1 border border-[var(--border-med)] rounded-lg px-2 py-1.5 text-xs bg-[var(--bg)] text-[var(--text-1)] w-full"
+                  />
+                  {[1, 2, 3].map(size => (
+                    <div key={size} className="relative">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-[var(--text-3)]">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={svc.pricing?.[size] ?? 0}
+                        onChange={e => {
+                          const updated = [...customServices];
+                          updated[i] = {
+                            ...updated[i],
+                            pricing: {
+                              ...updated[i].pricing,
+                              [size]: Number(e.target.value) || 0
+                            }
+                          };
+                          setCustomServices(updated);
+                        }}
+                        className="w-full border border-[var(--border-med)] rounded-lg pl-5 pr-1 py-1.5 text-xs bg-[var(--bg)] text-[var(--text-1)]"
+                      />
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomServices(prev => prev.filter((_, idx) => idx !== i));
+                    }}
+                    className="col-span-4 text-right text-xs text-red-500 hover:text-red-700 mt-0.5"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                const merged = { ...DEFAULT_PRICING };
+                setCustomServices(SERVICE_OPTIONS.map(name => ({
+                  name,
+                  pricing: merged[name] || { 1: 0, 2: 0, 3: 0 },
+                })));
+              }}
+              className="text-xs text-[var(--text-3)] hover:text-[var(--text-2)] underline"
+            >
+              Reset to defaults
+            </button>
           </div>
 
           {/* Booking Approval */}
