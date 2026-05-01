@@ -59,6 +59,9 @@ exports.handler = async (event) => {
 
   const fromNumber = groomer.sms_number || process.env.TELNYX_PHONE_NUMBER;
 
+  console.log("Sending SMS from:", fromNumber, "to:", toPhone);
+  console.log("Groomer plan:", groomer.plan_tier);
+
   // Send via Telnyx
   const telnyxRes = await fetch("https://api.telnyx.com/v2/messages", {
     method: "POST",
@@ -73,13 +76,23 @@ exports.handler = async (event) => {
     }),
   });
 
+  const telnyxBody = await telnyxRes.text();
+  console.log("Telnyx response status:", telnyxRes.status);
+  console.log("Telnyx response body:", telnyxBody);
+
   if (!telnyxRes.ok) {
-    const errText = await telnyxRes.text();
-    console.error("Telnyx send failed:", errText);
+    console.error("Telnyx send failed:", telnyxBody);
     return { statusCode: 500, body: "Failed to send message" };
   }
 
-  const telnyxData = await telnyxRes.json();
+  let telnyxData;
+  try {
+    telnyxData = JSON.parse(telnyxBody);
+  } catch {
+    telnyxData = {};
+  }
+
+  // telnyxData already parsed above
   const telnyxMsgId = telnyxData?.data?.id;
 
   // Find client record
