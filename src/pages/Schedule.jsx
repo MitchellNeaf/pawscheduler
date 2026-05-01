@@ -787,6 +787,25 @@ function AppointmentModal({
               className="border rounded px-2 py-1 min-h-[60px]" />
           </label>
 
+          {/* Payment Method */}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">Payment Method</span>
+            <select
+              value={form.payment_method || ""}
+              onChange={(e) => setForm((prev) => ({ ...prev, payment_method: e.target.value }))}
+              className="border rounded px-3 py-2 text-sm bg-white"
+            >
+              <option value="">Not recorded</option>
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="cashapp">Cash App</option>
+              <option value="venmo">Venmo</option>
+              <option value="zelle">Zelle</option>
+              <option value="check">Check</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+
           {/* Reminder toggle */}
           {(planTier === "basic" || planTier === "starter" || planTier === "pro") && (
             <label className="flex items-center gap-2 text-sm">

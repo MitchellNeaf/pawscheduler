@@ -47,7 +47,6 @@ export default function Profile() {
   const [hoursSaving, setHoursSaving] = useState(false);
 
   // ---------------- PRICING ----------------
-  const [pricing, setPricing] = useState(DEFAULT_PRICING);
 
   // ---------------- CONFIRM MODAL ----------------
   const [confirmConfig, setConfirmConfig] = useState(null);
@@ -90,13 +89,6 @@ export default function Profile() {
 
         // Load service pricing — merge with defaults so new services always have a price
         if (data.service_pricing) {
-          const merged = { ...DEFAULT_PRICING };
-          Object.keys(data.service_pricing).forEach((svc) => {
-            merged[svc] = { ...DEFAULT_PRICING[svc], ...data.service_pricing[svc] };
-          });
-          setPricing(merged);
-        }
-
         // ✅ Load timezone; if missing, auto-detect and save once
         if (data.time_zone) {
           setTimeZone(data.time_zone);
