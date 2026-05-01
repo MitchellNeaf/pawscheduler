@@ -72,6 +72,8 @@ export default function Profile() {
 
       if (data) {
         if (data.plan_tier) setPlanTier(data.plan_tier);
+        if (data.reminder_message_template) setReminderTemplate(data.reminder_message_template || "");
+        setBookingRequiresApproval(data.booking_requires_approval || false);
         setFullName(data.full_name || "");
         setSlug(data.slug || "");
         setLogoUrl(data.logo_url || null);
@@ -335,6 +337,8 @@ export default function Profile() {
   const [activeTab, setActiveTab] = useState("profile");
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
+  const [reminderTemplate, setReminderTemplate] = useState("");
+  const [bookingRequiresApproval, setBookingRequiresApproval] = useState(false);
   const [stripeError, setStripeError] = useState("");
   const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
 
@@ -477,6 +481,37 @@ export default function Profile() {
           <div>
             <label className="block text-sm font-medium mb-1">Business Name</label>
             <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="border rounded w-full p-2" />
+          </div>
+
+          {/* Booking Approval */}
+          <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-[var(--text-1)] text-sm">Require Booking Approval</h3>
+                <p className="text-xs text-[var(--text-3)] mt-0.5">Clients submit a request instead of booking directly. You approve or decline from your schedule.</p>
+              </div>
+              <button
+                onClick={() => setBookingRequiresApproval(prev => !prev)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ml-4 ${bookingRequiresApproval ? "bg-emerald-500" : "bg-gray-200"}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${bookingRequiresApproval ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Custom Reminder Message */}
+          <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-2">
+            <h3 className="font-bold text-[var(--text-1)] text-sm">Custom Reminder Message</h3>
+            <p className="text-xs text-[var(--text-3)]">
+              Personalize the SMS sent the night before. Placeholders: {"{client}"} {"{pet}"} {"{time}"} {"{confirm_link}"}. Leave blank for the default.
+            </p>
+            <textarea
+              rows={3}
+              value={reminderTemplate}
+              onChange={(e) => setReminderTemplate(e.target.value)}
+              placeholder="Hi {client}, just a reminder that {pet} has a grooming appointment tomorrow at {time}. Confirm here: {confirm_link}"
+              className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm resize-none bg-[var(--bg)] text-[var(--text-1)]"
+            />
           </div>
 
           <div>

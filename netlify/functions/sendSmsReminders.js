@@ -21,6 +21,19 @@ exports.handler = async (event) => {
 
     const { data: appts, error } = await supabase.rpc("sms_reminder_candidates");
 
+    // Load groomer reminder templates (for customizable messages)
+    const groomerIds = [...new Set((appts || []).map(a => a.groomer_id).filter(Boolean))];
+    const groomerTemplates = {};
+    if (groomerIds.length) {
+      const { data: groomers } = await supabase
+        .from("groomers")
+        .select("id, reminder_message_template")
+        .in("id", groomerIds);
+      (groomers || []).forEach(g => {
+        groomerTemplates[g.id] = g.reminder_message_template || null;
+      });
+    }
+
     if (error) {
       console.error("RPC Error:", error);
       throw error;
@@ -69,7 +82,25 @@ exports.handler = async (event) => {
         ? petNames.slice(0, -1).join(", ") + " & " + petNames[petNames.length - 1]
         : petNames[0] || "your pet";
 
-      const message = `Hi ${primary.client_name}, reminder that ${petDisplay} has a grooming appointment tomorrow at ${timeStr}. Reply STOP to opt out.`;
+      // Build confirmation link
+      const confirmLink = primary.confirm_token
+        ? `https://app.pawscheduler.app/.netlify/functions/confirmAppointmentSms?token=${primary.confirm_token}`
+        : null;
+
+      // Use groomer's custom template or default
+      const template = groomerTemplates[primary.groomer_id] || null;
+      let message;
+      if (template) {
+        // Replace placeholders in custom template
+        message = template
+          .replace("{client}", primary.client_name || "there")
+          .replace("{pet}", petDisplay)
+          .replace("{time}", timeStr)
+          .replace("{confirm_link}", confirmLink || "")
+          .trim();
+      } else {
+        message = `Hi ${primary.client_name}, reminder that ${petDisplay} has a grooming appointment tomorrow at ${timeStr}.${confirmLink ? ` Confirm here: ${confirmLink}` : ""} Reply STOP to opt out.`;
+      }
 
       if (DRY_RUN) {
         console.log("DRY RUN SMS:", {

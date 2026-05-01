@@ -1056,6 +1056,7 @@ export default function Schedule() {
     notes: "",
     amount: null,
     reminder_enabled: false,
+    payment_method: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -1067,6 +1068,7 @@ export default function Schedule() {
 
   // Service pricing loaded from groomers.service_pricing
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
+  const [groomer, setGroomer] = useState(null);
 
   /* Load user */
   useEffect(() => {
@@ -1119,7 +1121,7 @@ export default function Schedule() {
       ] = await Promise.all([
         supabase
           .from("groomers")
-          .select("max_parallel, service_pricing, plan_tier")
+          .select("max_parallel, service_pricing, plan_tier, booking_requires_approval")
           .eq("id", user.id)
           .maybeSingle(),
         supabase
@@ -1163,6 +1165,7 @@ export default function Schedule() {
       if (groomer?.service_pricing) {
         setPricing({ ...DEFAULT_PRICING, ...groomer.service_pricing });
       }
+      setGroomer(groomer);
       if (groomer?.plan_tier) {
         setPlanTier(groomer.plan_tier);
       }
@@ -1461,6 +1464,7 @@ export default function Schedule() {
       notes: appt.notes || "",
       amount: appt.amount ?? null,
       reminder_enabled: appt.reminder_enabled ?? false,
+      payment_method: appt.payment_method || "",
     });
 
     setEditModalOpen(true);
@@ -1491,6 +1495,7 @@ export default function Schedule() {
         notes: editForm.notes,
         amount: editForm.amount ?? null,
         reminder_enabled: editForm.reminder_enabled,
+      payment_method: editForm.payment_method || null,
         reminder_sent: false,
         slot_weight: editAppt.slot_weight || 1,
       })
@@ -2218,6 +2223,35 @@ export default function Schedule() {
                 />
 
                 <div className="card-body space-y-3">
+                  {/* Pending approval banner */}
+                  {!appt.confirmed && groomer?.booking_requires_approval && (
+                    <div className="flex items-center justify-between bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-1">
+                      <span className="text-xs font-semibold text-amber-800">⏳ Awaiting your approval</span>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            await supabase.from("appointments").update({ confirmed: true }).eq("id", appt.id);
+                            setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, confirmed: true } : a));
+                          }}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition"
+                        >
+                          ✓ Approve
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (window.confirm("Decline this booking request?")) {
+                              await supabase.from("appointments").delete().eq("id", appt.id);
+                              setAppointments(prev => prev.filter(a => a.id !== appt.id));
+                            }
+                          }}
+                          className="text-xs px-2.5 py-1 rounded-lg bg-red-100 text-red-700 font-bold hover:bg-red-200 transition"
+                        >
+                          ✕ Decline
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Top row: time + size + vaccine */}
                   <div className="flex justify-between items-center flex-wrap gap-2">
                     <div>
@@ -2316,6 +2350,11 @@ export default function Schedule() {
                   </div>
 
                   {/* Services & Notes */}
+                  {appt.payment_method && appt.paid && (
+                    <div className="text-xs text-emerald-700 font-medium">
+                      💰 Paid via {appt.payment_method === "cashapp" ? "Cash App" : appt.payment_method.charAt(0).toUpperCase() + appt.payment_method.slice(1)}
+                    </div>
+                  )}
                   {(servicesText || appt.notes) && (
                     <div className="text-xs sm:text-sm text-gray-700 space-y-1">
                       {servicesText && (

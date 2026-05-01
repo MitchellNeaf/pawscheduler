@@ -45,6 +45,7 @@ export default function BookPage() {
   const { slug } = useParams();
 
   const [groomer, setGroomer] = useState(null);
+  const [requiresApproval, setRequiresApproval] = useState(false);
   const [groomerId, setGroomerId] = useState(null);
   const [maxParallel, setMaxParallel] = useState(1);
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
@@ -463,7 +464,7 @@ export default function BookPage() {
         time: form.time,
         duration_min: Number(form.duration_min),
         services: form.services,
-        confirmed: false,
+        confirmed: requiresApproval ? false : false, // always starts unconfirmed
         no_show: false,
         amount: autoAmount > 0 ? autoAmount : null,
         paid: false,
@@ -510,6 +511,7 @@ export default function BookPage() {
         services: form.services,
         duration: form.duration_min,
         amount: autoAmount,
+        pending: requiresApproval,
       });
       setView("home");
     }
@@ -691,14 +693,19 @@ export default function BookPage() {
 
             {/* Success banner */}
             {submitted && (
-              <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4 space-y-2">
-                <p className="font-bold text-emerald-800 text-sm">✅ Appointment booked!</p>
-                <div className="text-xs text-emerald-700 space-y-0.5 leading-relaxed">
+              <div className={`rounded-xl p-4 space-y-2 border ${submitted.pending ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"}`}>
+                <p className={`font-bold text-sm ${submitted.pending ? "text-amber-800" : "text-emerald-800"}`}>
+                  {submitted.pending ? "⏳ Request sent — awaiting confirmation" : "✅ Appointment booked!"}
+                </p>
+                <div className={`text-xs space-y-0.5 leading-relaxed ${submitted.pending ? "text-amber-700" : "text-emerald-700"}`}>
                   <div><span className="font-semibold">Pet:</span> {submitted.pet}</div>
                   <div><span className="font-semibold">Date:</span> {submitted.date} at {fmtTime(submitted.time)}</div>
                   <div><span className="font-semibold">Services:</span> {submitted.services.join(", ")}</div>
                   {submitted.amount > 0 && (
                     <div><span className="font-semibold">Estimated total:</span> ${submitted.amount.toFixed(2)}</div>
+                  )}
+                  {submitted.pending && (
+                    <div className="mt-2 font-semibold">Your groomer will confirm shortly.</div>
                   )}
                 </div>
               </div>
@@ -709,7 +716,7 @@ export default function BookPage() {
               className="w-full flex items-center gap-3 p-4 rounded-xl bg-[var(--brand)] text-white font-bold text-sm text-left hover:opacity-90 active:opacity-80 transition shadow-sm"
             >
               <span className="text-xl">📅</span>
-              <span>Book an Appointment</span>
+              <span>{requiresApproval ? "Request an Appointment" : "Book an Appointment"}</span>
             </button>
 
             <button
