@@ -764,7 +764,7 @@ export default function Profile() {
       {/* ── PRICING TAB ── */}
       {activeTab === "pricing" && (
         <div className="space-y-4">
-          {planTier === "free" && (
+          {planTier === "free" ? (
             <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-6 text-center space-y-3">
               <div className="text-3xl">💲</div>
               <h3 className="font-bold text-[var(--text-1)]">Editable services require Basic or higher</h3>
@@ -773,14 +773,14 @@ export default function Profile() {
                 Upgrade to Basic — $29.99/mo →
               </a>
             </div>
-          )}
-          {planTier !== "free" && (
-          <div>
-            <h2 className="text-lg font-bold text-[var(--text-1)] mb-1">Services & Pricing</h2>
-            <p className="text-sm text-[var(--text-3)]">
-              Edit your service names and prices by dog size. Changes apply to scheduling and your public booking page.
-            </p>
-          </div>
+          ) : (
+            <>
+            <div>
+              <h2 className="text-lg font-bold text-[var(--text-1)] mb-1">Services & Pricing</h2>
+              <p className="text-sm text-[var(--text-3)]">
+                Edit your service names and prices by dog size. Changes apply to scheduling and your public booking page.
+              </p>
+            </div>
 
           {/* Column headers */}
           <div className="grid grid-cols-5 gap-2 text-xs font-semibold text-[var(--text-3)] px-1">
@@ -889,7 +889,7 @@ export default function Profile() {
           >
             Save Services & Pricing
           </button>
-          </div>
+          </>
           )}
         </div>
       )}
