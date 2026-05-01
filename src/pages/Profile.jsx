@@ -261,6 +261,9 @@ export default function Profile() {
         max_parallel: maxParallel,
         max_appts_per_day: maxApptsPerDay || null,
         time_zone: timeZone,
+        booking_requires_approval: bookingRequiresApproval,
+        reminder_message_template: reminderTemplate.trim() || null,
+        custom_services: customServices,
       })
       .eq("id", user.id);
 
@@ -494,96 +497,7 @@ export default function Profile() {
             <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="border rounded w-full p-2" />
           </div>
 
-          {/* ── Services & Pricing Editor ── */}
-          <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-[var(--text-1)] text-sm">Services & Pricing</h3>
-              <button
-                type="button"
-                onClick={() => {
-                  setCustomServices(prev => [...(prev || []), {
-                    name: "",
-                    pricing: { 1: 0, 2: 0, 3: 0 }
-                  }]);
-                }}
-                className="text-xs px-3 py-1.5 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
-              >
-                + Add Service
-              </button>
-            </div>
-
-            <div className="grid grid-cols-4 gap-1 text-xs font-semibold text-[var(--text-3)] px-1">
-              <span className="col-span-1">Service</span>
-              <span className="text-center">S/M</span>
-              <span className="text-center">Large</span>
-              <span className="text-center">XL</span>
-            </div>
-
-            <div className="space-y-2">
-              {(customServices || []).map((svc, i) => (
-                <div key={i} className="grid grid-cols-4 gap-1 items-center">
-                  <input
-                    type="text"
-                    value={svc.name}
-                    onChange={e => {
-                      const updated = [...customServices];
-                      updated[i] = { ...updated[i], name: e.target.value };
-                      setCustomServices(updated);
-                    }}
-                    placeholder="Service name"
-                    className="col-span-1 border border-[var(--border-med)] rounded-lg px-2 py-1.5 text-xs bg-[var(--bg)] text-[var(--text-1)] w-full"
-                  />
-                  {[1, 2, 3].map(size => (
-                    <div key={size} className="relative">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-[var(--text-3)]">$</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={svc.pricing?.[size] ?? 0}
-                        onChange={e => {
-                          const updated = [...customServices];
-                          updated[i] = {
-                            ...updated[i],
-                            pricing: {
-                              ...updated[i].pricing,
-                              [size]: Number(e.target.value) || 0
-                            }
-                          };
-                          setCustomServices(updated);
-                        }}
-                        className="w-full border border-[var(--border-med)] rounded-lg pl-5 pr-1 py-1.5 text-xs bg-[var(--bg)] text-[var(--text-1)]"
-                      />
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustomServices(prev => prev.filter((_, idx) => idx !== i));
-                    }}
-                    className="col-span-4 text-right text-xs text-red-500 hover:text-red-700 mt-0.5"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                const merged = { ...DEFAULT_PRICING };
-                setCustomServices(SERVICE_OPTIONS.map(name => ({
-                  name,
-                  pricing: merged[name] || { 1: 0, 2: 0, 3: 0 },
-                })));
-              }}
-              className="text-xs text-[var(--text-3)] hover:text-[var(--text-2)] underline"
-            >
-              Reset to defaults
-            </button>
-          </div>
-
-          {/* Booking Approval */}
+                    {/* Booking Approval */}
           <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-2">
             <div className="flex items-center justify-between">
               <div>
@@ -875,45 +789,120 @@ export default function Profile() {
 
       {/* ── PRICING TAB ── */}
       {activeTab === "pricing" && (
-        <div>
-          <h2 className="text-lg font-bold mb-1">Service Pricing</h2>
-          <p className="text-sm text-[var(--text-3)] mb-5">
-            Set your default prices by service and dog size. These auto-fill when you create an appointment.
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr>
-                  <th className="text-left py-2 pr-4 font-semibold text-[var(--text-2)] w-32">Service</th>
-                  {[1, 2, 3].map((size) => (
-                    <th key={size} className="text-center py-2 px-2 font-semibold text-[var(--text-2)]">{SIZE_LABELS[size]}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {SERVICE_OPTIONS.map((svc) => (
-                  <tr key={svc} className="border-t border-[var(--border-med)]">
-                    <td className="py-2 pr-4 font-medium text-[var(--text-1)]">{svc}</td>
-                    {[1, 2, 3].map((size) => (
-                      <td key={size} className="py-2 px-2">
-                        <div className="relative">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--text-3)] text-sm">$</span>
-                          <input type="number" min="0" step="1" value={pricing[svc]?.[size] ?? 0}
-                            onChange={(e) => setPricing((prev) => ({ ...prev, [svc]: { ...prev[svc], [size]: Number(e.target.value) || 0 } }))}
-                            className="border rounded w-full pl-6 pr-2 py-1 text-center" style={{ maxWidth: 80 }} />
-                        </div>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-[var(--text-1)] mb-1">Services & Pricing</h2>
+            <p className="text-sm text-[var(--text-3)]">
+              Edit your service names and prices by dog size. Changes apply to scheduling and your public booking page.
+            </p>
           </div>
-          <p className="text-xs text-[var(--text-3)] mt-3">
+
+          {/* Column headers */}
+          <div className="grid grid-cols-5 gap-2 text-xs font-semibold text-[var(--text-3)] px-1">
+            <span className="col-span-1">Service</span>
+            <span className="text-center">S/M</span>
+            <span className="text-center">Large</span>
+            <span className="text-center">XL</span>
+            <span></span>
+          </div>
+
+          {/* Service rows */}
+          <div className="space-y-2">
+            {(customServices || []).map((svc, i) => (
+              <div key={i} className="grid grid-cols-5 gap-2 items-center">
+                <input
+                  type="text"
+                  value={svc.name}
+                  onChange={e => {
+                    const updated = [...customServices];
+                    updated[i] = { ...updated[i], name: e.target.value };
+                    setCustomServices(updated);
+                  }}
+                  placeholder="Service name"
+                  className="col-span-1 border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm bg-[var(--bg)] text-[var(--text-1)] w-full"
+                />
+                {[1, 2, 3].map(size => (
+                  <div key={size} className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--text-3)]">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={svc.pricing?.[size] === 0 ? "" : (svc.pricing?.[size] ?? "")}
+                      onChange={e => {
+                        const updated = [...customServices];
+                        updated[i] = {
+                          ...updated[i],
+                          pricing: {
+                            ...updated[i].pricing,
+                            [size]: e.target.value === "" ? 0 : Number(e.target.value) || 0
+                          }
+                        };
+                        setCustomServices(updated);
+                      }}
+                      onFocus={e => e.target.select()}
+                      placeholder="0"
+                      className="w-full border border-[var(--border-med)] rounded-xl pl-6 pr-2 py-2 text-sm bg-[var(--bg)] text-[var(--text-1)]"
+                    />
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setCustomServices(prev => prev.filter((_, idx) => idx !== i))}
+                  className="text-red-400 hover:text-red-600 font-bold text-lg leading-none transition"
+                  title="Remove service"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center justify-between pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                const merged = { ...DEFAULT_PRICING };
+                setCustomServices(SERVICE_OPTIONS.map(name => ({
+                  name,
+                  pricing: merged[name] || { 1: 0, 2: 0, 3: 0 },
+                })));
+              }}
+              className="text-xs text-[var(--text-3)] hover:text-[var(--text-2)] underline"
+            >
+              Reset to defaults
+            </button>
+            <button
+              type="button"
+              onClick={() => setCustomServices(prev => [...(prev || []), { name: "", pricing: { 1: 0, 2: 0, 3: 0 } }])}
+              className="text-sm px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
+            >
+              + Add Service
+            </button>
+          </div>
+
+          <p className="text-xs text-[var(--text-3)]">
             Multiple services are summed automatically. You can always override the amount per appointment.
           </p>
-          <button onClick={savePricing} disabled={pricingSaving} className="btn-primary w-full mt-5">
-            {pricingSaving ? "Saving Pricing…" : "Save Pricing"}
+
+          <button
+            onClick={async () => {
+              const { error } = await supabase
+                .from("groomers")
+                .update({ custom_services: customServices })
+                .eq("id", user.id);
+              if (!error) {
+                setConfirmConfig({
+                  title: "Saved!",
+                  message: "Your services and pricing have been updated.",
+                  confirmLabel: "OK",
+                  onConfirm: () => {},
+                });
+              }
+            }}
+            className="btn-primary w-full mt-2"
+          >
+            Save Services & Pricing
           </button>
         </div>
       )}
