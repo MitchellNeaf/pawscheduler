@@ -382,6 +382,7 @@ function MultiPetAppointmentModal({
   pricing,
   workingRange, breakSlots,
   planTier,
+  serviceOptions,
 }) {
   if (!open || !newPets.length) return null;
 
@@ -625,6 +626,7 @@ function AppointmentModal({
   workingRange,
   breakSlots,
   planTier,
+  serviceOptions,
 }) {
   if (!open) return null;
   if (isEdit && !appt) return null;
@@ -2521,6 +2523,7 @@ export default function Schedule() {
         workingRange={workingRange}
         breakSlots={breakSlots}
         planTier={planTier}
+        serviceOptions={serviceOptions}
       />
 
       <AppointmentModal
@@ -2529,6 +2532,7 @@ export default function Schedule() {
         isEdit={true}
         appt={editAppt}
         planTier={planTier}
+        serviceOptions={serviceOptions}
         form={editForm}
         setForm={setEditForm}
         onSave={handleSaveEdit}
