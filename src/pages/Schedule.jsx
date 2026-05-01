@@ -846,6 +846,21 @@ function AppointmentModal({
 }
 
 /* ---------------- Toggle Checkbox ---------------- */
+// ── Check In / Check Out helper ──────────────────────────────
+function fmtCheckinTime(ts) {
+  if (!ts) return null;
+  return new Date(ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+}
+
+function elapsedTime(inTs, outTs) {
+  if (!inTs || !outTs) return null;
+  const mins = Math.round((new Date(outTs) - new Date(inTs)) / 60000);
+  if (mins < 60) return `${mins}m`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
 function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
   return (
     <label className="flex items-center gap-2 text-xs sm:text-sm">
@@ -1162,6 +1177,7 @@ export default function Schedule() {
           .select(`
             id, pet_id, groomer_id, date, time, duration_min, slot_weight,
             services, notes, confirmed, no_show, paid, amount, reminder_enabled, source, appointment_group_id,
+            checked_in_at, checked_out_at, payment_method,
             pets (
               id, name, tags, client_id,
               clients (
@@ -2508,6 +2524,54 @@ export default function Schedule() {
                         user={user}
                         setAppointments={setAppointments}
                       />
+                    </div>
+
+                    {/* Row 4: Check in / Check out */}
+                    <div className="flex gap-2 items-center pt-1">
+                      {/* Check In */}
+                      <button
+                        onClick={async () => {
+                          const value = appt.checked_in_at ? null : new Date().toISOString();
+                          await supabase.from("appointments").update({ checked_in_at: value }).eq("id", appt.id);
+                          setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, checked_in_at: value } : a));
+                        }}
+                        className={`flex-1 py-1.5 rounded-xl text-xs font-semibold border transition
+                          ${appt.checked_in_at
+                            ? "bg-blue-50 border-blue-300 text-blue-700"
+                            : "bg-[var(--surface)] border-[var(--border-med)] text-[var(--text-2)] hover:border-blue-300 hover:text-blue-600"
+                          }`}
+                      >
+                        {appt.checked_in_at
+                          ? `✓ In ${fmtCheckinTime(appt.checked_in_at)}`
+                          : "Check In"}
+                      </button>
+
+                      {/* Check Out — only show after check in */}
+                      {appt.checked_in_at && (
+                        <button
+                          onClick={async () => {
+                            const value = appt.checked_out_at ? null : new Date().toISOString();
+                            await supabase.from("appointments").update({ checked_out_at: value }).eq("id", appt.id);
+                            setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, checked_out_at: value } : a));
+                          }}
+                          className={`flex-1 py-1.5 rounded-xl text-xs font-semibold border transition
+                            ${appt.checked_out_at
+                              ? "bg-emerald-50 border-emerald-300 text-emerald-700"
+                              : "bg-[var(--surface)] border-[var(--border-med)] text-[var(--text-2)] hover:border-emerald-300 hover:text-emerald-600"
+                            }`}
+                        >
+                          {appt.checked_out_at
+                            ? `✓ Out ${fmtCheckinTime(appt.checked_out_at)}`
+                            : "Check Out"}
+                        </button>
+                      )}
+
+                      {/* Elapsed time */}
+                      {appt.checked_in_at && appt.checked_out_at && (
+                        <span className="text-xs text-[var(--text-3)] flex-shrink-0">
+                          {elapsedTime(appt.checked_in_at, appt.checked_out_at)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
