@@ -101,6 +101,7 @@ export default function BookPage() {
       if (!gErr && data && mounted) {
         setGroomer(data);
         setGroomerId(data.id);
+        setRequiresApproval(data.booking_requires_approval || false);
         setMaxParallel(data.max_parallel ?? 1);
         if (data.service_pricing) {
           setPricing({ ...DEFAULT_PRICING, ...data.service_pricing });
