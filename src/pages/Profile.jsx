@@ -5,7 +5,6 @@ import ConfirmModal from "../components/ConfirmModal";
 import VacationSection from "../components/VacationSection";
 import { SERVICE_OPTIONS, DEFAULT_PRICING } from "../utils/grooming";
 
-const SIZE_LABELS = { 1: "S/M", 2: "Large", 3: "XL" };
 
 const WEEKDAYS = [
   "Sunday",
@@ -49,7 +48,6 @@ export default function Profile() {
 
   // ---------------- PRICING ----------------
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
-  const [pricingSaving, setPricingSaving] = useState(false);
 
   // ---------------- CONFIRM MODAL ----------------
   const [confirmConfig, setConfirmConfig] = useState(null);
@@ -328,23 +326,6 @@ export default function Profile() {
   };
 
   // ---------------- SAVE PRICING ----------------
-  const savePricing = async () => {
-    if (!user) return;
-    setPricingSaving(true);
-    const { error } = await supabase
-      .from("groomers")
-      .update({ service_pricing: pricing })
-      .eq("id", user.id);
-    if (error) {
-      setConfirmConfig({
-        title: "Could not save pricing",
-        message: error.message || "Something went wrong. Please try again.",
-        confirmLabel: "OK",
-        onConfirm: () => {},
-      });
-    }
-    setPricingSaving(false);
-  };
 
   // ---------------- TABS ----------------
   const [activeTab, setActiveTab] = useState("profile");
