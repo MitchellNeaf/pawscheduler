@@ -229,6 +229,7 @@ async function propagateSmsPreferenceToFutureAppointments({
   clientId,
   pets,
   enabled,
+  groomerId,
 }) {
   const petIds = getPetIdsForClient(clientId, pets);
 
@@ -657,6 +658,7 @@ export default function Clients() {
           clientId,
           pets,
           enabled: false,
+          groomerId: user.id,
         });
 
         await fetchData();
@@ -687,6 +689,7 @@ export default function Clients() {
         clientId,
         pets,
         enabled,
+        groomerId: user.id,
       });
 
       await fetchData();

@@ -107,6 +107,10 @@ export default function BookPage() {
   const [submitted, setSubmitted] = useState(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [loginAttempts, setLoginAttempts] = useState(0);
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [cancelTargetId, setCancelTargetId] = useState(null);
+  const MAX_LOGIN_ATTEMPTS = 5;
 
   const [unavailable, setUnavailable] = useState([]);
   const [workingRange, setWorkingRange] = useState([]);
@@ -568,6 +572,7 @@ export default function BookPage() {
   -------------------------------------------- */
   const handleCancel = async (apptId) => {
     if (!confirmCancel) {
+      setCancelTargetId(apptId);
       setConfirmCancel(true);
       return;
     }
@@ -987,11 +992,11 @@ export default function BookPage() {
             <p style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 8 }}>Cancel appointment?</p>
             <p style={{ fontSize: "0.85rem", color: "#6b7280", marginBottom: 20 }}>This cannot be undone.</p>
             <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => setConfirmCancel(false)}
+              <button onClick={() => { setConfirmCancel(false); setCancelTargetId(null); }}
                 style={{ flex: 1, padding: "10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", cursor: "pointer", fontWeight: 600 }}>
                 Keep it
               </button>
-              <button onClick={handleCancelAppointment}
+              <button onClick={() => handleCancel(cancelTargetId)}
                 style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#dc2626", color: "white", cursor: "pointer", fontWeight: 700 }}>
                 Yes, cancel
               </button>
