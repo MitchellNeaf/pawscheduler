@@ -1088,6 +1088,24 @@ export default function Schedule() {
   const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
   const FREE_LIMIT = 50;
   const [monthlyCount, setMonthlyCount] = useState(null);
+  const [allPendingRequests, setAllPendingRequests] = useState([]);
+
+  // Load ALL pending booking requests across all future dates
+  useEffect(() => {
+    if (!user || !groomer?.booking_requires_approval) {
+      setAllPendingRequests([]);
+      return;
+    }
+    supabase
+      .from("appointments")
+      .select("id, date, time, pets(name, clients(full_name))")
+      .eq("groomer_id", user.id)
+      .eq("source", "booking_page")
+      .eq("confirmed", false)
+      .gte("date", new Date().toISOString().slice(0, 10))
+      .order("date", { ascending: true })
+      .then(({ data }) => { if (data) setAllPendingRequests(data); });
+  }, [user, groomer, appointments]);
   const [requestingPayment, setRequestingPayment] = useState(null); // appt.id | null
   const [paymentSentFor, setPaymentSentFor] = useState(new Set());
 
@@ -1764,11 +1782,6 @@ export default function Schedule() {
   const groupTotal = (group) =>
     group.reduce((sum, a) => sum + (a.amount || 0), 0);
 
-  // Count pending booking requests needing approval
-  const pendingRequests = groomer?.booking_requires_approval
-    ? appointments.filter(a => !a.confirmed && a.source === "booking_page")
-    : [];
-
   const unpaidToday =
     selectedDate === todayStr
       ? appointments.filter((appt) => {
@@ -1865,22 +1878,39 @@ export default function Schedule() {
         </div>
       )}
 
-      {/* Pending booking requests banner */}
-      {pendingRequests.length > 0 && (
-        <div className="mx-4 mt-3 rounded-xl px-4 py-3 flex items-center justify-between text-sm bg-amber-50 border border-amber-200 text-amber-800">
-          <span className="font-semibold">
-            📋 {pendingRequests.length} booking request{pendingRequests.length !== 1 ? "s" : ""} need{pendingRequests.length === 1 ? "s" : ""} your approval
-          </span>
-          <button
-            onClick={() => {
-              // Scroll to first pending appointment
-              const el = document.getElementById(`appt-${pendingRequests[0].id}`);
-              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-            }}
-            className="ml-3 text-xs font-bold px-3 py-1.5 rounded-full bg-amber-100 border border-amber-300 hover:bg-amber-200 transition whitespace-nowrap"
-          >
-            Review →
-          </button>
+      {/* Pending booking requests banner — shows ALL pending across all dates */}
+      {allPendingRequests.length > 0 && (
+        <div className="mx-4 mt-3 rounded-xl px-4 py-3 bg-amber-50 border border-amber-200 text-amber-800 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-bold">
+              📋 {allPendingRequests.length} booking request{allPendingRequests.length !== 1 ? "s" : ""} need{allPendingRequests.length === 1 ? "s" : ""} your approval
+            </span>
+          </div>
+          <div className="space-y-1">
+            {allPendingRequests.map(req => {
+              const [y, m, d] = req.date.split("-").map(Number);
+              const dateStr = new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+              return (
+                <div key={req.id} className="flex items-center justify-between bg-amber-100 rounded-lg px-3 py-2">
+                  <span className="text-xs font-medium">
+                    {req.pets?.name} ({req.pets?.clients?.full_name}) — {dateStr} at {req.time?.slice(0,5)}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setSelectedDate(req.date);
+                      setTimeout(() => {
+                        const el = document.getElementById(`appt-${req.id}`);
+                        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                      }, 300);
+                    }}
+                    className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition ml-2 whitespace-nowrap"
+                  >
+                    Review →
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
