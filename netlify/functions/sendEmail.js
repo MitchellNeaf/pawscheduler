@@ -5,6 +5,11 @@ const { createClient } = require("@supabase/supabase-js");
 
 function fillTemplate(template, data) {
   let output = template;
+  // Handle {{#if key}}...{{/if}} blocks
+  output = output.replace(/{{#if (\w+)}}([\s\S]*?){{\/if}}/g, (match, key, block) => {
+    return data[key] ? block : "";
+  });
+  // Replace {{key}} placeholders
   for (const key in data) {
     const regex = new RegExp(`{{${key}}}`, "g");
     output = output.replace(regex, data[key] ?? "");
@@ -67,6 +72,10 @@ exports.handler = async function(event) {
       fileName = "intake_email.html";
     } else if (template === "payment_request") {
       fileName = "payment_request.html";
+    } else if (template === "booking_approved") {
+      fileName = "booking_approved.html";
+    } else if (template === "booking_declined") {
+      fileName = "booking_declined.html";
     } else {
       fileName = "confirmation.html";
     }

@@ -501,6 +501,13 @@ export default function BookPage() {
         }).catch(() => {}); // don't block on email failure
       }
 
+      // Check if groomer requires approval
+      const { data: groomerCheck } = await supabase
+        .from("groomers")
+        .select("booking_requires_approval")
+        .eq("id", groomerId)
+        .single();
+
       setSubmitted({
         pet: pets.find((p) => p.id === selectedPetId)?.name || "",
         date: form.date,
@@ -508,6 +515,7 @@ export default function BookPage() {
         services: form.services,
         duration: form.duration_min,
         amount: autoAmount,
+        pending: groomerCheck?.booking_requires_approval || false,
       });
       setView("home");
     }
@@ -652,11 +660,18 @@ export default function BookPage() {
           {/* Success banner after booking */}
           {submitted && (
             <div style={{ padding: "14px 16px", borderRadius: 12,
-              background: "#ecfdf5", border: "1px solid #6ee7b7", marginBottom: 4 }}>
-              <div style={{ fontWeight: 700, color: "#065f46", marginBottom: 6 }}>
-                ✅ Appointment booked!
+              background: submitted.pending ? "#fffbeb" : "#ecfdf5",
+              border: submitted.pending ? "1px solid #fcd34d" : "1px solid #6ee7b7",
+              marginBottom: 4 }}>
+              <div style={{ fontWeight: 700, color: submitted.pending ? "#92400e" : "#065f46", marginBottom: 6 }}>
+                {submitted.pending ? "⏳ Request sent!" : "✅ Appointment booked!"}
               </div>
-              <div style={{ fontSize: "0.83rem", color: "#064e3b", lineHeight: 1.6 }}>
+              {submitted.pending && (
+                <div style={{ fontSize: "0.83rem", color: "#78350f", marginBottom: 8, lineHeight: 1.6 }}>
+                  You'll receive a confirmation email once your groomer approves. If you don't hear back within 24 hours please call us directly.
+                </div>
+              )}
+              <div style={{ fontSize: "0.83rem", color: submitted.pending ? "#92400e" : "#064e3b", lineHeight: 1.6 }}>
                 <div><strong>Pet:</strong> {submitted.pet}</div>
                 <div><strong>Date:</strong> {submitted.date} at {fmtTime(submitted.time)}</div>
                 <div><strong>Services:</strong> {submitted.services.join(", ")}</div>

@@ -33,6 +33,15 @@ for (let hour = START_HOUR; hour <= END_HOUR; hour++) {
   }
 }
 
+// Format date for emails
+function fmtEmailDate(dateStr) {
+  if (!dateStr) return "";
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric", year: "numeric"
+  });
+}
+
 // Basic service list for checkboxes
 const SERVICE_OPTIONS = [
   "Bath",
@@ -2280,6 +2289,28 @@ export default function Schedule() {
                           onClick={async () => {
                             await supabase.from("appointments").update({ confirmed: true }).eq("id", appt.id);
                             setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, confirmed: true } : a));
+                            // Send confirmation email to client
+                            const clientEmail = appt.pets?.clients?.email;
+                            if (clientEmail) {
+                              fetch("/.netlify/functions/sendEmail", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  to: clientEmail,
+                                  subject: `Your appointment is confirmed — ${appt.pets?.name}`,
+                                  template: "booking_approved",
+                                  data: {
+                                    groomer_id: appt.groomer_id,
+                                    client_name: appt.pets?.clients?.full_name || "there",
+                                    pet_name: appt.pets?.name || "your pet",
+                                    date: fmtEmailDate(appt.date),
+                                    time: appt.time?.slice(0,5),
+                                    services: (appt.services || []).join(", "),
+                                    groomer_phone: "",
+                                  }
+                                })
+                              }).catch(() => {});
+                            }
                           }}
                           className="text-xs px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition"
                         >
@@ -2287,7 +2318,28 @@ export default function Schedule() {
                         </button>
                         <button
                           onClick={async () => {
-                            if (window.confirm("Decline this booking request? The appointment will be deleted.")) {
+                            if (window.confirm("Decline this booking request? The appointment will be deleted and the client notified by email.")) {
+                              // Send decline email before deleting
+                              const clientEmail = appt.pets?.clients?.email;
+                              if (clientEmail) {
+                                await fetch("/.netlify/functions/sendEmail", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    to: clientEmail,
+                                    subject: `Booking request update — ${appt.pets?.name}`,
+                                    template: "booking_declined",
+                                    data: {
+                                      groomer_id: appt.groomer_id,
+                                      client_name: appt.pets?.clients?.full_name || "there",
+                                      pet_name: appt.pets?.name || "your pet",
+                                      date: fmtEmailDate(appt.date),
+                                      time: appt.time?.slice(0,5),
+                                      groomer_phone: "",
+                                    }
+                                  })
+                                }).catch(() => {});
+                              }
                               await supabase.from("appointments").delete().eq("id", appt.id);
                               setAppointments(prev => prev.filter(a => a.id !== appt.id));
                             }
