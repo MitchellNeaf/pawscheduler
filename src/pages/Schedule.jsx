@@ -1089,23 +1089,6 @@ export default function Schedule() {
   const FREE_LIMIT = 50;
   const [monthlyCount, setMonthlyCount] = useState(null);
   const [allPendingRequests, setAllPendingRequests] = useState([]);
-
-  // Load ALL pending booking requests across all future dates
-  useEffect(() => {
-    if (!user || !groomer?.booking_requires_approval) {
-      setAllPendingRequests([]);
-      return;
-    }
-    supabase
-      .from("appointments")
-      .select("id, date, time, pets(name, clients(full_name))")
-      .eq("groomer_id", user.id)
-      .eq("source", "booking_page")
-      .eq("confirmed", false)
-      .gte("date", new Date().toISOString().slice(0, 10))
-      .order("date", { ascending: true })
-      .then(({ data }) => { if (data) setAllPendingRequests(data); });
-  }, [user, groomer, appointments]);
   const [requestingPayment, setRequestingPayment] = useState(null); // appt.id | null
   const [paymentSentFor, setPaymentSentFor] = useState(new Set());
 
@@ -1133,6 +1116,20 @@ export default function Schedule() {
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
   const [serviceOptions, setServiceOptions] = useState(SERVICE_OPTIONS);
   const [groomer, setGroomer] = useState(null);
+
+  // Load ALL pending booking requests across all future dates
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("appointments")
+      .select("id, date, time, pets(name, clients(full_name))")
+      .eq("groomer_id", user.id)
+      .eq("source", "booking_page")
+      .eq("confirmed", false)
+      .gte("date", new Date().toISOString().slice(0, 10))
+      .order("date", { ascending: true })
+      .then(({ data }) => setAllPendingRequests(data || []));
+  }, [user, appointments]);
 
   /* Load user */
   useEffect(() => {
@@ -1879,7 +1876,7 @@ export default function Schedule() {
       )}
 
       {/* Pending booking requests banner — shows ALL pending across all dates */}
-      {allPendingRequests.length > 0 && (
+      {groomer?.booking_requires_approval && allPendingRequests.length > 0 && (
         <div className="mx-4 mt-3 rounded-xl px-4 py-3 bg-amber-50 border border-amber-200 text-amber-800 space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold">
