@@ -5,8 +5,8 @@
  * Sets subscription_status and plan_tier on groomers table.
  *
  * Price IDs:
- *   Starter Monthly: price_1TPYnd1RxmPJHwWbqJYQub43
- *   Starter Yearly:  price_1TPYo91RxmPJHwWb5qSpBQcV
+ *   Growth Monthly: price_1TPYnd1RxmPJHwWbqJYQub43
+ *   Growth Yearly:  price_1TPYo91RxmPJHwWb5qSpBQcV
  *   Pro Monthly:     price_1TPYoh1RxmPJHwWbPV02049p
  *   Pro Yearly:      price_1TPYp11RxmPJHwWbHbkYTZwq
  */
@@ -26,9 +26,9 @@ const PRO_PRICE_IDS = new Set([
   "price_1TPYp11RxmPJHwWbHbkYTZwq", // Pro Yearly
 ]);
 
-const STARTER_PRICE_IDS = new Set([
-  "price_1TPYnd1RxmPJHwWbqJYQub43", // Starter Monthly
-  "price_1TPYo91RxmPJHwWb5qSpBQcV", // Starter Yearly
+const GROWTH_PRICE_IDS = new Set([
+  "price_1TPYnd1RxmPJHwWbqJYQub43", // Growth Monthly
+  "price_1TPYo91RxmPJHwWb5qSpBQcV", // Growth Yearly
 ]);
 
 const BASIC_PRICE_IDS = new Set([
@@ -37,7 +37,7 @@ const BASIC_PRICE_IDS = new Set([
 
 function getPlanTier(priceId) {
   if (PRO_PRICE_IDS.has(priceId)) return "pro";
-  if (STARTER_PRICE_IDS.has(priceId)) return "starter";
+  if (GROWTH_PRICE_IDS.has(priceId)) return "growth";
   if (BASIC_PRICE_IDS.has(priceId)) return "basic";
   return "basic"; // safe default
 }

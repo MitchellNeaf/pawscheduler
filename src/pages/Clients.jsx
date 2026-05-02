@@ -961,8 +961,8 @@ export default function Clients() {
                     ➕ Add Pet
                   </button>
 
-                  {/* Waiver — starter+ only */}
-                  {groomerSlug && (planTier === "starter" || planTier === "pro") && (
+                  {/* Waiver — growth+ only */}
+                  {groomerSlug && (planTier === "growth" || planTier === "pro") && (
                     waiverSignedIds.has(client.id) ? (
                       <span className="text-sm px-3 py-1.5 rounded-xl border border-emerald-300 text-emerald-700 bg-emerald-50 font-semibold">
                         ✅ Waiver Signed
@@ -1010,20 +1010,20 @@ export default function Clients() {
                   {(planTier === "free" || planTier === "basic") && (
                     <a href="/upgrade"
                       className="text-sm px-3 py-1.5 rounded-xl border border-[var(--border-med)] text-[var(--text-3)] bg-gray-50 opacity-70 hover:opacity-100 hover:border-emerald-400 hover:text-emerald-600 transition-all"
-                      title="Upgrade to Starter to send intake forms">
+                      title="Upgrade to Growth to send intake forms">
                       🔒 Send Intake
                     </a>
                   )}
                   {(planTier === "free" || planTier === "basic") && (
                     <a href="/upgrade"
                       className="text-sm px-3 py-1.5 rounded-xl border border-[var(--border-med)] text-[var(--text-3)] bg-gray-50 opacity-70 hover:opacity-100 hover:border-emerald-400 hover:text-emerald-600 transition-all"
-                      title="Upgrade to Starter to send waivers">
+                      title="Upgrade to Growth to send waivers">
                       🔒 Send Waiver
                     </a>
                   )}
 
-                  {/* Intake button — starter+ only */}
-                  {groomerSlug && (planTier === "starter" || planTier === "pro") && (
+                  {/* Intake button — growth+ only */}
+                  {groomerSlug && (planTier === "growth" || planTier === "pro") && (
                     intakeSentFor.has(client.id) ? (
                       <span className="text-sm px-3 py-1.5 rounded-xl border border-blue-200 text-blue-700 bg-blue-50 font-semibold">
                         ✓ Intake Sent

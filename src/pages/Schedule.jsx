@@ -552,8 +552,8 @@ function MultiPetAppointmentModal({
             );
           })}
 
-          {/* Add another pet button — Starter+ only */}
-          {(planTier === "starter" || planTier === "pro") ? (
+          {/* Add another pet button — Growth+ only */}
+          {(planTier === "growth" || planTier === "pro") ? (
             <button type="button" onClick={onAddPet}
               className="w-full py-2 rounded-xl border-2 border-dashed border-gray-200 text-gray-500 text-sm font-semibold hover:border-emerald-400 hover:text-emerald-600 transition-colors">
               + Add another dog
@@ -561,7 +561,7 @@ function MultiPetAppointmentModal({
           ) : (
             <a href="/upgrade"
               className="w-full py-2 rounded-xl border-2 border-dashed border-gray-200 text-gray-400 text-sm font-semibold text-center block opacity-60 hover:opacity-100 hover:border-emerald-400 hover:text-emerald-600 transition-colors">
-              🔒 Multi-pet bookings — Starter+ only
+              🔒 Multi-pet bookings — Growth+ only
             </a>
           )}
 
@@ -573,7 +573,7 @@ function MultiPetAppointmentModal({
               className="border rounded px-2 py-1 min-h-[50px]" />
           </label>
 
-          {(planTier === "basic" || planTier === "starter" || planTier === "pro") && (
+          {(planTier === "basic" || planTier === "growth" || planTier === "pro") && (
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.reminder_enabled}
                 onChange={(e) => setForm((p) => ({ ...p, reminder_enabled: e.target.checked }))} />
@@ -816,7 +816,7 @@ function AppointmentModal({
           </label>
 
           {/* Reminder toggle */}
-          {(planTier === "basic" || planTier === "starter" || planTier === "pro") && (
+          {(planTier === "basic" || planTier === "growth" || planTier === "pro") && (
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.reminder_enabled}
                 onChange={(e) => setForm((prev) => ({ ...prev, reminder_enabled: e.target.checked }))} />
@@ -1411,8 +1411,8 @@ export default function Schedule() {
     if (newPets.length > 1 && (planTier === "free" || planTier === "basic")) {
       setSavingNew(false);
       setConfirmConfig({
-        title: "Multi-pet bookings require Starter",
-        message: "Upgrade to Starter or Pro to book multiple dogs in one appointment.",
+        title: "Multi-pet bookings require Growth",
+        message: "Upgrade to Growth or Pro to book multiple dogs in one appointment.",
         confirmLabel: "Upgrade",
         cancelLabel: "Not now",
         onConfirm: () => { window.location.href = "/upgrade"; },
@@ -2585,7 +2585,7 @@ export default function Schedule() {
                         )}
 
                         {/* Request Payment */}
-                        {!appt.paid && appt.amount > 0 && (planTier === "starter" || planTier === "pro") ? (
+                        {!appt.paid && appt.amount > 0 && (planTier === "growth" || planTier === "pro") ? (
                           <button
                             onClick={() => handleRequestPayment(appt)}
                             disabled={requestingPayment === appt.id}

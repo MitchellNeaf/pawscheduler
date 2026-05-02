@@ -188,19 +188,19 @@ export default function SmsInbox() {
 
   const totalUnread = conversations.reduce((s, c) => s + Number(c.unread_count || 0), 0);
 
-  // Gate for non-starter users
+  // Gate for non-growth users
   if (planTier === "free" || planTier === "basic") {
     return (
       <main className="min-h-screen bg-[var(--bg)] flex items-center justify-center p-6">
         <div className="max-w-md text-center space-y-4">
           <div className="text-5xl">💬</div>
-          <h2 className="text-xl font-bold text-[var(--text-1)]">Two-way SMS Inbox requires Starter or higher</h2>
+          <h2 className="text-xl font-bold text-[var(--text-1)]">Two-way SMS Inbox requires Growth or higher</h2>
           <p className="text-sm text-[var(--text-2)]">
-            Upgrade to Starter to unlock two-way SMS messaging, a dedicated business number, and full client conversation history.
+            Upgrade to Growth to unlock two-way SMS messaging, a dedicated business number, and full client conversation history.
           </p>
           <a href="/upgrade"
             className="inline-block mt-2 px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
-            Upgrade to Starter — $49.99/mo →
+            Upgrade to Growth — $49.99/mo →
           </a>
         </div>
       </main>

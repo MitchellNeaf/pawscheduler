@@ -54,8 +54,8 @@ const PLANS = [
     ],
   },
   {
-    key:         "starter",
-    name:        "Starter",
+    key:         "growth",
+    name:        "Growth",
     price:       49.99,
     description: "The full grooming business suite.",
     color:       "emerald",
@@ -83,7 +83,7 @@ const PLANS = [
     description: "Everything, plus AI that books while you groom.",
     color:       "violet",
     features: [
-      "Everything in Starter",
+      "Everything in Growth",
       "AI SMS booking bot",
       "Dedicated scheduling phone number",
       "Bot books, reschedules & cancels by text",
@@ -96,7 +96,7 @@ const PLANS = [
   },
 ];
 
-const TIER_ORDER = ["free", "basic", "starter", "pro"];
+const TIER_ORDER = ["free", "basic", "growth", "pro"];
 
 export default function Upgrade() {
   const [searchParams] = useSearchParams();
@@ -218,7 +218,7 @@ export default function Upgrade() {
                 className={`rounded-2xl border-2 p-5 space-y-4 relative flex flex-col
                   ${borderColor}
                   ${isCurrentPlan ? "ring-2 ring-offset-1 ring-emerald-400" : ""}
-                  ${plan.key === "starter" ? "shadow-lg shadow-emerald-100" : ""}
+                  ${plan.key === "growth" ? "shadow-lg shadow-emerald-100" : ""}
                 `}
               >
                 {plan.badge && (

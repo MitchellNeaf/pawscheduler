@@ -1204,7 +1204,7 @@ function AccountInfoCard({ userId, planTier, onManageBilling }) {
   const planLabels = {
     free:    { label: "Free",    color: "bg-gray-100 text-gray-600" },
     basic:   { label: "Basic",   color: "bg-blue-100 text-blue-700" },
-    starter: { label: "Starter", color: "bg-emerald-100 text-emerald-700" },
+    growth: { label: "Growth", color: "bg-emerald-100 text-emerald-700" },
     pro:     { label: "Pro",     color: "bg-violet-100 text-violet-700" },
   };
 

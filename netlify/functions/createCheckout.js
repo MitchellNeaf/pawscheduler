@@ -4,8 +4,8 @@
  * Creates a Stripe Checkout session for PawScheduler subscriptions.
  *
  * Price IDs:
- *   Starter Monthly: price_1TPYnd1RxmPJHwWbqJYQub43  ($49.99/mo)
- *   Starter Yearly:  price_1TPYo91RxmPJHwWb5qSpBQcV  ($499.99/yr)
+ *   Growth Monthly: price_1TPYnd1RxmPJHwWbqJYQub43  ($49.99/mo)
+ *   Growth Yearly:  price_1TPYo91RxmPJHwWb5qSpBQcV  ($499.99/yr)
  *   Pro Monthly:     price_1TPYoh1RxmPJHwWbPV02049p  ($79.99/mo)
  *   Pro Yearly:      price_1TPYp11RxmPJHwWbHbkYTZwq  ($799.99/yr)
  */
@@ -21,8 +21,8 @@ const supabase = createClient(
 
 const PRICES = {
   basic_monthly:   "price_1TQX0t1RxmPJHwWbVt2rKvfr",
-  starter_monthly: "price_1TPYnd1RxmPJHwWbqJYQub43",
-  starter_yearly:  "price_1TPYo91RxmPJHwWb5qSpBQcV",
+  growth_monthly: "price_1TPYnd1RxmPJHwWbqJYQub43",
+  growth_yearly:  "price_1TPYo91RxmPJHwWb5qSpBQcV",
   pro_monthly:     "price_1TPYoh1RxmPJHwWbPV02049p",
   pro_yearly:      "price_1TPYp11RxmPJHwWbHbkYTZwq",
 };
@@ -47,13 +47,13 @@ exports.handler = async (event) => {
   let plan, billing;
   try {
     ({ plan, billing } = JSON.parse(event.body || "{}"));
-    // plan: "starter" | "pro"
+    // plan: "growth" | "pro"
     // billing: "monthly" | "yearly"
   } catch {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON" }) };
   }
 
-  const priceKey = `${plan || "starter"}_${billing || "monthly"}`;
+  const priceKey = `${plan || "growth"}_${billing || "monthly"}`;
   const priceId = PRICES[priceKey];
 
   if (!priceId) {
