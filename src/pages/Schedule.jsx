@@ -1764,6 +1764,11 @@ export default function Schedule() {
   const groupTotal = (group) =>
     group.reduce((sum, a) => sum + (a.amount || 0), 0);
 
+  // Count pending booking requests needing approval
+  const pendingRequests = groomer?.booking_requires_approval
+    ? appointments.filter(a => !a.confirmed && a.source === "booking_page")
+    : [];
+
   const unpaidToday =
     selectedDate === todayStr
       ? appointments.filter((appt) => {
@@ -1857,6 +1862,25 @@ export default function Schedule() {
             className="ml-1 text-xs font-bold px-3 py-1.5 rounded-full bg-white border border-current hover:opacity-80 transition whitespace-nowrap flex-shrink-0">
             Upgrade →
           </a>
+        </div>
+      )}
+
+      {/* Pending booking requests banner */}
+      {pendingRequests.length > 0 && (
+        <div className="mx-4 mt-3 rounded-xl px-4 py-3 flex items-center justify-between text-sm bg-amber-50 border border-amber-200 text-amber-800">
+          <span className="font-semibold">
+            📋 {pendingRequests.length} booking request{pendingRequests.length !== 1 ? "s" : ""} need{pendingRequests.length === 1 ? "s" : ""} your approval
+          </span>
+          <button
+            onClick={() => {
+              // Scroll to first pending appointment
+              const el = document.getElementById(`appt-${pendingRequests[0].id}`);
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+            className="ml-3 text-xs font-bold px-3 py-1.5 rounded-full bg-amber-100 border border-amber-300 hover:bg-amber-200 transition whitespace-nowrap"
+          >
+            Review →
+          </button>
         </div>
       )}
 

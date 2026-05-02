@@ -504,9 +504,11 @@ export default function BookPage() {
       // Check if groomer requires approval
       const { data: groomerCheck } = await supabase
         .from("groomers")
-        .select("booking_requires_approval")
+        .select("booking_requires_approval, email, full_name, business_name")
         .eq("id", groomerId)
         .single();
+
+      const isPending = groomerCheck?.booking_requires_approval || false;
 
       setSubmitted({
         pet: pets.find((p) => p.id === selectedPetId)?.name || "",
@@ -515,8 +517,37 @@ export default function BookPage() {
         services: form.services,
         duration: form.duration_min,
         amount: autoAmount,
-        pending: groomerCheck?.booking_requires_approval || false,
+        pending: isPending,
       });
+
+      // Notify groomer of new booking request
+      if (groomerCheck?.email) {
+        const petName = pets.find((p) => p.id === selectedPetId)?.name || "Unknown pet";
+        const [y, m, d] = form.date.split("-").map(Number);
+        const dateStr = new Date(y, m - 1, d).toLocaleDateString("en-US", {
+          weekday: "long", month: "long", day: "numeric"
+        });
+        fetch("/.netlify/functions/sendEmail", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: groomerCheck.email,
+            subject: isPending
+              ? `New booking request — ${petName} on ${form.date}`
+              : `New appointment booked — ${petName} on ${form.date}`,
+            template: isPending ? "booking_request" : "groomer_notification",
+            data: {
+              groomer_id: groomerId,
+              groomer_name: groomerCheck.business_name || groomerCheck.full_name || "there",
+              client_name: client?.full_name || "A client",
+              pet_name: petName,
+              date: dateStr,
+              time: form.time?.slice(0, 5),
+              services: form.services.join(", "),
+            }
+          })
+        }).catch(() => {});
+      }
       setView("home");
     }
 
