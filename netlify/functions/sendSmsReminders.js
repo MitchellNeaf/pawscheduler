@@ -1,6 +1,28 @@
 const fetch = require("node-fetch");
 const { createClient } = require("@supabase/supabase-js");
 
+// Send failure alert to admin
+async function alertAdmin(jobName, error) {
+  try {
+    await fetch("https://api.mailersend.com/v1/email", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.MAILERSEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: { email: "noreply@pawscheduler.app", name: "PawScheduler" },
+        to: [{ email: "pawscheduler@gmail.com" }],
+        subject: `⚠️ PawScheduler: ${jobName} failed`,
+        text: `The nightly job "${jobName}" failed at ${new Date().toISOString()}\n\nError: ${error?.message || String(error)}`,
+      }),
+    });
+  } catch (e) {
+    console.error("Failed to send admin alert:", e);
+  }
+}
+
+
 exports.handler = async (event) => {
   try {
     // -------------------------------------------------
@@ -161,6 +183,7 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: summary };
   } catch (err) {
     console.error("SMS Reminder Fatal Error:", err);
+    await alertAdmin("sendSmsReminders", err);
     return { statusCode: 500, body: err.message };
   }
 };

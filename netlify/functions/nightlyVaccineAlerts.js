@@ -28,6 +28,28 @@ const supabase = createClient(
 // Vaccines that trigger alerts
 const ALERT_SHOT_TYPES = ["Rabies", "Bordetella"];
 
+// Send failure alert to admin
+async function alertAdmin(jobName, error) {
+  try {
+    await fetch("https://api.mailersend.com/v1/email", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.MAILERSEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: { email: "noreply@pawscheduler.app", name: "PawScheduler" },
+        to: [{ email: "pawscheduler@gmail.com" }],
+        subject: `⚠️ PawScheduler: ${jobName} failed`,
+        text: `The nightly job "${jobName}" failed at ${new Date().toISOString()}\n\nError: ${error?.message || String(error)}`,
+      }),
+    });
+  } catch (e) {
+    console.error("Failed to send admin alert:", e);
+  }
+}
+
+
 // Format YYYY-MM-DD date string for display
 function fmtDate(dateStr) {
   if (!dateStr) return "soon";
@@ -77,6 +99,7 @@ exports.handler = async (event) => {
   if (secret !== process.env.CRON_SECRET) {
     return { statusCode: 401, body: "Unauthorized" };
   }
+  try {
   console.log("nightlyVaccineAlerts: starting run at", new Date().toISOString());
 
   const target30 = dateInDays(30);
@@ -189,4 +212,9 @@ exports.handler = async (event) => {
     statusCode: 200,
     body: JSON.stringify({ sent, skipped }),
   };
+  } catch (err) {
+    console.error("nightlyVaccineAlerts fatal error:", err);
+    await alertAdmin("nightlyVaccineAlerts", err);
+    return { statusCode: 500, body: err.message };
+  }
 };
