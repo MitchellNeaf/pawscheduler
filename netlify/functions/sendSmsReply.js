@@ -40,6 +40,16 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: "Missing toPhone or message" };
   }
 
+  // Message length limit — prevent runaway Telnyx costs
+  if (message.trim().length > 1600) {
+    return { statusCode: 400, body: "Message too long (max 1600 characters)" };
+  }
+
+  // Phone format basic validation
+  if (!/^\+?[1-9]\d{7,14}$/.test(toPhone.replace(/\s/g, ""))) {
+    return { statusCode: 400, body: "Invalid phone number format" };
+  }
+
   // Get groomer's SMS number (dedicated or shared)
   const { data: groomer } = await supabase
     .from("groomers")
@@ -59,8 +69,18 @@ exports.handler = async (event) => {
 
   const fromNumber = groomer.sms_number || process.env.TELNYX_PHONE_NUMBER;
 
-  console.log("Sending SMS from:", fromNumber, "to:", toPhone);
-  console.log("Groomer plan:", groomer.plan_tier);
+  // Security: verify toPhone belongs to one of this groomer's clients
+  const { data: clientCheck } = await supabase
+    .from("clients")
+    .select("id")
+    .eq("groomer_id", user.id)
+    .eq("phone", toPhone)
+    .single();
+
+  if (!clientCheck) {
+    console.error(`Groomer ${user.id} tried to text non-client number ${toPhone}`);
+    return { statusCode: 403, body: "Phone number not associated with your clients" };
+  }
 
   // Send via Telnyx
   const telnyxRes = await fetch("https://api.telnyx.com/v2/messages", {
@@ -77,9 +97,6 @@ exports.handler = async (event) => {
   });
 
   const telnyxBody = await telnyxRes.text();
-  console.log("Telnyx response status:", telnyxRes.status);
-  console.log("Telnyx response body:", telnyxBody);
-
   if (!telnyxRes.ok) {
     console.error("Telnyx send failed:", telnyxBody);
     return { statusCode: 500, body: "Failed to send message" };

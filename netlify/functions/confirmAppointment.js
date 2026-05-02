@@ -66,10 +66,10 @@ exports.handler = async (event) => {
     };
   }
 
-  // Mark confirmed
+  // Mark confirmed and invalidate token
   const { error: updateError } = await supabase
     .from("appointments")
-    .update({ confirmed: true })
+    .update({ confirmed: true, confirm_token: null })
     .eq("id", appt.id);
 
   if (updateError) {

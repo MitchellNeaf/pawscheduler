@@ -4,10 +4,41 @@
 // Handles STOP opt-outs
 
 const { createClient } = require("@supabase/supabase-js");
+const crypto = require("crypto");
+
+// Verify Telnyx webhook signature using Ed25519
+function verifyTelnyxSignature(payload, signature, timestamp, publicKey) {
+  try {
+    if (!signature || !timestamp || !publicKey) return false;
+    const message = `${timestamp}|${payload}`;
+    const sigBuffer = Buffer.from(signature, "base64");
+    const keyBuffer = Buffer.from(publicKey, "base64");
+    // Use Node crypto to verify Ed25519 signature
+    const key = crypto.createPublicKey({
+      key: keyBuffer,
+      format: "der",
+      type: "spki",
+    });
+    return crypto.verify(null, Buffer.from(message), key, sigBuffer);
+  } catch {
+    return false;
+  }
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method not allowed" };
+  }
+
+  // ── Verify Telnyx signature ──────────────────────────────
+  const telnyxPublicKey = process.env.TELNYX_PUBLIC_KEY;
+  if (telnyxPublicKey) {
+    const signature = event.headers["telnyx-signature-ed25519"];
+    const timestamp  = event.headers["telnyx-timestamp"];
+    if (!verifyTelnyxSignature(event.body, signature, timestamp, telnyxPublicKey)) {
+      console.error("Invalid Telnyx signature — rejecting webhook");
+      return { statusCode: 403, body: "Invalid signature" };
+    }
   }
 
   let payload;

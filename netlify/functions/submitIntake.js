@@ -51,6 +51,24 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "slug, client name and phone are required" }) };
   }
 
+  // Field length limits to prevent abuse
+  const limits = { full_name: 100, email: 200, street: 200, city: 100, state: 50, zip: 20 };
+  for (const [field, max] of Object.entries(limits)) {
+    if (clientData[field] && clientData[field].length > max) {
+      return { statusCode: 400, body: JSON.stringify({ error: `${field} is too long` }) };
+    }
+  }
+  if (petsData) {
+    for (const pet of (Array.isArray(petsData) ? petsData : [petsData])) {
+      if (pet?.notes?.length > 2000) {
+        return { statusCode: 400, body: JSON.stringify({ error: "Pet notes too long" }) };
+      }
+      if (pet?.name?.length > 100) {
+        return { statusCode: 400, body: JSON.stringify({ error: "Pet name too long" }) };
+      }
+    }
+  }
+
   // ── Load groomer ────────────────────────────────────────
   const { data: groomer, error: groomerErr } = await supabase
     .from("groomers")

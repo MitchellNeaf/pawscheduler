@@ -248,6 +248,7 @@ async function propagateSmsPreferenceToFutureAppointments({
     .from("appointments")
     .update(updatePayload)
     .in("pet_id", petIds)
+    .eq("groomer_id", groomerId)
     .gte("date", today);
 
   if (error) throw error;

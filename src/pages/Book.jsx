@@ -360,6 +360,12 @@ export default function BookPage() {
     e.preventDefault();
     setError("");
 
+    // Brute force protection
+    if (loginAttempts >= MAX_LOGIN_ATTEMPTS) {
+      setError("too_many_attempts");
+      return;
+    }
+
     const firstName = clientForm.name.trim().toLowerCase();
     const last4 = clientForm.last4.trim();
 
@@ -370,7 +376,10 @@ export default function BookPage() {
       .ilike("full_name", `${firstName}%`)
       .like("phone", `%${last4}`);
 
-    if (!matches?.length) return setError("not_found");
+    if (!matches?.length) {
+      setLoginAttempts(prev => prev + 1);
+      return setError("not_found");
+    }
 
     const matchedClient = matches[0];
     setClient(matchedClient);
@@ -558,7 +567,11 @@ export default function BookPage() {
      CANCEL APPOINTMENT
   -------------------------------------------- */
   const handleCancel = async (apptId) => {
-    if (!window.confirm("Are you sure you want to cancel this appointment?")) return;
+    if (!confirmCancel) {
+      setConfirmCancel(true);
+      return;
+    }
+    setConfirmCancel(false);
     setCancelling(apptId);
 
     // Grab the appt details before deleting so we can email the groomer
@@ -657,7 +670,12 @@ export default function BookPage() {
               className="border rounded px-2 py-1 w-full"
               maxLength={4} inputMode="numeric" required
             />
-            {error === "not_found" ? (
+            {error === "too_many_attempts" ? (
+              <div style={{ textAlign: "center", padding: "12px", background: "#fef2f2", borderRadius: 10, border: "1px solid #fecaca" }}>
+                <p style={{ color: "#dc2626", fontSize: "0.9rem", fontWeight: 600, marginBottom: 6 }}>Too many failed attempts.</p>
+                <p style={{ color: "#7f1d1d", fontSize: "0.8rem" }}>Please call us directly to book your appointment.</p>
+              </div>
+            ) : error === "not_found" ? (
               <div style={{ textAlign: "center", padding: "12px", background: "#fef2f2", borderRadius: 10, border: "1px solid #fecaca" }}>
                 <p style={{ color: "#dc2626", fontSize: "0.9rem", fontWeight: 600, marginBottom: 6 }}>We couldn't find your account.</p>
                 <p style={{ color: "#7f1d1d", fontSize: "0.8rem", marginBottom: 10 }}>Make sure your name and last 4 digits of your phone number match what's on file.</p>
@@ -959,6 +977,26 @@ export default function BookPage() {
             Cancellations must be made at least 24 hours in advance.
             To reschedule, cancel here and book a new time.
           </p>
+        </div>
+      )}
+
+      {/* Cancel confirmation modal */}
+      {confirmCancel && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, padding: 20 }}>
+          <div style={{ background: "white", borderRadius: 16, padding: 24, maxWidth: 320, width: "100%", textAlign: "center" }}>
+            <p style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 8 }}>Cancel appointment?</p>
+            <p style={{ fontSize: "0.85rem", color: "#6b7280", marginBottom: 20 }}>This cannot be undone.</p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button onClick={() => setConfirmCancel(false)}
+                style={{ flex: 1, padding: "10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", cursor: "pointer", fontWeight: 600 }}>
+                Keep it
+              </button>
+              <button onClick={handleCancelAppointment}
+                style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#dc2626", color: "white", cursor: "pointer", fontWeight: 700 }}>
+                Yes, cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
