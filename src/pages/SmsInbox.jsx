@@ -34,6 +34,9 @@ export default function SmsInbox() {
   const [loadingConvos, setLoadingConvos] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [search, setSearch] = useState("");
+  const [showClientPicker, setShowClientPicker] = useState(false);
+  const [clients, setClients] = useState([]);
+  const [clientSearch, setClientSearch] = useState("");
   const messagesEndRef = useRef(null);
   const replyRef = useRef(null);
   const [searchParams] = useSearchParams();
@@ -55,6 +58,22 @@ export default function SmsInbox() {
       setSelectedPhone(decodeURIComponent(phoneParam));
     }
   }, [searchParams, conversations, selectedPhone]);
+
+  // Load clients for new message picker
+  const loadClients = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("clients")
+      .select("id, full_name, phone")
+      .eq("groomer_id", user.id)
+      .not("phone", "is", null)
+      .order("full_name", { ascending: true });
+    if (data) setClients(data);
+  }, [user]);
+
+  useEffect(() => {
+    if (showClientPicker) loadClients();
+  }, [showClientPicker, loadClients]);
 
   // Load conversations
   const loadConversations = useCallback(async () => {
@@ -239,13 +258,22 @@ export default function SmsInbox() {
               )}
             </h1>
           </div>
-          <input
-            type="text"
-            placeholder="Search conversations…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-[var(--border-med)] bg-[var(--bg)] text-sm text-[var(--text-1)] placeholder:text-[var(--text-3)]"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Search conversations…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="flex-1 px-3 py-2 rounded-xl border border-[var(--border-med)] bg-[var(--bg)] text-sm text-[var(--text-1)] placeholder:text-[var(--text-3)]"
+            />
+            <button
+              onClick={() => { setShowClientPicker(true); setClientSearch(""); }}
+              className="px-3 py-2 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition whitespace-nowrap"
+              title="New message"
+            >
+              ✏️
+            </button>
+          </div>
         </div>
 
         {/* Conversation items */}
@@ -443,6 +471,62 @@ export default function SmsInbox() {
           </div>
         </div>
       )}
+      {/* Client picker modal for new message */}
+      {showClientPicker && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+          <div className="bg-[var(--surface)] rounded-2xl w-full max-w-sm max-h-[70vh] flex flex-col shadow-2xl">
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[var(--border-med)]">
+              <h3 className="font-bold text-[var(--text-1)]">New Message</h3>
+              <button onClick={() => setShowClientPicker(false)}
+                className="text-[var(--text-3)] hover:text-[var(--text-1)] text-xl leading-none">✕</button>
+            </div>
+            <div className="px-4 py-3 border-b border-[var(--border-med)]">
+              <input
+                type="text"
+                placeholder="Search clients…"
+                value={clientSearch}
+                onChange={e => setClientSearch(e.target.value)}
+                autoFocus
+                className="w-full px-3 py-2 rounded-xl border border-[var(--border-med)] bg-[var(--bg)] text-sm text-[var(--text-1)] placeholder:text-[var(--text-3)]"
+              />
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {clients
+                .filter(c => c.full_name?.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                  c.phone?.includes(clientSearch))
+                .map(client => (
+                  <button
+                    key={client.id}
+                    onClick={() => {
+                      setSelectedPhone(client.phone);
+                      setShowClientPicker(false);
+                      setClientSearch("");
+                      setTimeout(() => replyRef.current?.focus(), 100);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--surface-2)] transition border-b border-[var(--border-light)] text-left"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">
+                      {client.full_name?.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-sm text-[var(--text-1)]">{client.full_name}</div>
+                      <div className="text-xs text-[var(--text-3)]">{client.phone}</div>
+                    </div>
+                  </button>
+                ))}
+              {clients.filter(c =>
+                c.full_name?.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                c.phone?.includes(clientSearch)
+              ).length === 0 && (
+                <div className="p-6 text-center text-sm text-[var(--text-3)]">
+                  {clientSearch ? "No clients match your search" : "No clients with a phone number on file"}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }
