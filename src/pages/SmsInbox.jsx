@@ -264,7 +264,7 @@ export default function SmsInbox() {
               placeholder="Search conversations…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-xl border border-[var(--border-med)] bg-[var(--bg)] text-sm text-[var(--text-1)] placeholder:text-[var(--text-3)]"
+              className="flex-1 px-3 py-2 rounded-xl border border-[var(--border-med)] bg-white dark:bg-gray-800 text-sm text-[var(--text-1)] placeholder:text-[var(--text-3)] shadow-sm"
             />
             <button
               onClick={() => { setShowClientPicker(true); setClientSearch(""); }}
@@ -437,7 +437,7 @@ export default function SmsInbox() {
                 }}
                 onKeyDown={handleKeyDown}
                 placeholder="Type a message… (Enter to send)"
-                className="flex-1 resize-none px-3.5 py-2.5 rounded-xl border border-[var(--border-med)] bg-[var(--bg)] text-sm text-[var(--text-1)] placeholder:text-[var(--text-3)] focus:outline-none focus:border-emerald-400 overflow-hidden"
+                className="flex-1 resize-none px-3.5 py-2.5 rounded-xl border border-[var(--border-med)] bg-white dark:bg-gray-800 text-sm text-[var(--text-1)] placeholder:text-[var(--text-3)] focus:outline-none focus:border-emerald-400 overflow-hidden shadow-sm"
                 style={{ minHeight: "42px" }}
               />
               <button
