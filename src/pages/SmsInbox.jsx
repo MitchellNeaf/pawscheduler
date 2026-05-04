@@ -54,7 +54,7 @@ export default function SmsInbox() {
     if (phoneParam && !selectedPhone) {
       setSelectedPhone(decodeURIComponent(phoneParam));
     }
-  }, [searchParams, conversations]);
+  }, [searchParams, conversations, selectedPhone]);
 
   // Load conversations
   const loadConversations = useCallback(async () => {
