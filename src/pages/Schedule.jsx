@@ -2460,7 +2460,7 @@ export default function Schedule() {
 
                     {/* Contact buttons */}
                     <div className="flex flex-wrap gap-2 text-xs sm:text-sm">
-                      {appt.pets?.clients?.phone && (
+                      {appt.pets?.clients?.phone ? (
                         <>
                           <a
                             href={`tel:${appt.pets.clients.phone}`}
@@ -2477,7 +2477,23 @@ export default function Schedule() {
                           >
                             💬 Text
                           </a>
+
+                          {/* Inbox button — Growth+ only, navigates to inbox with client pre-selected */}
+                          {(planTier === "growth" || planTier === "pro") && (
+                            <a
+                              href={`/inbox?phone=${encodeURIComponent(appt.pets.clients.phone)}`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="px-2 py-1 border border-emerald-300 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 flex items-center gap-1 font-semibold transition"
+                            >
+                              📥 Inbox
+                            </a>
+                          )}
                         </>
+                      ) : (
+                        /* No phone saved */
+                        <span className="px-2 py-1 text-xs text-[var(--text-3)] border border-dashed border-gray-200 rounded">
+                          No phone on file
+                        </span>
                       )}
 
                       {appt.pets?.clients?.street &&

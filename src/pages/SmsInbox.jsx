@@ -2,6 +2,7 @@
 // Two-way SMS inbox for groomer ↔ client messaging
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabase";
 
 const POLL_INTERVAL = 10000; // poll every 10s for new messages
@@ -35,6 +36,7 @@ export default function SmsInbox() {
   const [search, setSearch] = useState("");
   const messagesEndRef = useRef(null);
   const replyRef = useRef(null);
+  const [searchParams] = useSearchParams();
 
   // Load user + plan
   useEffect(() => {
@@ -45,6 +47,14 @@ export default function SmsInbox() {
         .then(({ data: g }) => { if (g?.plan_tier) setPlanTier(g.plan_tier); });
     });
   }, []);
+
+  // Auto-select conversation from URL param (?phone=...)
+  useEffect(() => {
+    const phoneParam = searchParams.get("phone");
+    if (phoneParam && !selectedPhone) {
+      setSelectedPhone(decodeURIComponent(phoneParam));
+    }
+  }, [searchParams, conversations]);
 
   // Load conversations
   const loadConversations = useCallback(async () => {
@@ -177,6 +187,9 @@ export default function SmsInbox() {
   };
 
   const selectedConvo = conversations.find(c => c.client_phone === selectedPhone);
+  // If phone came from URL but no conversation exists yet, still show the thread
+  const phoneFromUrl = searchParams.get("phone");
+  const isNewConversation = selectedPhone && !selectedConvo && selectedPhone === decodeURIComponent(phoneFromUrl || "");
   const filteredConvos = conversations.filter(c => {
     const q = search.toLowerCase();
     return (
@@ -321,6 +334,7 @@ export default function SmsInbox() {
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-[var(--text-1)] text-sm truncate">
                 {selectedConvo?.client_name || selectedPhone}
+                {isNewConversation && <span className="ml-2 text-xs font-normal text-amber-600">New conversation</span>}
               </div>
               <div className="text-xs text-[var(--text-3)]">{selectedPhone}</div>
             </div>
@@ -343,8 +357,9 @@ export default function SmsInbox() {
               </div>
             ) : messages.length === 0 ? (
               <div className="flex items-center justify-center h-full">
-                <div className="text-sm text-[var(--text-3)] text-center">
-                  No messages yet. Send one below to start the conversation.
+                <div className="text-sm text-[var(--text-3)] text-center space-y-1">
+                  <div>{isNewConversation ? "No messages yet with this client." : "No messages yet."}</div>
+                  <div>Send one below to start the conversation.</div>
                 </div>
               </div>
             ) : (
