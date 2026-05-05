@@ -796,12 +796,20 @@ function AppointmentModal({
               className="border rounded px-2 py-1 min-h-[60px]" />
           </label>
 
-          {/* Payment Method */}
+          {/* Payment Method — selecting one auto-marks as paid */}
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">Payment Method</span>
             <select
               value={form.payment_method || ""}
-              onChange={(e) => setForm((prev) => ({ ...prev, payment_method: e.target.value }))}
+              onChange={(e) => {
+                const method = e.target.value;
+                setForm((prev) => ({
+                  ...prev,
+                  payment_method: method,
+                  // Auto-mark paid when a method is selected, unmark when cleared
+                  paid: method ? true : prev.paid,
+                }));
+              }}
               className="border rounded px-3 py-2 text-sm bg-white"
             >
               <option value="">Not recorded</option>
@@ -813,6 +821,9 @@ function AppointmentModal({
               <option value="check">Check</option>
               <option value="other">Other</option>
             </select>
+            {form.payment_method && (
+              <p className="text-xs text-emerald-600 font-medium">✓ Appointment will be marked as paid</p>
+            )}
           </label>
 
           {/* Reminder toggle */}
@@ -1534,6 +1545,7 @@ export default function Schedule() {
       amount: appt.amount ?? null,
       reminder_enabled: appt.reminder_enabled ?? false,
       payment_method: appt.payment_method || "",
+      paid: appt.paid ?? false,
     });
 
     setEditModalOpen(true);
@@ -1564,7 +1576,8 @@ export default function Schedule() {
         notes: editForm.notes,
         amount: editForm.amount ?? null,
         reminder_enabled: editForm.reminder_enabled,
-      payment_method: editForm.payment_method || null,
+        payment_method: editForm.payment_method || null,
+        paid: editForm.paid ?? false,
         reminder_sent: false,
         slot_weight: editAppt.slot_weight || 1,
       })
@@ -1573,6 +1586,7 @@ export default function Schedule() {
       .select(`
         id, pet_id, groomer_id, date, time, duration_min, slot_weight,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled, appointment_group_id,
+        payment_method, checked_in_at, checked_out_at, source,
         pets ( id, name, tags, client_id, clients ( id, full_name, phone, email ) )
       `)
       .single();
@@ -2481,7 +2495,7 @@ export default function Schedule() {
                           {/* Inbox button — Growth+ only, navigates to inbox with client pre-selected */}
                           {(planTier === "growth" || planTier === "pro") && (
                             <a
-                              href={`/inbox?phone=${encodeURIComponent(appt.pets.clients.phone)}`}
+                              href={`/inbox?phone=${encodeURIComponent(appt.pets.clients.phone)}&name=${encodeURIComponent(appt.pets.clients.full_name || "")}`}
                               onClick={(e) => e.stopPropagation()}
                               className="px-2 py-1 border border-emerald-300 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-700 flex items-center gap-1 font-semibold transition"
                             >

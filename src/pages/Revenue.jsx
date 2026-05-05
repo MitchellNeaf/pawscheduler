@@ -2,7 +2,14 @@ import { useEffect, useState, useMemo } from "react";
 import { supabase } from "../supabase";
 import { Link } from "react-router-dom";
 import Loader from "../components/Loader";
-import { normalizeServiceName as normalizeSvc } from "../utils/grooming";
+
+/* ── legacy service name normalization ── */
+const LEGACY_SERVICE_MAP = {
+  "Wash": "Bath", "Cut": "Full Groom", "Nail Trim": "Nails",
+  "Teeth Cleaning": "Teeth", "Deshedding": "Deshed",
+  "Bath Only": "Bath", "Ear Cleaning": "Other", "Tick Treatment": "Other",
+};
+const normalizeSvc = (s) => LEGACY_SERVICE_MAP[s] || s;
 
 /* ── quick period helpers ── */
 const toYMD = (d) => d.toISOString().slice(0, 10);
@@ -82,20 +89,14 @@ export default function Revenue() {
   const [startDate, setStartDate]         = useState(null);
   const [endDate, setEndDate]             = useState(null);
   const [includeUnpaid, setIncludeUnpaid] = useState(false);
+  const [paymentMethodFilter, setPaymentMethodFilter] = useState("all");
   const [activePeriod, setActivePeriod]   = useState("This Month");
 
   const [sortCol, setSortCol] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
-  const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user || null);
-      if (data.user) {
-        supabase.from("groomers").select("plan_tier").eq("id", data.user.id).single()
-          .then(({ data: g }) => { if (g?.plan_tier) setPlanTier(g.plan_tier); });
-      }
-    });
+    supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
 
   useEffect(() => {
@@ -104,7 +105,7 @@ export default function Revenue() {
       const { data } = await supabase
         .from("appointments")
         .select(`
-          id, date, time, amount, paid, no_show, services,
+          id, date, time, amount, paid, no_show, services, payment_method,
           pets ( name, clients ( full_name ) )
         `)
         .eq("groomer_id", user.id)
@@ -132,13 +133,13 @@ export default function Revenue() {
 
   /* ── derived ── */
   const filtered = useMemo(() => appointments.filter((a) => {
-    // Use string comparison to avoid UTC offset issues and correctly
-    // include appointments ON the end date (not just before it).
-    if (startDate && a.date < startDate) return false;
-    if (endDate   && a.date > endDate)   return false;
-    if (!includeUnpaid && !a.paid)       return false;
+    const d = new Date(a.date);
+    if (startDate && d < new Date(startDate)) return false;
+    if (endDate   && d > new Date(endDate))   return false;
+    if (!includeUnpaid && !a.paid)             return false;
+    if (paymentMethodFilter !== "all" && a.payment_method !== paymentMethodFilter) return false;
     return true;
-  }), [appointments, startDate, endDate, includeUnpaid]);
+  }), [appointments, startDate, endDate, includeUnpaid, paymentMethodFilter]);
 
   const paidOnly = useMemo(() => filtered.filter((a) => a.paid), [filtered]);
 
@@ -146,6 +147,22 @@ export default function Revenue() {
   const apptCount    = filtered.length;
   const avgPerAppt   = paidOnly.length ? totalRevenue / paidOnly.length : 0;
   const unpaidCount  = filtered.filter((a) => !a.paid && !a.no_show).length;
+
+  // Payment method breakdown
+  const paymentBreakdown = useMemo(() => {
+    const breakdown = {};
+    paidOnly.forEach(a => {
+      const method = a.payment_method || "unrecorded";
+      breakdown[method] = (breakdown[method] || 0) + (a.amount || 0);
+    });
+    return breakdown;
+  }, [paidOnly]);
+
+  const PAYMENT_LABELS = {
+    cash: "Cash", card: "Card", cashapp: "Cash App",
+    venmo: "Venmo", zelle: "Zelle", check: "Check",
+    other: "Other", unrecorded: "Not Recorded"
+  };
 
   const noShowLoss = useMemo(() =>
     appointments.filter((a) => a.no_show).reduce((s, a) => s + (a.amount || 0), 0),
@@ -221,39 +238,6 @@ export default function Revenue() {
 
   if (loading) return <main className="p-6 space-y-6"><Loader /><Loader /></main>;
 
-  if (planTier === "free") return (
-    <main className="px-4 py-6 max-w-4xl mx-auto">
-      <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-10 text-center space-y-4">
-        <div className="text-5xl">📊</div>
-        <h2 className="text-xl font-bold text-[var(--text-1)]">Revenue tracking requires Basic or higher</h2>
-        <p className="text-sm text-[var(--text-2)] max-w-md mx-auto">
-          See your total revenue, monthly trends, service breakdowns, paid vs. unpaid, and full appointment history.
-        </p>
-        <div className="flex flex-col sm:flex-row gap-3 justify-center mt-4">
-          <a href="/upgrade"
-            className="px-6 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
-            Upgrade to Basic — $9.99/mo →
-          </a>
-          <a href="/upgrade"
-            className="px-6 py-3 rounded-xl border border-[var(--border-med)] text-[var(--text-2)] font-semibold text-sm hover:bg-[var(--surface-2)] transition">
-            See all plans
-          </a>
-        </div>
-        {/* Blurred preview */}
-        <div className="mt-8 rounded-xl overflow-hidden border border-[var(--border-med)] select-none pointer-events-none" style={{filter:"blur(4px)", opacity:0.4}}>
-          <div className="bg-[var(--surface)] p-4 grid grid-cols-3 gap-3">
-            {["$2,840.00", "$94.67", "30 appts"].map((v, i) => (
-              <div key={i} className="rounded-xl bg-[var(--bg)] p-4 text-center">
-                <div className="text-xl font-black text-[var(--text-1)]">{v}</div>
-                <div className="text-xs text-[var(--text-3)] mt-1">{["Total Revenue", "Avg per Appt", "This Month"][i]}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </main>
-  );
-
   return (
     <main className="px-4 py-6 max-w-4xl mx-auto space-y-6">
 
@@ -302,6 +286,22 @@ export default function Revenue() {
               color: "var(--text-1)" }}
           />
         </div>
+      </div>
+
+      {/* Payment method filter */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-sm font-semibold text-[var(--text-2)]">Payment:</span>
+        {["all", "cash", "card", "cashapp", "venmo", "zelle", "check", "other", "unrecorded"].map(method => (
+          <button key={method}
+            onClick={() => setPaymentMethodFilter(method)}
+            className={`text-xs px-3 py-1.5 rounded-full border font-semibold transition
+              ${paymentMethodFilter === method
+                ? "bg-emerald-600 text-white border-emerald-600"
+                : "bg-[var(--surface)] text-[var(--text-2)] border-[var(--border-med)] hover:border-emerald-400"
+              }`}>
+            {method === "all" ? "All" : method === "cashapp" ? "Cash App" : method === "unrecorded" ? "Not Recorded" : method.charAt(0).toUpperCase() + method.slice(1)}
+          </button>
+        ))}
       </div>
 
       {/* Include unpaid toggle */}
@@ -375,6 +375,36 @@ export default function Revenue() {
           </div>
         </div>
       )}
+
+      {/* Revenue by payment method */}
+      <div className="card">
+        <div className="card-body">
+          <h3 className="font-bold text-[var(--text-1)] mb-3">Revenue by Payment Method</h3>
+          {Object.keys(paymentBreakdown).length === 0 ? (
+            <p className="text-sm text-[var(--text-3)]">No payment methods recorded yet.</p>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(paymentBreakdown)
+                .sort((a, b) => b[1] - a[1])
+                .map(([method, total]) => {
+                  const pct = totalRevenue > 0 ? Math.round((total / totalRevenue) * 100) : 0;
+                  const label = PAYMENT_LABELS[method] || method;
+                  return (
+                    <div key={method}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="font-medium text-[var(--text-1)]">{label}</span>
+                        <span className="text-[var(--text-2)]">${total.toFixed(2)} <span className="text-[var(--text-3)]">({pct}%)</span></span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Revenue by service */}
       {revenueByService.length > 0 && (
@@ -504,6 +534,7 @@ export default function Revenue() {
           </div>
         )}
       </div>
+
     </main>
   );
 }

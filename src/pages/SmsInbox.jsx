@@ -206,9 +206,12 @@ export default function SmsInbox() {
   };
 
   const selectedConvo = conversations.find(c => c.client_phone === selectedPhone);
-  // If phone came from URL but no conversation exists yet, still show the thread
+  // If phone came from URL but no conversation exists yet, use URL params for display
   const phoneFromUrl = searchParams.get("phone");
+  const nameFromUrl = searchParams.get("name") ? decodeURIComponent(searchParams.get("name")) : null;
   const isNewConversation = selectedPhone && !selectedConvo && selectedPhone === decodeURIComponent(phoneFromUrl || "");
+  // Display name — prefer conversation record, fall back to URL param, then phone number
+  const displayName = selectedConvo?.client_name || nameFromUrl || selectedPhone;
   const filteredConvos = conversations.filter(c => {
     const q = search.toLowerCase();
     return (
@@ -240,14 +243,14 @@ export default function SmsInbox() {
   }
 
   return (
-    <main className="flex h-[calc(100vh-56px)] bg-[var(--bg)] overflow-hidden">
+    <main className="flex h-[calc(100vh-56px)] bg-gray-100 overflow-hidden">
 
       {/* ── Conversation list ── */}
-      <div className={`flex flex-col border-r border-[var(--border-med)] bg-[var(--surface)]
+      <div className={`flex flex-col border-r border-gray-200 bg-white
         ${selectedPhone ? "hidden md:flex" : "flex"} w-full md:w-80 lg:w-96 flex-shrink-0`}>
 
         {/* Header */}
-        <div className="px-4 pt-4 pb-3 border-b border-[var(--border-med)]">
+        <div className="px-4 pt-4 pb-3 border-b border-gray-200 bg-white">
           <div className="flex items-center justify-between mb-3">
             <h1 className="text-lg font-bold text-[var(--text-1)]">
               Messages
@@ -277,7 +280,7 @@ export default function SmsInbox() {
         </div>
 
         {/* Conversation items */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto bg-white">
           {loadingConvos ? (
             <div className="p-4 space-y-3">
               {[1,2,3].map(i => (
@@ -305,8 +308,8 @@ export default function SmsInbox() {
                 <button
                   key={convo.client_phone}
                   onClick={() => handleSelectConvo(convo.client_phone)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition hover:bg-[var(--surface-2)] border-b border-[var(--border-light)]
-                    ${isSelected ? "bg-emerald-50 border-l-2 border-l-emerald-500" : ""}`}
+                  className={`w-full flex items-center gap-3 px-4 py-3 text-left transition hover:bg-gray-50 border-b border-gray-100
+                    ${isSelected ? "bg-emerald-50 border-l-2 border-l-emerald-500" : "bg-white"}`}
                 >
                   {/* Avatar */}
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0
@@ -347,7 +350,7 @@ export default function SmsInbox() {
         <div className="flex flex-col flex-1 min-w-0">
 
           {/* Thread header */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--border-med)] bg-[var(--surface)]">
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 bg-white">
             <button
               onClick={() => setSelectedPhone(null)}
               className="md:hidden p-1.5 rounded-lg hover:bg-[var(--surface-2)] text-[var(--text-2)]"
@@ -356,12 +359,12 @@ export default function SmsInbox() {
             </button>
 
             <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-sm flex-shrink-0">
-              {(selectedConvo?.client_name || selectedPhone).split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
+              {displayName.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}
             </div>
 
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-[var(--text-1)] text-sm truncate">
-                {selectedConvo?.client_name || selectedPhone}
+                {displayName}
                 {isNewConversation && <span className="ml-2 text-xs font-normal text-amber-600">New conversation</span>}
               </div>
               <div className="text-xs text-[var(--text-3)]">{selectedPhone}</div>
@@ -423,7 +426,7 @@ export default function SmsInbox() {
           </div>
 
           {/* Reply box */}
-          <div className="px-4 py-3 border-t border-[var(--border-med)] bg-[var(--surface)]">
+          <div className="px-4 py-3 border-t border-gray-200 bg-white">
             <div className="flex items-end gap-2">
               <textarea
                 ref={replyRef}
@@ -461,7 +464,7 @@ export default function SmsInbox() {
         </div>
       ) : (
         /* Empty state on desktop */
-        <div className="hidden md:flex flex-1 items-center justify-center">
+        <div className="hidden md:flex flex-1 items-center justify-center bg-gray-50">
           <div className="text-center space-y-3 max-w-sm">
             <div className="text-5xl">💬</div>
             <h3 className="font-semibold text-[var(--text-1)]">Select a conversation</h3>
@@ -474,23 +477,23 @@ export default function SmsInbox() {
       {/* Client picker modal for new message */}
       {showClientPicker && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="bg-[var(--surface)] rounded-2xl w-full max-w-sm max-h-[70vh] flex flex-col shadow-2xl">
-            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-[var(--border-med)]">
+          <div className="bg-white rounded-2xl w-full max-w-sm max-h-[70vh] flex flex-col shadow-2xl border border-gray-200">
+            <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-gray-200 bg-white rounded-t-2xl">
               <h3 className="font-bold text-[var(--text-1)]">New Message</h3>
               <button onClick={() => setShowClientPicker(false)}
                 className="text-[var(--text-3)] hover:text-[var(--text-1)] text-xl leading-none">✕</button>
             </div>
-            <div className="px-4 py-3 border-b border-[var(--border-med)]">
+            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
               <input
                 type="text"
                 placeholder="Search clients…"
                 value={clientSearch}
                 onChange={e => setClientSearch(e.target.value)}
                 autoFocus
-                className="w-full px-3 py-2 rounded-xl border border-[var(--border-med)] bg-[var(--bg)] text-sm text-[var(--text-1)] placeholder:text-[var(--text-3)]"
+                className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-sm text-gray-900 placeholder:text-gray-400 shadow-sm"
               />
             </div>
-            <div className="overflow-y-auto flex-1">
+            <div className="overflow-y-auto flex-1 bg-white">
               {clients
                 .filter(c => c.full_name?.toLowerCase().includes(clientSearch.toLowerCase()) ||
                   c.phone?.includes(clientSearch))
@@ -503,7 +506,7 @@ export default function SmsInbox() {
                       setClientSearch("");
                       setTimeout(() => replyRef.current?.focus(), 100);
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--surface-2)] transition border-b border-[var(--border-light)] text-left"
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition border-b border-gray-100 text-left"
                   >
                     <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 font-bold text-sm flex items-center justify-center flex-shrink-0">
                       {client.full_name?.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
