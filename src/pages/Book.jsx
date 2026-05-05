@@ -140,7 +140,7 @@ export default function BookPage() {
           setPricing({ ...DEFAULT_PRICING, ...data.service_pricing });
         }
       } else {
-        setError("Booking page not found.");
+        setError("booking_page_not_found");
       }
     })();
 
@@ -630,9 +630,13 @@ export default function BookPage() {
      RENDER
 -------------------------------------------- */
 
-  if (error)
-    return <main className="p-4 text-center text-red-600">{error}</main>;
-
+  if (error === "booking_page_not_found") {
+    return (
+      <main className="p-4 text-center text-red-600">
+        Booking page not found.
+      </main>
+    );
+  }
   if (!groomerId)
     return <main className="p-4 text-center">Loading booking page…</main>;
 
