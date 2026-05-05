@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { supabase } from "../supabase";
 import { createClient } from "@supabase/supabase-js";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
@@ -372,7 +371,7 @@ export default function BookPage() {
     const firstName = clientForm.name.trim().toLowerCase();
     const last4 = clientForm.last4.trim();
 
-    const { data: candidates, error: qErr } = await anonSupabase
+    const { data: candidates } = await anonSupabase
       .from("clients")
       .select("*")
       .eq("groomer_id", groomerId)
