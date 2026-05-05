@@ -107,10 +107,6 @@ export default function BookPage() {
   const [submitted, setSubmitted] = useState(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [loginAttempts, setLoginAttempts] = useState(0);
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const [cancelTargetId, setCancelTargetId] = useState(null);
-  const MAX_LOGIN_ATTEMPTS = 5;
 
   const [unavailable, setUnavailable] = useState([]);
   const [workingRange, setWorkingRange] = useState([]);
@@ -140,7 +136,7 @@ export default function BookPage() {
           setPricing({ ...DEFAULT_PRICING, ...data.service_pricing });
         }
       } else {
-        setError("booking_page_not_found");
+        setError("Booking page not found.");
       }
     })();
 
@@ -364,31 +360,21 @@ export default function BookPage() {
     e.preventDefault();
     setError("");
 
-    // Brute force protection
-    if (loginAttempts >= MAX_LOGIN_ATTEMPTS) {
-      setError("too_many_attempts");
-      return;
-    }
-
     const firstName = clientForm.name.trim().toLowerCase();
     const last4 = clientForm.last4.trim();
 
-    const normalizePhone = (value = "") => value.replace(/\D/g, "");
+    console.log("DEBUG login:", { firstName, last4, groomerId });
 
-    const { data: candidates } = await supabase
+    const { data: matches, error: qErr } = await supabase
       .from("clients")
       .select("*")
       .eq("groomer_id", groomerId)
-      .ilike("full_name", `${firstName}%`);
+      .ilike("full_name", `${firstName}%`)
+      .like("phone", `%${last4}`);
 
-    const matches = (candidates || []).filter((c) =>
-      normalizePhone(c.phone).slice(-4) === last4
-    );
+    console.log("DEBUG matches:", matches, "error:", qErr);
 
-    if (!matches?.length) {
-      setLoginAttempts(prev => prev + 1);
-      return setError("not_found");
-    }
+    if (!matches?.length) return setError("Client not found.");
 
     const matchedClient = matches[0];
     setClient(matchedClient);
@@ -490,7 +476,6 @@ export default function BookPage() {
         paid: false,
         notes: form.notes || "",
         slot_weight: slotWeight,
-        source: "booking_page",
       },
     ]);
 
@@ -519,15 +504,6 @@ export default function BookPage() {
         }).catch(() => {}); // don't block on email failure
       }
 
-      // Check if groomer requires approval
-      const { data: groomerCheck } = await supabase
-        .from("groomers")
-        .select("booking_requires_approval, email, full_name, business_name")
-        .eq("id", groomerId)
-        .single();
-
-      const isPending = groomerCheck?.booking_requires_approval || false;
-
       setSubmitted({
         pet: pets.find((p) => p.id === selectedPetId)?.name || "",
         date: form.date,
@@ -535,37 +511,7 @@ export default function BookPage() {
         services: form.services,
         duration: form.duration_min,
         amount: autoAmount,
-        pending: isPending,
       });
-
-      // Notify groomer of new booking request
-      if (groomerCheck?.email) {
-        const petName = pets.find((p) => p.id === selectedPetId)?.name || "Unknown pet";
-        const [y, m, d] = form.date.split("-").map(Number);
-        const dateStr = new Date(y, m - 1, d).toLocaleDateString("en-US", {
-          weekday: "long", month: "long", day: "numeric"
-        });
-        fetch("/.netlify/functions/sendEmail", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: groomerCheck.email,
-            subject: isPending
-              ? `New booking request — ${petName} on ${form.date}`
-              : `New appointment booked — ${petName} on ${form.date}`,
-            template: isPending ? "booking_request" : "groomer_notification",
-            data: {
-              groomer_id: groomerId,
-              groomer_name: groomerCheck.business_name || groomerCheck.full_name || "there",
-              client_name: client?.full_name || "A client",
-              pet_name: petName,
-              date: dateStr,
-              time: form.time?.slice(0, 5),
-              services: form.services.join(", "),
-            }
-          })
-        }).catch(() => {});
-      }
       setView("home");
     }
 
@@ -576,12 +522,7 @@ export default function BookPage() {
      CANCEL APPOINTMENT
   -------------------------------------------- */
   const handleCancel = async (apptId) => {
-    if (!confirmCancel) {
-      setCancelTargetId(apptId);
-      setConfirmCancel(true);
-      return;
-    }
-    setConfirmCancel(false);
+    if (!window.confirm("Are you sure you want to cancel this appointment?")) return;
     setCancelling(apptId);
 
     // Grab the appt details before deleting so we can email the groomer
@@ -630,13 +571,9 @@ export default function BookPage() {
      RENDER
 -------------------------------------------- */
 
-  if (error === "booking_page_not_found") {
-    return (
-      <main className="p-4 text-center text-red-600">
-        Booking page not found.
-      </main>
-    );
-  }
+  if (error)
+    return <main className="p-4 text-center text-red-600">{error}</main>;
+
   if (!groomerId)
     return <main className="p-4 text-center">Loading booking page…</main>;
 
@@ -684,30 +621,12 @@ export default function BookPage() {
               className="border rounded px-2 py-1 w-full"
               maxLength={4} inputMode="numeric" required
             />
-            {error === "too_many_attempts" ? (
-              <div style={{ textAlign: "center", padding: "12px", background: "#fef2f2", borderRadius: 10, border: "1px solid #fecaca" }}>
-                <p style={{ color: "#dc2626", fontSize: "0.9rem", fontWeight: 600, marginBottom: 6 }}>Too many failed attempts.</p>
-                <p style={{ color: "#7f1d1d", fontSize: "0.8rem" }}>Please call us directly to book your appointment.</p>
-              </div>
-            ) : error === "not_found" ? (
-              <div style={{ textAlign: "center", padding: "12px", background: "#fef2f2", borderRadius: 10, border: "1px solid #fecaca" }}>
-                <p style={{ color: "#dc2626", fontSize: "0.9rem", fontWeight: 600, marginBottom: 6 }}>We couldn't find your account.</p>
-                <p style={{ color: "#7f1d1d", fontSize: "0.8rem", marginBottom: 10 }}>Make sure your name and last 4 digits of your phone number match what's on file.</p>
-                <button type="button"
-                  onClick={() => setError(null)}
-                  style={{ padding: "8px 20px", borderRadius: 8, background: "#dc2626", color: "white", fontWeight: 700, border: "none", cursor: "pointer", fontSize: "0.85rem" }}>
-                  Try Again
-                </button>
-              </div>
-            ) : error ? (
-              <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{error}</p>
-            ) : null}
+            {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{error}</p>}
             <button type="submit"
-              style={{ marginTop: 8, padding: "14px", borderRadius: 12, width: "100%",
-                background: "#16a34a", color: "white", fontWeight: 800,
-                border: "none", cursor: "pointer", fontSize: "1rem",
-                boxShadow: "0 4px 14px rgba(22,163,74,0.35)", letterSpacing: "0.01em" }}>
-              Continue →
+              style={{ marginTop: 4, padding: "10px", borderRadius: 8,
+                background: "#10b981", color: "white", fontWeight: 700,
+                border: "none", cursor: "pointer", fontSize: "0.95rem" }}>
+              Continue
             </button>
           </form>
         </div>
@@ -723,18 +642,11 @@ export default function BookPage() {
           {/* Success banner after booking */}
           {submitted && (
             <div style={{ padding: "14px 16px", borderRadius: 12,
-              background: submitted.pending ? "#fffbeb" : "#ecfdf5",
-              border: submitted.pending ? "1px solid #fcd34d" : "1px solid #6ee7b7",
-              marginBottom: 4 }}>
-              <div style={{ fontWeight: 700, color: submitted.pending ? "#92400e" : "#065f46", marginBottom: 6 }}>
-                {submitted.pending ? "⏳ Request sent!" : "✅ Appointment booked!"}
+              background: "#ecfdf5", border: "1px solid #6ee7b7", marginBottom: 4 }}>
+              <div style={{ fontWeight: 700, color: "#065f46", marginBottom: 6 }}>
+                ✅ Appointment booked!
               </div>
-              {submitted.pending && (
-                <div style={{ fontSize: "0.83rem", color: "#78350f", marginBottom: 8, lineHeight: 1.6 }}>
-                  You'll receive a confirmation email once your groomer approves. If you don't hear back within 24 hours please call us directly.
-                </div>
-              )}
-              <div style={{ fontSize: "0.83rem", color: submitted.pending ? "#92400e" : "#064e3b", lineHeight: 1.6 }}>
+              <div style={{ fontSize: "0.83rem", color: "#064e3b", lineHeight: 1.6 }}>
                 <div><strong>Pet:</strong> {submitted.pet}</div>
                 <div><strong>Date:</strong> {submitted.date} at {fmtTime(submitted.time)}</div>
                 <div><strong>Services:</strong> {submitted.services.join(", ")}</div>
@@ -991,26 +903,6 @@ export default function BookPage() {
             Cancellations must be made at least 24 hours in advance.
             To reschedule, cancel here and book a new time.
           </p>
-        </div>
-      )}
-
-      {/* Cancel confirmation modal */}
-      {confirmCancel && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, padding: 20 }}>
-          <div style={{ background: "white", borderRadius: 16, padding: 24, maxWidth: 320, width: "100%", textAlign: "center" }}>
-            <p style={{ fontWeight: 700, fontSize: "1.05rem", marginBottom: 8 }}>Cancel appointment?</p>
-            <p style={{ fontSize: "0.85rem", color: "#6b7280", marginBottom: 20 }}>This cannot be undone.</p>
-            <div style={{ display: "flex", gap: 10 }}>
-              <button onClick={() => { setConfirmCancel(false); setCancelTargetId(null); }}
-                style={{ flex: 1, padding: "10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "white", cursor: "pointer", fontWeight: 600 }}>
-                Keep it
-              </button>
-              <button onClick={() => handleCancel(cancelTargetId)}
-                style={{ flex: 1, padding: "10px", borderRadius: 10, border: "none", background: "#dc2626", color: "white", cursor: "pointer", fontWeight: 700 }}>
-                Yes, cancel
-              </button>
-            </div>
-          </div>
         </div>
       )}
 
