@@ -373,12 +373,17 @@ export default function BookPage() {
     const firstName = clientForm.name.trim().toLowerCase();
     const last4 = clientForm.last4.trim();
 
-    const { data: matches } = await supabase
+    const normalizePhone = (value = "") => value.replace(/\D/g, "");
+
+    const { data: candidates } = await supabase
       .from("clients")
       .select("*")
       .eq("groomer_id", groomerId)
-      .ilike("full_name", `${firstName}%`)
-      .like("phone", `%${last4}`);
+      .ilike("full_name", `${firstName}%`);
+
+    const matches = (candidates || []).filter((c) =>
+      normalizePhone(c.phone).slice(-4) === last4
+    );
 
     if (!matches?.length) {
       setLoginAttempts(prev => prev + 1);
