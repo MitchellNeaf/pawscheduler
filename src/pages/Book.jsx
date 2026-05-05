@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../supabase";
+import { createClient } from "@supabase/supabase-js";
+
+// Separate anon client for booking page — no auth session so RLS anon policies apply
+// This lets clients look up their records without the groomer's session interfering
+const anonSupabase = createClient(
+  process.env.REACT_APP_SUPABASE_URL,
+  process.env.REACT_APP_SUPABASE_ANON_KEY,
+  { auth: { persistSession: false, autoRefreshToken: false } }
+);
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -122,7 +131,7 @@ export default function BookPage() {
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const { data, error: gErr } = await supabase
+      const { data, error: gErr } = await anonSupabase
         .from("groomers")
         .select("id, full_name, slug, logo_url, max_parallel, service_pricing")
         .eq("slug", slug)
@@ -152,7 +161,7 @@ export default function BookPage() {
     if (!groomerId) return;
 
     (async () => {
-      const { data } = await supabase
+      const { data } = await anonSupabase
         .from("vacation_days")
         .select("date")
         .eq("groomer_id", groomerId);
@@ -168,7 +177,7 @@ export default function BookPage() {
     if (!groomerId) return;
 
     (async () => {
-      const { data } = await supabase
+      const { data } = await anonSupabase
         .from("working_hours")
         .select("weekday")
         .eq("groomer_id", groomerId);
@@ -192,7 +201,7 @@ export default function BookPage() {
     const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 
     // Vacation
-    const { data: vacs } = await supabase
+    const { data: vacs } = await anonSupabase
       .from("vacation_days")
       .select("*")
       .eq("groomer_id", groomerId)
@@ -219,7 +228,7 @@ export default function BookPage() {
     }
 
     // Working hours
-    const { data: hours } = await supabase
+    const { data: hours } = await anonSupabase
       .from("working_hours")
       .select("*")
       .eq("groomer_id", groomerId)
@@ -238,7 +247,7 @@ export default function BookPage() {
     setWorkingRange(activeSlots);
 
     // Breaks
-    const { data: breaks } = await supabase
+    const { data: breaks } = await anonSupabase
       .from("working_breaks")
       .select("*")
       .eq("groomer_id", groomerId)
@@ -252,7 +261,7 @@ export default function BookPage() {
     });
 
     // Existing appts
-    const { data: appts } = await supabase
+    const { data: appts } = await anonSupabase
       .from("appointments")
       .select("time, duration_min, slot_weight")
       .eq("date", form.date)
@@ -363,23 +372,23 @@ export default function BookPage() {
     const firstName = clientForm.name.trim().toLowerCase();
     const last4 = clientForm.last4.trim();
 
-    console.log("DEBUG login:", { firstName, last4, groomerId });
-
-    const { data: matches, error: qErr } = await supabase
+    const { data: candidates, error: qErr } = await anonSupabase
       .from("clients")
       .select("*")
       .eq("groomer_id", groomerId)
-      .ilike("full_name", `${firstName}%`)
-      .like("phone", `%${last4}`);
+      .ilike("full_name", `${firstName}%`);
 
-    console.log("DEBUG matches:", matches, "error:", qErr);
+    const normalizePhone = (value = "") => value.replace(/\D/g, "");
+    const matches = (candidates || []).filter((c) =>
+      normalizePhone(c.phone || "").slice(-4) === last4.trim()
+    );
 
     if (!matches?.length) return setError("Client not found.");
 
     const matchedClient = matches[0];
     setClient(matchedClient);
 
-    const { data: petList } = await supabase
+    const { data: petList } = await anonSupabase
       .from("pets")
       .select("id, name, slot_weight")
       .eq("client_id", matchedClient.id)
@@ -398,7 +407,7 @@ export default function BookPage() {
 
     let appts = [];
     if (petIds.length > 0) {
-      const { data, error: apptErr } = await supabase
+      const { data, error: apptErr } = await anonSupabase
         .from("appointments")
         .select("id, date, time, duration_min, services, pets(name)")
         .eq("groomer_id", groomerId)
@@ -462,7 +471,7 @@ export default function BookPage() {
     const slotWeight = selectedPetWeight ?? 1;
     const autoAmount = calcAmount(form.services, slotWeight, pricing);
 
-    const { error } = await supabase.from("appointments").insert([
+    const { error } = await anonSupabase.from("appointments").insert([
       {
         groomer_id: groomerId,
         pet_id: selectedPetId,
@@ -528,7 +537,7 @@ export default function BookPage() {
     // Grab the appt details before deleting so we can email the groomer
     const appt = upcomingAppts.find((a) => a.id === apptId);
 
-    const { error } = await supabase
+    const { error } = await anonSupabase
       .from("appointments")
       .delete()
       .eq("id", apptId)
