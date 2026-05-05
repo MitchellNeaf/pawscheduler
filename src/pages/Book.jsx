@@ -4,8 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
-// Separate anon client for booking page — no auth session so RLS anon policies apply
-// This lets clients look up their records without the groomer's session interfering
+// Separate anon client — no auth session so groomer login doesn't interfere
 const anonSupabase = createClient(
   process.env.REACT_APP_SUPABASE_URL,
   process.env.REACT_APP_SUPABASE_ANON_KEY,
@@ -371,18 +370,14 @@ export default function BookPage() {
     const firstName = clientForm.name.trim().toLowerCase();
     const last4 = clientForm.last4.trim();
 
-    const { data: candidates } = await anonSupabase
+    const { data: matches } = await anonSupabase
       .from("clients")
       .select("*")
       .eq("groomer_id", groomerId)
-      .ilike("full_name", `${firstName}%`);
+      .ilike("full_name", `${firstName}%`)
+      .like("phone", `%${last4}`);
 
-    const normalizePhone = (value = "") => value.replace(/\D/g, "");
-    const matches = (candidates || []).filter((c) =>
-      normalizePhone(c.phone || "").slice(-4) === last4.trim()
-    );
-
-    if (!matches?.length) return setError("not_found");
+    if (!matches?.length) return setError("Client not found.");
 
     const matchedClient = matches[0];
     setClient(matchedClient);
@@ -579,8 +574,8 @@ export default function BookPage() {
      RENDER
 -------------------------------------------- */
 
-  if (error)
-    return <main className="p-4 text-center text-red-600">{error}</main>;
+  if (error === "Booking page not found.")
+    return <main className="p-4 text-center text-red-600">Booking page not found.</main>;
 
   if (!groomerId)
     return <main className="p-4 text-center">Loading booking page…</main>;
@@ -629,19 +624,7 @@ export default function BookPage() {
               className="border rounded px-2 py-1 w-full"
               maxLength={4} inputMode="numeric" required
             />
-            {error === "not_found" ? (
-              <div style={{ textAlign: "center", padding: "12px", background: "#fef2f2", borderRadius: 10, border: "1px solid #fecaca" }}>
-                <p style={{ color: "#dc2626", fontSize: "0.9rem", fontWeight: 600, marginBottom: 6 }}>We couldn't find your account.</p>
-                <p style={{ color: "#7f1d1d", fontSize: "0.8rem", marginBottom: 10 }}>Make sure your first name and last 4 digits of your phone number match what's on file.</p>
-                <button type="button"
-                  onClick={() => setError("")}
-                  style={{ padding: "8px 20px", borderRadius: 8, background: "#dc2626", color: "white", fontWeight: 700, border: "none", cursor: "pointer", fontSize: "0.85rem" }}>
-                  Try Again
-                </button>
-              </div>
-            ) : error ? (
-              <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{error}</p>
-            ) : null}
+            {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{error}</p>}
             <button type="submit"
               style={{ marginTop: 4, padding: "10px", borderRadius: 8,
                 background: "#10b981", color: "white", fontWeight: 700,
