@@ -382,7 +382,7 @@ export default function BookPage() {
       normalizePhone(c.phone || "").slice(-4) === last4.trim()
     );
 
-    if (!matches?.length) return setError("Client not found.");
+    if (!matches?.length) return setError("not_found");
 
     const matchedClient = matches[0];
     setClient(matchedClient);
@@ -629,7 +629,19 @@ export default function BookPage() {
               className="border rounded px-2 py-1 w-full"
               maxLength={4} inputMode="numeric" required
             />
-            {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{error}</p>}
+            {error === "not_found" ? (
+              <div style={{ textAlign: "center", padding: "12px", background: "#fef2f2", borderRadius: 10, border: "1px solid #fecaca" }}>
+                <p style={{ color: "#dc2626", fontSize: "0.9rem", fontWeight: 600, marginBottom: 6 }}>We couldn't find your account.</p>
+                <p style={{ color: "#7f1d1d", fontSize: "0.8rem", marginBottom: 10 }}>Make sure your first name and last 4 digits of your phone number match what's on file.</p>
+                <button type="button"
+                  onClick={() => setError("")}
+                  style={{ padding: "8px 20px", borderRadius: 8, background: "#dc2626", color: "white", fontWeight: 700, border: "none", cursor: "pointer", fontSize: "0.85rem" }}>
+                  Try Again
+                </button>
+              </div>
+            ) : error ? (
+              <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{error}</p>
+            ) : null}
             <button type="submit"
               style={{ marginTop: 4, padding: "10px", borderRadius: 8,
                 background: "#10b981", color: "white", fontWeight: 700,
