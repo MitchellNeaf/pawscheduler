@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../supabase";
 import { createClient } from "@supabase/supabase-js";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 // Separate anon client for booking page — no auth session so RLS anon policies apply
 // This lets clients look up their records without the groomer's session interfering
@@ -10,8 +12,6 @@ const anonSupabase = createClient(
   process.env.REACT_APP_SUPABASE_ANON_KEY,
   { auth: { persistSession: false, autoRefreshToken: false } }
 );
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
 
 /* --------------------------------------------
    TIME SLOTS
