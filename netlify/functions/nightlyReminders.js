@@ -13,7 +13,32 @@ function fillTemplate(template, data) {
   return output;
 }
 
-exports.handler = async () => {
+async function alertAdmin(jobName, error) {
+  try {
+    await fetch("https://api.mailersend.com/v1/email", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.MAILERSEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: { email: "noreply@pawscheduler.app", name: "PawScheduler" },
+        to: [{ email: "pawscheduler@gmail.com" }],
+        subject: `⚠️ PawScheduler: ${jobName} failed`,
+        text: `The nightly job "${jobName}" failed at ${new Date().toISOString()}\n\nError: ${error?.message || String(error)}`,
+      }),
+    });
+  } catch (e) {
+    console.error("Failed to send admin alert:", e);
+  }
+}
+
+exports.handler = async (event) => {
+  // ── Security ─────────────────────────────────────────
+  const secret = event.headers?.["x-cron-secret"] || event.headers?.["X-Cron-Secret"];
+  if (secret !== process.env.CRON_SECRET) {
+    return { statusCode: 401, body: "Unauthorized" };
+  }
   try {
     const supabase = createClient(
       process.env.SUPABASE_URL,
@@ -54,7 +79,8 @@ exports.handler = async () => {
       `)
       .eq("date", tomorrow)
       .eq("reminder_enabled", true)
-      .eq("reminder_sent", false);
+      .eq("reminder_sent", false)
+      .eq("confirmed", false);
 
     if (error) throw error;
 
@@ -135,6 +161,7 @@ exports.handler = async () => {
 
   } catch (err) {
     console.error("Nightly Reminders Error:", err);
+    await alertAdmin("nightlyReminders", err);
     return { statusCode: 500, body: err.message };
   }
 };
