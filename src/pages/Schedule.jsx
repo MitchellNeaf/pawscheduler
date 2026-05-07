@@ -1067,6 +1067,306 @@ function RebookWeekModal({ open, appt, onClose, onPickDate }) {
   );
 }
 
+/* ---------------- Day Action Modal (Month View) ---------------- */
+// Shown when a day cell is clicked in month view.
+// Options: Go to Day, Add Booking, Add Time Block.
+function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock }) {
+  const [mode, setMode] = useState(null); // null | "timeblock"
+  const [tbStart, setTbStart] = useState("08:00");
+  const [tbEnd, setTbEnd] = useState("09:00");
+  const [tbNote, setTbNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  if (!date) return null;
+
+  const [y, m, d] = date.split("-").map(Number);
+  const label = new Date(y, m - 1, d).toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric",
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="rounded-2xl shadow-2xl border border-[var(--border-med)] w-full max-w-sm overflow-hidden"
+        style={{ background: "var(--surface, #ffffff)", isolation: "isolate" }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
+          <h2 className="font-bold text-[var(--text-1)] text-sm">{label}</h2>
+          <button onClick={onClose} className="text-[var(--text-3)] hover:text-[var(--text-1)] text-lg leading-none">✕</button>
+        </div>
+
+        {mode === null && (
+          <div className="p-4 space-y-2">
+            <button
+              onClick={onGoToDay}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[var(--border-med)] bg-[var(--bg)] hover:bg-[var(--surface-raised,#f9fafb)] transition text-left"
+            >
+              <span className="text-xl">📅</span>
+              <div>
+                <div className="font-semibold text-sm text-[var(--text-1)]">Go to Day</div>
+                <div className="text-xs text-[var(--text-3)]">View and manage this day's schedule</div>
+              </div>
+            </button>
+
+            <button
+              onClick={onAddBooking}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition text-left"
+            >
+              <span className="text-xl">🐾</span>
+              <div>
+                <div className="font-semibold text-sm text-emerald-800">Add Booking</div>
+                <div className="text-xs text-emerald-600">Book a grooming appointment</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setMode("timeblock")}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition text-left"
+            >
+              <span className="text-xl">🚫</span>
+              <div>
+                <div className="font-semibold text-sm text-blue-800">Add Time Block</div>
+                <div className="text-xs text-blue-600">Block time off (appointment, errand, etc.)</div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {mode === "timeblock" && (
+          <div className="p-4 space-y-3">
+            <p className="text-xs text-[var(--text-3)] mb-1">Block time off on <strong>{label}</strong></p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-[var(--text-2)]">Start time</span>
+                <input
+                  type="time"
+                  value={tbStart}
+                  onChange={(e) => setTbStart(e.target.value)}
+                  className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-[var(--text-2)]">End time</span>
+                <input
+                  type="time"
+                  value={tbEnd}
+                  onChange={(e) => setTbEnd(e.target.value)}
+                  className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm"
+                />
+              </label>
+            </div>
+
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-[var(--text-2)]">Note (optional)</span>
+              <input
+                type="text"
+                value={tbNote}
+                onChange={(e) => setTbNote(e.target.value)}
+                placeholder="e.g. Vet appointment, lunch, etc."
+                className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm"
+              />
+            </label>
+
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => setMode(null)}
+                className="flex-1 py-2.5 rounded-xl border border-[var(--border-med)] text-sm font-semibold text-[var(--text-2)] hover:bg-[var(--bg)] transition"
+              >
+                ← Back
+              </button>
+              <button
+                onClick={() => onAddTimeBlock(date, tbStart, tbEnd, tbNote, setSaving)}
+                disabled={saving || !tbStart || !tbEnd || tbEnd <= tbStart}
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save Block"}
+              </button>
+            </div>
+
+            {tbEnd <= tbStart && (
+              <p className="text-xs text-red-500">End time must be after start time.</p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Month View Component ---------------- */
+function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffset }) {
+  const [monthAppts, setMonthAppts] = useState([]);
+  const [loadingMonth, setLoadingMonth] = useState(false);
+  const [vacationDays, setVacationDays] = useState([]);
+
+  // Compute displayed month from selectedDate + offset
+  const base = parseYMD(selectedDate);
+  const displayMonth = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1);
+  const year = displayMonth.getFullYear();
+  const month = displayMonth.getMonth(); // 0-indexed
+
+  const monthStart = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const monthEnd = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  useEffect(() => {
+    if (!userId) return;
+    setLoadingMonth(true);
+
+    Promise.all([
+      supabase
+        .from("appointments")
+        .select("id, date, time, pets(name, clients(full_name)), confirmed, no_show, paid")
+        .eq("groomer_id", userId)
+        .gte("date", monthStart)
+        .lte("date", monthEnd)
+        .order("time", { ascending: true }),
+      supabase
+        .from("vacation_days")
+        .select("id, date, start_time, end_time")
+        .eq("groomer_id", userId)
+        .gte("date", monthStart)
+        .lte("date", monthEnd),
+    ]).then(([{ data: appts }, { data: vacs }]) => {
+      setMonthAppts(appts || []);
+      setVacationDays(vacs || []);
+      setLoadingMonth(false);
+    });
+  }, [userId, monthStart, monthEnd]);
+
+  // Build day grid
+  const firstWeekday = new Date(year, month, 1).getDay(); // 0=Sun
+  const totalCells = firstWeekday + lastDay;
+  const rows = Math.ceil(totalCells / 7);
+  const cells = Array.from({ length: rows * 7 }, (_, i) => {
+    const dayNum = i - firstWeekday + 1;
+    return dayNum >= 1 && dayNum <= lastDay ? dayNum : null;
+  });
+
+  const todayStr = toYMD(new Date());
+
+  // Group appointments by date string
+  const apptsByDate = {};
+  (monthAppts || []).forEach((a) => {
+    if (!apptsByDate[a.date]) apptsByDate[a.date] = [];
+    apptsByDate[a.date].push(a);
+  });
+
+  const vacsByDate = {};
+  (vacationDays || []).forEach((v) => {
+    if (!vacsByDate[v.date]) vacsByDate[v.date] = [];
+    vacsByDate[v.date].push(v);
+  });
+
+  const monthLabel = displayMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+
+  return (
+    <div className="space-y-3">
+      {/* Month nav */}
+      <div className="flex items-center justify-between px-1">
+        <button
+          onClick={() => setMonthOffset((o) => o - 1)}
+          className="w-9 h-9 rounded-full border border-[var(--border-med)] bg-[var(--surface)] flex items-center justify-center text-[var(--text-2)] hover:bg-[var(--bg)] text-lg font-bold active:opacity-70"
+          aria-label="Previous month"
+        >‹</button>
+        <span className="font-bold text-[var(--text-1)] text-base">{monthLabel}</span>
+        <button
+          onClick={() => setMonthOffset((o) => o + 1)}
+          className="w-9 h-9 rounded-full border border-[var(--border-med)] bg-[var(--surface)] flex items-center justify-center text-[var(--text-2)] hover:bg-[var(--bg)] text-lg font-bold active:opacity-70"
+          aria-label="Next month"
+        >›</button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div className="grid grid-cols-7 text-center">
+        {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d) => (
+          <div key={d} className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wide py-1">{d}</div>
+        ))}
+      </div>
+
+      {loadingMonth ? (
+        <div className="flex items-center justify-center py-12 text-[var(--text-3)] text-sm">Loading…</div>
+      ) : (
+        <div className="grid grid-cols-7 border-t border-l border-[var(--border)]">
+          {cells.map((dayNum, idx) => {
+            if (!dayNum) {
+              return (
+                <div key={`empty-${idx}`} className="border-b border-r border-[var(--border)] bg-[var(--bg)] min-h-[72px] sm:min-h-[88px]" />
+              );
+            }
+
+            const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
+            const dayAppts = apptsByDate[dateStr] || [];
+            const dayVacs = vacsByDate[dateStr] || [];
+            const isToday = dateStr === todayStr;
+            const isSelected = dateStr === selectedDate;
+            const isPast = dateStr < todayStr;
+            const MAX_VISIBLE = 3;
+
+            return (
+              <div
+                key={dateStr}
+                onClick={() => onDayClick(dateStr)}
+                className={`border-b border-r border-[var(--border)] min-h-[72px] sm:min-h-[88px] p-1 cursor-pointer transition-colors select-none
+                  ${isToday ? "bg-emerald-50" : isPast ? "bg-[var(--bg)]" : "bg-[var(--surface)]"}
+                  hover:bg-emerald-50/60 active:bg-emerald-100/60
+                `}
+              >
+                {/* Day number */}
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full leading-none
+                    ${isToday ? "bg-emerald-500 text-white" : isSelected ? "bg-[var(--brand,#059669)] text-white" : "text-[var(--text-2)]"}
+                  `}>
+                    {dayNum}
+                  </span>
+                  {dayAppts.length > 0 && (
+                    <span className="text-[9px] font-bold text-[var(--text-3)]">{dayAppts.length}</span>
+                  )}
+                </div>
+
+                {/* Time block indicator */}
+                {dayVacs.length > 0 && (
+                  <div className="text-[9px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 mb-0.5 truncate leading-tight">
+                    🚫 Blocked
+                  </div>
+                )}
+
+                {/* Appointment chips */}
+                {dayAppts.slice(0, MAX_VISIBLE).map((a) => (
+                  <div
+                    key={a.id}
+                    className={`text-[9px] font-medium rounded px-1 py-0.5 mb-0.5 truncate leading-tight
+                      ${a.no_show ? "bg-gray-100 text-gray-500"
+                        : a.confirmed ? "bg-emerald-100 text-emerald-800"
+                        : "bg-amber-100 text-amber-800"}
+                    `}
+                  >
+                    {a.time?.slice(0,5)} {a.pets?.name || "—"}
+                  </div>
+                ))}
+
+                {dayAppts.length > MAX_VISIBLE && (
+                  <div className="text-[9px] text-[var(--text-3)] font-semibold px-1">
+                    +{dayAppts.length - MAX_VISIBLE} more
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 text-[10px] text-[var(--text-3)] px-1 pt-1">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-100 border border-emerald-300 inline-block" /> Confirmed</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-100 border border-amber-300 inline-block" /> Unconfirmed</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-blue-50 border border-blue-200 inline-block" /> Blocked</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" /> Today</span>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Main Schedule Component ---------------- */
 export default function Schedule() {
   const [appointments, setAppointments] = useState([]);
@@ -1081,6 +1381,8 @@ export default function Schedule() {
   const [viewMode, setViewMode] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "list" : "grid"
   );
+  const [monthOffset, setMonthOffset] = useState(0); // months from selectedDate's month
+  const [dayActionDate, setDayActionDate] = useState(null); // date string for DayActionModal
 
   const [petModalOpen, setPetModalOpen] = useState(false);
   const [modalSlot, setModalSlot] = useState(null);
@@ -2013,7 +2315,7 @@ export default function Schedule() {
             >Today</button>
           </div>
 
-          {/* View toggle — List/Grid */}
+          {/* View toggle — List / Grid / Month */}
           <div className="flex items-center gap-1">
             <button
               onClick={() => setViewMode("list")}
@@ -2035,7 +2337,7 @@ export default function Schedule() {
                 padding: "6px 14px",
                 fontSize: 13,
                 fontWeight: 700,
-                borderRadius: "0 999px 999px 0",
+                borderRadius: "0",
                 border: "1px solid",
                 borderLeft: "none",
                 borderColor: viewMode === "grid" ? "#059669" : "#d1d5db",
@@ -2044,6 +2346,21 @@ export default function Schedule() {
                 cursor: "pointer",
               }}
             >⊞ Grid</button>
+            <button
+              onClick={() => { setViewMode("month"); setMonthOffset(0); }}
+              style={{
+                padding: "6px 14px",
+                fontSize: 13,
+                fontWeight: 700,
+                borderRadius: "0 999px 999px 0",
+                border: "1px solid",
+                borderLeft: "none",
+                borderColor: viewMode === "month" ? "#059669" : "#d1d5db",
+                backgroundColor: viewMode === "month" ? "#059669" : "#ffffff",
+                color: viewMode === "month" ? "#ffffff" : "#6b7280",
+                cursor: "pointer",
+              }}
+            >📅 Month</button>
           </div>
 
           <div className="flex-1 flex flex-col gap-3">
@@ -2291,6 +2608,21 @@ export default function Schedule() {
                 })}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MONTH VIEW */}
+      {viewMode === "month" && user && (
+        <div className="card mb-6" style={{ position: "relative", zIndex: 1 }}>
+          <div className="card-body">
+            <MonthView
+              userId={user.id}
+              selectedDate={selectedDate}
+              monthOffset={monthOffset}
+              setMonthOffset={setMonthOffset}
+              onDayClick={(dateStr) => setDayActionDate(dateStr)}
+            />
           </div>
         </div>
       )}
@@ -2716,6 +3048,42 @@ export default function Schedule() {
           })}
         </div>
       ))}
+
+      {/* Month view — Day Action Modal */}
+      {dayActionDate && (
+        <DayActionModal
+          date={dayActionDate}
+          onClose={() => setDayActionDate(null)}
+          onGoToDay={() => {
+            setSelectedDate(dayActionDate);
+            setViewMode("list");
+            setDayActionDate(null);
+          }}
+          onAddBooking={() => {
+            setSelectedDate(dayActionDate);
+            setViewMode("list");
+            setDayActionDate(null);
+            // Small delay to let day data load before opening slot picker
+            setTimeout(() => openSlot("09:00"), 300);
+          }}
+          onAddTimeBlock={async (date, start, end, note, setSaving) => {
+            if (!user) return;
+            setSaving(true);
+            const { error } = await supabase.from("vacation_days").insert([{
+              groomer_id: user.id,
+              date,
+              start_time: start || null,
+              end_time: end || null,
+            }]);
+            setSaving(false);
+            if (error) {
+              alert("Could not save time block: " + error.message);
+            } else {
+              setDayActionDate(null);
+            }
+          }}
+        />
+      )}
 
       {/* Modals */}
       <PetSelectModal
