@@ -46,6 +46,9 @@ export default function IntakePage() {
     { name: "", breed: "", slot_weight: 1, tags: [], notes: "" }
   ]);
 
+  // Custom intake question answers — keyed by question id
+  const [customAnswers, setCustomAnswers] = useState({});
+
   const addPet = () => setPets(prev => [
     ...prev,
     { name: "", breed: "", slot_weight: 1, tags: [], notes: "" }
@@ -73,7 +76,7 @@ export default function IntakePage() {
     (async () => {
       const { data, error } = await supabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url")
+        .select("id, full_name, slug, logo_url, custom_intake_questions")
         .eq("slug", slug)
         .single();
 
@@ -93,6 +96,15 @@ export default function IntakePage() {
     if (!phone.trim())    { setSubmitError("Please enter your phone number."); return; }
     if (!pets[0]?.name?.trim()) { setSubmitError("Please enter at least one pet's name."); return; }
 
+    // Validate required custom questions
+    const questions = groomer?.custom_intake_questions || [];
+    for (const q of questions) {
+      if (q.required && !customAnswers[q.id]?.toString().trim()) {
+        setSubmitError(`Please answer the required question: "${q.label}"`);
+        return;
+      }
+    }
+
     setSubmitting(true);
 
     try {
@@ -104,6 +116,7 @@ export default function IntakePage() {
           client: { full_name: fullName, phone, email, street, city, state, zip },
           emergency: { name: emergName, phone: emergPhone },
           pets: pets.filter(p => p.name.trim()),
+          custom_answers: customAnswers,
         }),
       });
 
@@ -338,6 +351,66 @@ export default function IntakePage() {
           className="w-full py-3 rounded-xl border-2 border-dashed border-[var(--border-med)] text-[var(--text-3)] font-semibold text-sm hover:border-emerald-400 hover:text-emerald-600 transition-colors">
           + Add another dog
         </button>
+
+        {/* ── SECTION 4: Custom Questions (if any) ── */}
+        {groomer?.custom_intake_questions?.length > 0 && (
+          <div className="card">
+            <div className="card-body space-y-4">
+              <h2 className="font-bold text-[var(--text-1)] text-base">Additional Questions</h2>
+
+              {groomer.custom_intake_questions.map((q) => (
+                <div key={q.id}>
+                  <label className={labelCls}>
+                    {q.label}
+                    {q.required
+                      ? <span className="text-red-500 ml-1">*</span>
+                      : <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                    }
+                  </label>
+
+                  {q.type === "textarea" && (
+                    <textarea
+                      className={`${inputCls} resize-none`}
+                      rows={3}
+                      placeholder="Your answer…"
+                      value={customAnswers[q.id] || ""}
+                      onChange={(e) => setCustomAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                    />
+                  )}
+
+                  {q.type === "text" && (
+                    <input
+                      type="text"
+                      className={inputCls}
+                      placeholder="Your answer…"
+                      value={customAnswers[q.id] || ""}
+                      onChange={(e) => setCustomAnswers(prev => ({ ...prev, [q.id]: e.target.value }))}
+                    />
+                  )}
+
+                  {q.type === "yesno" && (
+                    <div className="flex gap-3">
+                      {["Yes", "No"].map((opt) => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setCustomAnswers(prev => ({ ...prev, [q.id]: opt }))}
+                          className={`flex-1 py-2.5 rounded-xl border text-sm font-semibold transition-colors
+                            ${customAnswers[q.id] === opt
+                              ? "bg-emerald-600 border-emerald-600 text-white"
+                              : "bg-[var(--surface)] border-[var(--border-med)] text-[var(--text-2)] hover:border-emerald-400"
+                            }`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Error */}
         {submitError && (

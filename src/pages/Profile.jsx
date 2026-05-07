@@ -27,6 +27,19 @@ const TIMEZONE_OPTIONS = [
   { value: "Pacific/Honolulu", label: "Hawaii — Pacific/Honolulu" },
 ];
 
+// Default intake form questions — mirrors the fields already in Intake.jsx
+// These are shown in the Profile intake editor as the starting point.
+// type: "text" | "textarea" | "yesno"
+const DEFAULT_INTAKE_QUESTIONS = [
+  { id: "q1", label: "Does your dog have any medical conditions or health concerns we should know about?", type: "textarea", required: false },
+  { id: "q2", label: "Is your dog up to date on all vaccinations?", type: "yesno", required: true },
+  { id: "q3", label: "Has your dog ever been aggressive or bitten anyone during grooming?", type: "yesno", required: true },
+  { id: "q4", label: "Is your dog on any medications?", type: "yesno", required: false },
+  { id: "q5", label: "Are there any areas of your dog's body that are sensitive or should be avoided?", type: "textarea", required: false },
+  { id: "q6", label: "How does your dog typically behave during baths and grooming?", type: "textarea", required: false },
+  { id: "q7", label: "Any special instructions or preferences for this grooming visit?", type: "textarea", required: false },
+];
+
 export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -86,6 +99,13 @@ export default function Profile() {
         setLogoUrl(data.logo_url || null);
         setMaxParallel(data.max_parallel ?? 1);
         setMaxApptsPerDay(data.max_appts_per_day ?? null);
+
+        // Load custom intake questions; seed defaults if never set
+        if (data.custom_intake_questions) {
+          setCustomIntakeQuestions(data.custom_intake_questions);
+        } else {
+          setCustomIntakeQuestions(DEFAULT_INTAKE_QUESTIONS);
+        }
 
         // Load service pricing — merge with defaults so new services always have a price
         // (custom_services handles the editor, this is legacy support)
@@ -329,6 +349,8 @@ export default function Profile() {
   const [bookingRequiresApproval, setBookingRequiresApproval] = useState(false);
   const [stripeError, setStripeError] = useState("");
   const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
+  const [customIntakeQuestions, setCustomIntakeQuestions] = useState(null);
+  const [savingIntake, setSavingIntake] = useState(false);
 
   // ---------------- BILLING PORTAL ----------------
   const handleManageBilling = async () => {
@@ -390,6 +412,7 @@ export default function Profile() {
     { id: "profile",  emoji: "👤", label: "Profile"  },
     { id: "schedule", emoji: "🗓", label: "Schedule" },
     { id: "pricing",  emoji: "💲", label: "Pricing"  },
+    { id: "intake",   emoji: "📋", label: (planTier === "growth" || planTier === "pro") ? "Intake" : "Intake 🔒" },
     { id: "smsbot",   emoji: "💬", label: planTier === "pro" ? "SMS Bot" : "SMS Bot 🔒" },
   ];
 
@@ -782,62 +805,79 @@ export default function Profile() {
               </p>
             </div>
 
-          {/* Column headers */}
-          <div className="grid grid-cols-5 gap-2 text-xs font-semibold text-[var(--text-3)] px-1">
-            <span className="col-span-1">Service</span>
-            <span className="text-center">S/M</span>
-            <span className="text-center">Large</span>
-            <span className="text-center">XL</span>
-            <span></span>
-          </div>
-
-          {/* Service rows */}
-          <div className="space-y-2">
+          {/* Service cards */}
+          <div className="space-y-3">
             {(customServices || []).map((svc, i) => (
-              <div key={i} className="grid grid-cols-5 gap-2 items-center">
+              <div key={i} className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
+
+                {/* Service name row + delete */}
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={svc.name}
+                    onChange={e => {
+                      const updated = [...customServices];
+                      updated[i] = { ...updated[i], name: e.target.value };
+                      setCustomServices(updated);
+                    }}
+                    placeholder="Service name"
+                    className="flex-1 border border-[var(--border-med)] rounded-xl px-3 py-2.5 text-sm font-semibold bg-[var(--bg)] text-[var(--text-1)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCustomServices(prev => prev.filter((_, idx) => idx !== i))}
+                    className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-red-200 text-red-400 hover:text-red-600 hover:bg-red-50 transition font-bold text-sm"
+                    title="Remove service"
+                  >✕</button>
+                </div>
+
+                {/* Price inputs */}
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { size: 1, label: "S / M" },
+                    { size: 2, label: "Large" },
+                    { size: 3, label: "XL" },
+                  ].map(({ size, label }) => (
+                    <div key={size}>
+                      <label className="block text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide mb-1">{label}</label>
+                      <div className="relative">
+                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--text-3)]">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={svc.pricing?.[size] === 0 ? "" : (svc.pricing?.[size] ?? "")}
+                          onChange={e => {
+                            const updated = [...customServices];
+                            updated[i] = {
+                              ...updated[i],
+                              pricing: {
+                                ...updated[i].pricing,
+                                [size]: e.target.value === "" ? 0 : Number(e.target.value) || 0
+                              }
+                            };
+                            setCustomServices(updated);
+                          }}
+                          onFocus={e => e.target.select()}
+                          placeholder="0"
+                          className="w-full border border-[var(--border-med)] rounded-xl pl-6 pr-2 py-2 text-sm bg-[var(--bg)] text-[var(--text-1)]"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Description */}
                 <input
                   type="text"
-                  value={svc.name}
+                  value={svc.description || ""}
                   onChange={e => {
                     const updated = [...customServices];
-                    updated[i] = { ...updated[i], name: e.target.value };
+                    updated[i] = { ...updated[i], description: e.target.value };
                     setCustomServices(updated);
                   }}
-                  placeholder="Service name"
-                  className="col-span-1 border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm bg-[var(--bg)] text-[var(--text-1)] w-full"
+                  placeholder="Description (optional) — shown to clients on the booking page"
+                  className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2 text-xs bg-[var(--bg)] text-[var(--text-2)]"
                 />
-                {[1, 2, 3].map(size => (
-                  <div key={size} className="relative">
-                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--text-3)]">$</span>
-                    <input
-                      type="number"
-                      min="0"
-                      value={svc.pricing?.[size] === 0 ? "" : (svc.pricing?.[size] ?? "")}
-                      onChange={e => {
-                        const updated = [...customServices];
-                        updated[i] = {
-                          ...updated[i],
-                          pricing: {
-                            ...updated[i].pricing,
-                            [size]: e.target.value === "" ? 0 : Number(e.target.value) || 0
-                          }
-                        };
-                        setCustomServices(updated);
-                      }}
-                      onFocus={e => e.target.select()}
-                      placeholder="0"
-                      className="w-full border border-[var(--border-med)] rounded-xl pl-6 pr-2 py-2 text-sm bg-[var(--bg)] text-[var(--text-1)]"
-                    />
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setCustomServices(prev => prev.filter((_, idx) => idx !== i))}
-                  className="text-red-400 hover:text-red-600 font-bold text-lg leading-none transition"
-                  title="Remove service"
-                >
-                  ✕
-                </button>
               </div>
             ))}
           </div>
@@ -970,6 +1010,195 @@ export default function Profile() {
         </div>
       )}
 
+      {/* ── INTAKE TAB ── */}
+      {activeTab === "intake" && (
+        <div className="space-y-4">
+          {(planTier !== "growth" && planTier !== "pro") ? (
+            <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-6 text-center space-y-3">
+              <div className="text-3xl">📋</div>
+              <h3 className="font-bold text-[var(--text-1)]">Intake forms require Growth or higher</h3>
+              <p className="text-sm text-[var(--text-2)]">Upgrade to customize the questions your clients answer when they fill out your intake form.</p>
+              <a href="/upgrade" className="inline-block px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
+                Upgrade to Growth — $49.99/mo →
+              </a>
+            </div>
+          ) : (
+            <>
+              <div>
+                <h2 className="text-lg font-bold text-[var(--text-1)] mb-1">Intake Form Questions</h2>
+                <p className="text-sm text-[var(--text-3)]">
+                  Customize the questions clients answer when filling out your intake form. Edit, remove, or add new questions. Changes apply immediately to your public intake page.
+                </p>
+              </div>
+
+              {/* Question type legend */}
+              <div className="flex flex-wrap gap-2 text-xs text-[var(--text-3)]">
+                <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--surface-2)] border border-[var(--border-med)]">
+                  <span className="font-bold text-[var(--text-2)]">T</span> Short answer
+                </span>
+                <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--surface-2)] border border-[var(--border-med)]">
+                  <span className="font-bold text-[var(--text-2)]">¶</span> Long answer
+                </span>
+                <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--surface-2)] border border-[var(--border-med)]">
+                  <span className="font-bold text-[var(--text-2)]">Y/N</span> Yes / No
+                </span>
+              </div>
+
+              {/* Question rows */}
+              <div className="space-y-2">
+                {(customIntakeQuestions || []).map((q, i) => (
+                  <div key={q.id || i} className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-3 space-y-2">
+                    {/* Question text input */}
+                    <input
+                      type="text"
+                      value={q.label}
+                      onChange={(e) => {
+                        const updated = [...customIntakeQuestions];
+                        updated[i] = { ...updated[i], label: e.target.value };
+                        setCustomIntakeQuestions(updated);
+                      }}
+                      placeholder="Enter your question…"
+                      className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm bg-[var(--bg)] text-[var(--text-1)]"
+                    />
+
+                    {/* Controls row */}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Type selector */}
+                      <select
+                        value={q.type}
+                        onChange={(e) => {
+                          const updated = [...customIntakeQuestions];
+                          updated[i] = { ...updated[i], type: e.target.value };
+                          setCustomIntakeQuestions(updated);
+                        }}
+                        className="border border-[var(--border-med)] rounded-lg px-2 py-1.5 text-xs bg-[var(--bg)] text-[var(--text-1)] font-medium"
+                      >
+                        <option value="text">T — Short answer</option>
+                        <option value="textarea">¶ — Long answer</option>
+                        <option value="yesno">Y/N — Yes / No</option>
+                      </select>
+
+                      {/* Required toggle */}
+                      <label className="flex items-center gap-1.5 text-xs text-[var(--text-2)] cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={q.required || false}
+                          onChange={(e) => {
+                            const updated = [...customIntakeQuestions];
+                            updated[i] = { ...updated[i], required: e.target.checked };
+                            setCustomIntakeQuestions(updated);
+                          }}
+                          className="rounded accent-emerald-500"
+                        />
+                        Required
+                      </label>
+
+                      {/* Spacer */}
+                      <div className="flex-1" />
+
+                      {/* Move up */}
+                      <button
+                        type="button"
+                        disabled={i === 0}
+                        onClick={() => {
+                          const updated = [...customIntakeQuestions];
+                          [updated[i - 1], updated[i]] = [updated[i], updated[i - 1]];
+                          setCustomIntakeQuestions(updated);
+                        }}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--border-med)] text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--surface-2)] disabled:opacity-30 disabled:cursor-not-allowed transition text-sm"
+                        title="Move up"
+                      >↑</button>
+
+                      {/* Move down */}
+                      <button
+                        type="button"
+                        disabled={i === (customIntakeQuestions.length - 1)}
+                        onClick={() => {
+                          const updated = [...customIntakeQuestions];
+                          [updated[i], updated[i + 1]] = [updated[i + 1], updated[i]];
+                          setCustomIntakeQuestions(updated);
+                        }}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg border border-[var(--border-med)] text-[var(--text-3)] hover:text-[var(--text-1)] hover:bg-[var(--surface-2)] disabled:opacity-30 disabled:cursor-not-allowed transition text-sm"
+                        title="Move down"
+                      >↓</button>
+
+                      {/* Delete */}
+                      <button
+                        type="button"
+                        onClick={() => setCustomIntakeQuestions(prev => prev.filter((_, idx) => idx !== i))}
+                        className="w-7 h-7 flex items-center justify-center rounded-lg border border-red-200 text-red-400 hover:text-red-600 hover:bg-red-50 transition text-sm font-bold"
+                        title="Remove question"
+                      >✕</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={() => setCustomIntakeQuestions(DEFAULT_INTAKE_QUESTIONS)}
+                  className="text-xs text-[var(--text-3)] hover:text-[var(--text-2)] underline"
+                >
+                  Reset to defaults
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newQ = {
+                      id: `q${Date.now()}`,
+                      label: "",
+                      type: "text",
+                      required: false,
+                    };
+                    setCustomIntakeQuestions(prev => [...(prev || []), newQ]);
+                  }}
+                  className="text-sm px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
+                >
+                  + Add Question
+                </button>
+              </div>
+
+              <p className="text-xs text-[var(--text-3)]">
+                These questions appear in the "Additional Questions" section of your intake form at the bottom, after the standard client and pet fields.
+              </p>
+
+              <button
+                onClick={async () => {
+                  setSavingIntake(true);
+                  const { error } = await supabase
+                    .from("groomers")
+                    .update({ custom_intake_questions: customIntakeQuestions })
+                    .eq("id", user.id);
+                  setSavingIntake(false);
+                  if (!error) {
+                    setConfirmConfig({
+                      title: "Saved! ✓",
+                      message: "Your intake form questions have been updated.",
+                      confirmLabel: "OK",
+                      onConfirm: () => {},
+                    });
+                  } else {
+                    setConfirmConfig({
+                      title: "Could not save",
+                      message: error.message || "Something went wrong. Please try again.",
+                      confirmLabel: "OK",
+                      onConfirm: () => {},
+                    });
+                  }
+                }}
+                disabled={savingIntake}
+                className="btn-primary w-full mt-2"
+              >
+                {savingIntake ? "Saving…" : "Save Intake Questions"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── SMS BOT TAB ── */}
       {activeTab === "smsbot" && (
         <div>
           <h2 className="text-lg font-bold mb-1">SMS AI Scheduler</h2>

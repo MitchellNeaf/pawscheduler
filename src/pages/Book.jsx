@@ -89,6 +89,7 @@ export default function BookPage() {
   const [groomerId, setGroomerId] = useState(null);
   const [maxParallel, setMaxParallel] = useState(1);
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
+  const [serviceOptions, setServiceOptions] = useState(SERVICE_OPTIONS); // array of { name, description? } or string
 
   const [clientForm, setClientForm] = useState({ name: "", last4: "" });
   const [client, setClient] = useState(null);
@@ -131,7 +132,7 @@ export default function BookPage() {
     (async () => {
       const { data, error: gErr } = await anonSupabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, max_parallel, service_pricing")
+        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services")
         .eq("slug", slug)
         .single();
 
@@ -139,7 +140,14 @@ export default function BookPage() {
         setGroomer(data);
         setGroomerId(data.id);
         setMaxParallel(data.max_parallel ?? 1);
-        if (data.service_pricing) {
+        if (data.custom_services && data.custom_services.length > 0) {
+          // Use groomer's custom services (includes descriptions)
+          setServiceOptions(data.custom_services); // array of { name, pricing, description? }
+          const pricingObj = Object.fromEntries(
+            data.custom_services.map(s => [s.name, s.pricing])
+          );
+          setPricing({ ...DEFAULT_PRICING, ...pricingObj });
+        } else if (data.service_pricing) {
           setPricing({ ...DEFAULT_PRICING, ...data.service_pricing });
         }
       } else {
@@ -724,15 +732,45 @@ export default function BookPage() {
               <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#374151", marginBottom: 6 }}>
                 Services
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                {SERVICE_OPTIONS.map((s) => (
-                  <label key={s} style={{ display: "flex", alignItems: "center", gap: 6,
-                    fontSize: "0.88rem", color: "#374151", cursor: "pointer" }}>
-                    <input type="checkbox" name="services" value={s}
-                      checked={form.services.includes(s)} onChange={handleChange} />
-                    {s}
-                  </label>
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {serviceOptions.map((svc) => {
+                  const name = typeof svc === "string" ? svc : svc.name;
+                  const description = typeof svc === "string" ? null : svc.description;
+                  const isChecked = form.services.includes(name);
+                  return (
+                    <label
+                      key={name}
+                      style={{
+                        display: "flex",
+                        alignItems: "flex-start",
+                        gap: 10,
+                        padding: "10px 12px",
+                        borderRadius: 12,
+                        border: `1.5px solid ${isChecked ? "#059669" : "#e5e7eb"}`,
+                        background: isChecked ? "#f0fdf4" : "#fff",
+                        cursor: "pointer",
+                        transition: "border-color 0.15s, background 0.15s",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        name="services"
+                        value={name}
+                        checked={isChecked}
+                        onChange={handleChange}
+                        style={{ marginTop: 2, flexShrink: 0, accentColor: "#059669" }}
+                      />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#111827" }}>{name}</div>
+                        {description && (
+                          <div style={{ fontSize: "0.78rem", color: "#6b7280", marginTop: 2, lineHeight: 1.4 }}>
+                            {description}
+                          </div>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
