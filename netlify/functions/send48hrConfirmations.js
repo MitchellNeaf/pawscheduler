@@ -66,20 +66,30 @@ exports.handler = async (event) => {
       .from("appointments")
       .select(`
         id, date, time, duration_min, services, confirmed, confirm_token,
-        reminder_enabled, sms_reminder_enabled,
+        reminder_enabled, sms_reminder_enabled, groomer_id,
         pets (
           id, name,
-          clients ( id, full_name, email, phone, sms_opt_in ),
-          groomers:groomer_id (
-            id, full_name, business_name, email, sms_number,
-            plan_tier, subscription_status
-          )
+          clients ( id, full_name, email, phone, sms_opt_in )
         )
       `)
       .eq("date", targetDate)
       .eq("confirmed", false)
       .is("confirmation_sent_at", null)
       .or("no_show.is.null,no_show.eq.false");
+
+    if (!appts?.length) {
+      console.log("No unconfirmed appointments 48hrs out.");
+      return { statusCode: 200, body: JSON.stringify({ sent: 0, skipped: 0 }) };
+    }
+
+    // Load groomer data separately
+    const groomerIds = [...new Set(appts.map(a => a.groomer_id).filter(Boolean))];
+    const { data: groomers } = await supabase
+      .from("groomers")
+      .select("id, full_name, business_name, email, sms_number, plan_tier, subscription_status")
+      .in("id", groomerIds);
+    const groomerMap = {};
+    (groomers || []).forEach(g => { groomerMap[g.id] = g; });
 
     if (apptErr) {
       console.error("Query error:", apptErr);
@@ -96,9 +106,10 @@ exports.handler = async (event) => {
     let skipped = 0;
 
     for (const appt of appts) {
-      const groomer = appt.pets?.groomers;
-      const client = appt.pets?.clients;
-      const petName = appt.pets?.name || "your pet";
+      const groomer = groomerMap[appt.groomer_id];
+      const pet = petMap[appt.pet_id];
+      const client = clientMap[pet?.client_id];
+      const petName = pet?.name || "your pet";
 
       // Skip if groomer is not on a paid plan
       const paid = ["basic", "growth", "pro"].includes(groomer?.plan_tier);
