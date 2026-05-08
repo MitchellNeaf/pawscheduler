@@ -19,8 +19,7 @@ export default function ConfirmPage() {
         .from("appointments")
         .select(`
           id, date, time, confirmed, confirm_token,
-          pets ( name, clients ( full_name ) ),
-          groomers ( full_name )
+          pets ( name, clients ( full_name ) )
         `)
         .eq("confirm_token", token)
         .maybeSingle();
@@ -89,9 +88,6 @@ export default function ConfirmPage() {
                 <div><span className="font-semibold text-[var(--text-2)]">Pet:</span> <span className="text-[var(--text-1)]">{appt.pets?.name}</span></div>
                 <div><span className="font-semibold text-[var(--text-2)]">Date:</span> <span className="text-[var(--text-1)]">{fmtDate(appt.date)}</span></div>
                 <div><span className="font-semibold text-[var(--text-2)]">Time:</span> <span className="text-[var(--text-1)]">{fmtTime(appt.time)}</span></div>
-                {appt.groomers?.full_name && (
-                  <div><span className="font-semibold text-[var(--text-2)]">With:</span> <span className="text-[var(--text-1)]">{appt.groomers.full_name}</span></div>
-                )}
               </div>
             )}
             <p className="text-[var(--text-3)] text-xs">You can close this page.</p>
