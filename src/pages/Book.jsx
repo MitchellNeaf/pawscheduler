@@ -57,6 +57,12 @@ const calcAmount = (services, slotWeight, pricing) => {
     }, 0);
 };
 
+// Sum flat prices for selected add-ons
+const calcAddons = (services, addonOptions) =>
+  (addonOptions || [])
+    .filter(a => services.includes(a.name))
+    .reduce((sum, a) => sum + (a.price || 0), 0);
+
 /* --------------------------------------------
    FORMAT DATE — FIXED (UTC SAFE)
 -------------------------------------------- */
@@ -90,6 +96,7 @@ export default function BookPage() {
   const [maxParallel, setMaxParallel] = useState(1);
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
   const [serviceOptions, setServiceOptions] = useState(SERVICE_OPTIONS); // array of { name, description? } or string
+  const [addonOptions, setAddonOptions] = useState([]); // array of { name, price, description? }
 
   const [clientForm, setClientForm] = useState({ name: "", last4: "" });
   const [client, setClient] = useState(null);
@@ -141,8 +148,7 @@ export default function BookPage() {
         setGroomerId(data.id);
         setMaxParallel(data.max_parallel ?? 1);
         if (data.custom_services && data.custom_services.length > 0) {
-          // Use groomer's custom services (includes descriptions)
-          setServiceOptions(data.custom_services); // array of { name, pricing, description? }
+          setServiceOptions(data.custom_services);
           const pricingObj = Object.fromEntries(
             data.custom_services.map(s => [s.name, s.pricing])
           );
@@ -150,6 +156,19 @@ export default function BookPage() {
         } else if (data.service_pricing) {
           setPricing({ ...DEFAULT_PRICING, ...data.service_pricing });
         }
+
+        // Fetch add-ons separately — column may not exist yet, non-blocking
+        anonSupabase
+          .from("groomers")
+          .select("custom_addons")
+          .eq("slug", slug)
+          .single()
+          .then(({ data: extras }) => {
+            if (extras?.custom_addons?.length > 0 && mounted) {
+              setAddonOptions(extras.custom_addons);
+            }
+          })
+          .catch(() => {});
       } else {
         setError("Booking page not found.");
       }
@@ -471,9 +490,9 @@ export default function BookPage() {
     }
 
     const slotWeight = selectedPetWeight ?? 1;
-    const autoAmount = calcAmount(form.services, slotWeight, pricing);
+    const autoAmount = calcAmount(form.services, slotWeight, pricing) + calcAddons(form.services, addonOptions);
 
-    const { error } = await anonSupabase.from("appointments").insert([
+    const { data: inserted, error } = await anonSupabase.from("appointments").insert([
       {
         groomer_id: groomerId,
         pet_id: selectedPetId,
@@ -488,7 +507,7 @@ export default function BookPage() {
         notes: form.notes || "",
         slot_weight: slotWeight,
       },
-    ]);
+    ]).select("id");
 
     if (error) alert(error.message);
     else {
@@ -515,14 +534,27 @@ export default function BookPage() {
         }).catch(() => {}); // don't block on email failure
       }
 
+      const bookedPet = pets.find((p) => p.id === selectedPetId);
+
       setSubmitted({
-        pet: pets.find((p) => p.id === selectedPetId)?.name || "",
+        pet: bookedPet?.name || "",
         date: form.date,
         time: form.time,
         services: form.services,
         duration: form.duration_min,
         amount: autoAmount,
       });
+
+      // Add to upcoming list immediately so cancel view shows it without refresh
+      setUpcomingAppts((prev) => [...prev, {
+        id: inserted?.[0]?.id || Date.now(),
+        date: form.date,
+        time: form.time,
+        duration_min: Number(form.duration_min),
+        services: form.services,
+        pets: { name: bookedPet?.name || "" },
+      }].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "") < (b.time || "") ? -1 : 1));
+
       setView("home");
     }
 
@@ -738,34 +770,20 @@ export default function BookPage() {
                   const description = typeof svc === "string" ? null : svc.description;
                   const isChecked = form.services.includes(name);
                   return (
-                    <label
-                      key={name}
-                      style={{
-                        display: "flex",
-                        alignItems: "flex-start",
-                        gap: 10,
-                        padding: "10px 12px",
-                        borderRadius: 12,
-                        border: `1.5px solid ${isChecked ? "#059669" : "#e5e7eb"}`,
-                        background: isChecked ? "#f0fdf4" : "#fff",
-                        cursor: "pointer",
-                        transition: "border-color 0.15s, background 0.15s",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        name="services"
-                        value={name}
-                        checked={isChecked}
-                        onChange={handleChange}
-                        style={{ marginTop: 2, flexShrink: 0, accentColor: "#059669" }}
-                      />
-                      <div style={{ minWidth: 0 }}>
+                    <label key={name} style={{
+                      display: "flex", alignItems: "flex-start", gap: 10,
+                      padding: "10px 12px", borderRadius: 12,
+                      border: `1.5px solid ${isChecked ? "#059669" : "#e5e7eb"}`,
+                      background: isChecked ? "#f0fdf4" : "#fff",
+                      cursor: "pointer", transition: "border-color 0.15s, background 0.15s",
+                    }}>
+                      <input type="checkbox" name="services" value={name}
+                        checked={isChecked} onChange={handleChange}
+                        style={{ marginTop: 2, flexShrink: 0, accentColor: "#059669" }} />
+                      <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#111827" }}>{name}</div>
                         {description && (
-                          <div style={{ fontSize: "0.78rem", color: "#6b7280", marginTop: 2, lineHeight: 1.4 }}>
-                            {description}
-                          </div>
+                          <div style={{ fontSize: "0.78rem", color: "#6b7280", marginTop: 2, lineHeight: 1.4 }}>{description}</div>
                         )}
                       </div>
                     </label>
@@ -773,6 +791,46 @@ export default function BookPage() {
                 })}
               </div>
             </div>
+
+            {/* ADD-ONS */}
+            {addonOptions.length > 0 && (
+              <div>
+                <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "#374151", marginBottom: 6 }}>
+                  Add-ons
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {addonOptions.map((addon) => {
+                    const isChecked = form.services.includes(addon.name);
+                    return (
+                      <label key={addon.name} style={{
+                        display: "flex", alignItems: "flex-start", gap: 10,
+                        padding: "10px 12px", borderRadius: 12,
+                        border: `1.5px solid ${isChecked ? "#7c3aed" : "#e5e7eb"}`,
+                        background: isChecked ? "#f5f3ff" : "#fff",
+                        cursor: "pointer", transition: "border-color 0.15s, background 0.15s",
+                      }}>
+                        <input type="checkbox" name="services" value={addon.name}
+                          checked={isChecked} onChange={handleChange}
+                          style={{ marginTop: 2, flexShrink: 0, accentColor: "#7c3aed" }} />
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
+                            <div style={{ fontSize: "0.88rem", fontWeight: 600, color: "#111827" }}>{addon.name}</div>
+                            {addon.price > 0 && (
+                              <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#7c3aed", flexShrink: 0 }}>
+                                +${addon.price.toFixed(2)}
+                              </div>
+                            )}
+                          </div>
+                          {addon.description && (
+                            <div style={{ fontSize: "0.78rem", color: "#6b7280", marginTop: 2, lineHeight: 1.4 }}>{addon.description}</div>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* PRICE + DURATION ESTIMATE */}
             {form.services.filter(s => s !== "Other").length > 0 && (
@@ -783,7 +841,7 @@ export default function BookPage() {
                   ⏱ {form.duration_min} min &nbsp;·&nbsp; Estimated total
                 </span>
                 <span style={{ fontWeight: 800, color: "#065f46", fontSize: "1rem" }}>
-                  ${calcAmount(form.services, selectedPetWeight, pricing).toFixed(2)}
+                  ${(calcAmount(form.services, selectedPetWeight, pricing) + calcAddons(form.services, addonOptions)).toFixed(2)}
                 </span>
               </div>
             )}

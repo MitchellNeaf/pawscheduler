@@ -75,6 +75,12 @@ const calcAmount = (services, slotWeight, pricing) => {
   }, 0);
 };
 
+// Sum flat prices for selected add-ons or fees by name
+const calcFlatItems = (services, items) =>
+  (items || [])
+    .filter(item => services.includes(item.name))
+    .reduce((sum, item) => sum + (item.price || 0), 0);
+
 /* ---------------- Trial Banner ---------------- */
 function ScheduleTrialBanner({ userId }) {
   const [status, setStatus] = useState(null);
@@ -392,6 +398,8 @@ function MultiPetAppointmentModal({
   workingRange, breakSlots,
   planTier,
   serviceOptions,
+  addonOptions = [],
+  feeOptions = [],
 }) {
   if (!open || !newPets.length) return null;
 
@@ -411,12 +419,15 @@ function MultiPetAppointmentModal({
         ? entry.form.services.filter((s) => s !== svc)
         : [...entry.form.services, svc];
       const slotWeight = entry.pet.slot_weight || 1;
+      const serviceAmt = calcAmount(newServices, slotWeight, pricing);
+      const addonAmt   = calcFlatItems(newServices, addonOptions);
+      const feeAmt     = calcFlatItems(newServices, feeOptions);
       return {
         ...entry,
         form: {
           ...entry.form,
           services: newServices,
-          amount: calcAmount(newServices, slotWeight, pricing),
+          amount: serviceAmt + addonAmt + feeAmt,
         },
       };
     }));
@@ -533,19 +544,63 @@ function MultiPetAppointmentModal({
                     </label>
                   </div>
 
-                  {/* Services */}
-                  <div className="text-sm">
-                    <div className="font-medium text-gray-700 mb-1">Services</div>
-                    <div className="grid grid-cols-2 gap-1">
-                      {serviceOptions.map((svc) => (
-                        <label key={svc} className="flex items-center gap-2 text-xs text-gray-700">
-                          <input type="checkbox"
-                            checked={petForm.services.includes(svc)}
-                            onChange={() => togglePetService(pet.id, svc)} />
-                          {svc}
-                        </label>
-                      ))}
+                  {/* Services / Add-ons / Fees */}
+                  <div className="space-y-3">
+                    <div className="text-sm">
+                      <div className="font-medium text-gray-700 mb-1">Services</div>
+                      <div className="grid grid-cols-2 gap-1">
+                        {serviceOptions.map((svc) => (
+                          <label key={svc} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                            <input type="checkbox"
+                              checked={petForm.services.includes(svc)}
+                              onChange={() => togglePetService(pet.id, svc)} />
+                            {svc}
+                          </label>
+                        ))}
+                      </div>
                     </div>
+
+                    {addonOptions.length > 0 && (
+                      <div className="text-sm">
+                        <div className="font-medium text-gray-700 mb-1">Add-ons</div>
+                        <div className="space-y-1">
+                          {addonOptions.map((addon) => (
+                            <label key={addon.name} className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border cursor-pointer transition-colors text-xs
+                              ${petForm.services.includes(addon.name)
+                                ? "border-violet-300 bg-violet-50 text-violet-800"
+                                : "border-gray-200 bg-gray-50 text-gray-700 hover:border-violet-200"}`}>
+                              <input type="checkbox"
+                                checked={petForm.services.includes(addon.name)}
+                                onChange={() => togglePetService(pet.id, addon.name)}
+                                className="accent-violet-600" />
+                              <span className="flex-1 font-medium">{addon.name}</span>
+                              {addon.price > 0 && <span className="font-bold text-violet-600">+${addon.price.toFixed(2)}</span>}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {feeOptions.length > 0 && (
+                      <div className="text-sm">
+                        <div className="font-medium text-gray-700 mb-1">Fees</div>
+                        <div className="space-y-1">
+                          {feeOptions.map((fee) => (
+                            <label key={fee.name} className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border cursor-pointer transition-colors text-xs
+                              ${petForm.services.includes(fee.name)
+                                ? "border-amber-300 bg-amber-50 text-amber-800"
+                                : "border-gray-200 bg-gray-50 text-gray-700 hover:border-amber-200"}`}>
+                              <input type="checkbox"
+                                checked={petForm.services.includes(fee.name)}
+                                onChange={() => togglePetService(pet.id, fee.name)}
+                                className="accent-amber-600" />
+                              <span className="flex-1 font-medium">{fee.name}</span>
+                              {fee.price > 0 && <span className="font-bold text-amber-600">+${fee.price.toFixed(2)}</span>}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -636,6 +691,8 @@ function AppointmentModal({
   breakSlots,
   planTier,
   serviceOptions,
+  addonOptions = [],
+  feeOptions = [],
 }) {
   if (!open) return null;
   if (isEdit && !appt) return null;
@@ -663,10 +720,13 @@ function AppointmentModal({
       const newServices = exists
         ? prev.services.filter((s) => s !== svc)
         : [...prev.services, svc];
+      const serviceAmt = calcAmount(newServices, slotWeight, pricing);
+      const addonAmt   = calcFlatItems(newServices, addonOptions);
+      const feeAmt     = calcFlatItems(newServices, feeOptions);
       return {
         ...prev,
         services: newServices,
-        amount: calcAmount(newServices, slotWeight, pricing),
+        amount: serviceAmt + addonAmt + feeAmt,
       };
     });
   };
@@ -775,18 +835,58 @@ function AppointmentModal({
               placeholder="Enter price" />
           </label>
 
-          {/* Services */}
-          <div className="text-sm">
-            <div className="font-medium text-gray-700 mb-1">Services</div>
-            <div className="grid grid-cols-2 gap-1">
-              {serviceOptions.map((svc) => (
-                <label key={svc} className="flex items-center gap-2 text-xs text-gray-700">
-                  <input type="checkbox" checked={form.services.includes(svc)}
-                    onChange={() => toggleService(svc)} />
-                  {svc}
-                </label>
-              ))}
+          {/* Services / Add-ons / Fees */}
+          <div className="space-y-3">
+            <div className="text-sm">
+              <div className="font-medium text-gray-700 mb-1">Services</div>
+              <div className="grid grid-cols-2 gap-1">
+                {serviceOptions.map((svc) => (
+                  <label key={svc} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                    <input type="checkbox" checked={form.services.includes(svc)}
+                      onChange={() => toggleService(svc)} />
+                    {svc}
+                  </label>
+                ))}
+              </div>
             </div>
+
+            {addonOptions.length > 0 && (
+              <div className="text-sm">
+                <div className="font-medium text-gray-700 mb-1">Add-ons</div>
+                <div className="space-y-1">
+                  {addonOptions.map((addon) => (
+                    <label key={addon.name} className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border cursor-pointer transition-colors text-xs
+                      ${form.services.includes(addon.name)
+                        ? "border-violet-300 bg-violet-50 text-violet-800"
+                        : "border-gray-200 bg-gray-50 text-gray-700 hover:border-violet-200"}`}>
+                      <input type="checkbox" checked={form.services.includes(addon.name)}
+                        onChange={() => toggleService(addon.name)} className="accent-violet-600" />
+                      <span className="flex-1 font-medium">{addon.name}</span>
+                      {addon.price > 0 && <span className="font-bold text-violet-600">+${addon.price.toFixed(2)}</span>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {feeOptions.length > 0 && (
+              <div className="text-sm">
+                <div className="font-medium text-gray-700 mb-1">Fees</div>
+                <div className="space-y-1">
+                  {feeOptions.map((fee) => (
+                    <label key={fee.name} className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border cursor-pointer transition-colors text-xs
+                      ${form.services.includes(fee.name)
+                        ? "border-amber-300 bg-amber-50 text-amber-800"
+                        : "border-gray-200 bg-gray-50 text-gray-700 hover:border-amber-200"}`}>
+                      <input type="checkbox" checked={form.services.includes(fee.name)}
+                        onChange={() => toggleService(fee.name)} className="accent-amber-600" />
+                      <span className="flex-1 font-medium">{fee.name}</span>
+                      {fee.price > 0 && <span className="font-bold text-amber-600">+${fee.price.toFixed(2)}</span>}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Notes */}
@@ -1068,10 +1168,8 @@ function RebookWeekModal({ open, appt, onClose, onPickDate }) {
 }
 
 /* ---------------- Day Action Modal (Month View) ---------------- */
-// Shown when a day cell is clicked in month view.
-// Options: Go to Day, Add Booking, Add Time Block.
 function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock }) {
-  const [mode, setMode] = useState(null); // null | "timeblock"
+  const [mode, setMode] = useState(null);
   const [tbStart, setTbStart] = useState("08:00");
   const [tbEnd, setTbEnd] = useState("09:00");
   const [tbNote, setTbNote] = useState("");
@@ -1088,7 +1186,6 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
       <div className="rounded-2xl shadow-2xl border border-[var(--border-med)] w-full max-w-sm overflow-hidden"
         style={{ background: "var(--surface, #ffffff)", isolation: "isolate" }}>
-        {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
           <h2 className="font-bold text-[var(--text-1)] text-sm">{label}</h2>
           <button onClick={onClose} className="text-[var(--text-3)] hover:text-[var(--text-1)] text-lg leading-none">✕</button>
@@ -1096,32 +1193,24 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
 
         {mode === null && (
           <div className="p-4 space-y-2">
-            <button
-              onClick={onGoToDay}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[var(--border-med)] bg-[var(--bg)] hover:bg-[var(--surface-raised,#f9fafb)] transition text-left"
-            >
+            <button onClick={onGoToDay}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[var(--border-med)] bg-[var(--bg)] hover:bg-[var(--surface-raised,#f9fafb)] transition text-left">
               <span className="text-xl">📅</span>
               <div>
                 <div className="font-semibold text-sm text-[var(--text-1)]">Go to Day</div>
                 <div className="text-xs text-[var(--text-3)]">View and manage this day's schedule</div>
               </div>
             </button>
-
-            <button
-              onClick={onAddBooking}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition text-left"
-            >
+            <button onClick={onAddBooking}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition text-left">
               <span className="text-xl">🐾</span>
               <div>
                 <div className="font-semibold text-sm text-emerald-800">Add Booking</div>
                 <div className="text-xs text-emerald-600">Book a grooming appointment</div>
               </div>
             </button>
-
-            <button
-              onClick={() => setMode("timeblock")}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition text-left"
-            >
+            <button onClick={() => setMode("timeblock")}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition text-left">
               <span className="text-xl">🚫</span>
               <div>
                 <div className="font-semibold text-sm text-blue-800">Add Time Block</div>
@@ -1134,58 +1223,36 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
         {mode === "timeblock" && (
           <div className="p-4 space-y-3">
             <p className="text-xs text-[var(--text-3)] mb-1">Block time off on <strong>{label}</strong></p>
-
             <div className="grid grid-cols-2 gap-3">
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium text-[var(--text-2)]">Start time</span>
-                <input
-                  type="time"
-                  value={tbStart}
-                  onChange={(e) => setTbStart(e.target.value)}
-                  className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm"
-                />
+                <input type="time" value={tbStart} onChange={(e) => setTbStart(e.target.value)}
+                  className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm" />
               </label>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium text-[var(--text-2)]">End time</span>
-                <input
-                  type="time"
-                  value={tbEnd}
-                  onChange={(e) => setTbEnd(e.target.value)}
-                  className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm"
-                />
+                <input type="time" value={tbEnd} onChange={(e) => setTbEnd(e.target.value)}
+                  className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm" />
               </label>
             </div>
-
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-[var(--text-2)]">Note (optional)</span>
-              <input
-                type="text"
-                value={tbNote}
-                onChange={(e) => setTbNote(e.target.value)}
+              <input type="text" value={tbNote} onChange={(e) => setTbNote(e.target.value)}
                 placeholder="e.g. Vet appointment, lunch, etc."
-                className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm"
-              />
+                className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm" />
             </label>
-
             <div className="flex gap-2 pt-1">
-              <button
-                onClick={() => setMode(null)}
-                className="flex-1 py-2.5 rounded-xl border border-[var(--border-med)] text-sm font-semibold text-[var(--text-2)] hover:bg-[var(--bg)] transition"
-              >
+              <button onClick={() => setMode(null)}
+                className="flex-1 py-2.5 rounded-xl border border-[var(--border-med)] text-sm font-semibold text-[var(--text-2)] hover:bg-[var(--bg)] transition">
                 ← Back
               </button>
-              <button
-                onClick={() => onAddTimeBlock(date, tbStart, tbEnd, tbNote, setSaving)}
+              <button onClick={() => onAddTimeBlock(date, tbStart, tbEnd, tbNote, setSaving)}
                 disabled={saving || !tbStart || !tbEnd || tbEnd <= tbStart}
-                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50"
-              >
+                className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50">
                 {saving ? "Saving…" : "Save Block"}
               </button>
             </div>
-
-            {tbEnd <= tbStart && (
-              <p className="text-xs text-red-500">End time must be after start time.</p>
-            )}
+            {tbEnd <= tbStart && <p className="text-xs text-red-500">End time must be after start time.</p>}
           </div>
         )}
       </div>
@@ -1199,11 +1266,10 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
   const [loadingMonth, setLoadingMonth] = useState(false);
   const [vacationDays, setVacationDays] = useState([]);
 
-  // Compute displayed month from selectedDate + offset
   const base = parseYMD(selectedDate);
   const displayMonth = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1);
   const year = displayMonth.getFullYear();
-  const month = displayMonth.getMonth(); // 0-indexed
+  const month = displayMonth.getMonth();
 
   const monthStart = `${year}-${String(month + 1).padStart(2, "0")}-01`;
   const lastDay = new Date(year, month + 1, 0).getDate();
@@ -1212,21 +1278,14 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
   useEffect(() => {
     if (!userId) return;
     setLoadingMonth(true);
-
     Promise.all([
-      supabase
-        .from("appointments")
+      supabase.from("appointments")
         .select("id, date, time, pets(name, clients(full_name)), confirmed, no_show, paid")
-        .eq("groomer_id", userId)
-        .gte("date", monthStart)
-        .lte("date", monthEnd)
+        .eq("groomer_id", userId).gte("date", monthStart).lte("date", monthEnd)
         .order("time", { ascending: true }),
-      supabase
-        .from("vacation_days")
+      supabase.from("vacation_days")
         .select("id, date, start_time, end_time")
-        .eq("groomer_id", userId)
-        .gte("date", monthStart)
-        .lte("date", monthEnd),
+        .eq("groomer_id", userId).gte("date", monthStart).lte("date", monthEnd),
     ]).then(([{ data: appts }, { data: vacs }]) => {
       setMonthAppts(appts || []);
       setVacationDays(vacs || []);
@@ -1234,24 +1293,19 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
     });
   }, [userId, monthStart, monthEnd]);
 
-  // Build day grid
-  const firstWeekday = new Date(year, month, 1).getDay(); // 0=Sun
+  const firstWeekday = new Date(year, month, 1).getDay();
   const totalCells = firstWeekday + lastDay;
-  const rows = Math.ceil(totalCells / 7);
-  const cells = Array.from({ length: rows * 7 }, (_, i) => {
+  const cells = Array.from({ length: Math.ceil(totalCells / 7) * 7 }, (_, i) => {
     const dayNum = i - firstWeekday + 1;
     return dayNum >= 1 && dayNum <= lastDay ? dayNum : null;
   });
 
   const todayStr = toYMD(new Date());
-
-  // Group appointments by date string
   const apptsByDate = {};
   (monthAppts || []).forEach((a) => {
     if (!apptsByDate[a.date]) apptsByDate[a.date] = [];
     apptsByDate[a.date].push(a);
   });
-
   const vacsByDate = {};
   (vacationDays || []).forEach((v) => {
     if (!vacsByDate[v.date]) vacsByDate[v.date] = [];
@@ -1262,22 +1316,16 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
 
   return (
     <div className="space-y-3">
-      {/* Month nav */}
       <div className="flex items-center justify-between px-1">
-        <button
-          onClick={() => setMonthOffset((o) => o - 1)}
+        <button onClick={() => setMonthOffset((o) => o - 1)}
           className="w-9 h-9 rounded-full border border-[var(--border-med)] bg-[var(--surface)] flex items-center justify-center text-[var(--text-2)] hover:bg-[var(--bg)] text-lg font-bold active:opacity-70"
-          aria-label="Previous month"
-        >‹</button>
+          aria-label="Previous month">‹</button>
         <span className="font-bold text-[var(--text-1)] text-base">{monthLabel}</span>
-        <button
-          onClick={() => setMonthOffset((o) => o + 1)}
+        <button onClick={() => setMonthOffset((o) => o + 1)}
           className="w-9 h-9 rounded-full border border-[var(--border-med)] bg-[var(--surface)] flex items-center justify-center text-[var(--text-2)] hover:bg-[var(--bg)] text-lg font-bold active:opacity-70"
-          aria-label="Next month"
-        >›</button>
+          aria-label="Next month">›</button>
       </div>
 
-      {/* Day-of-week headers */}
       <div className="grid grid-cols-7 text-center">
         {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d) => (
           <div key={d} className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wide py-1">{d}</div>
@@ -1289,12 +1337,9 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
       ) : (
         <div className="grid grid-cols-7 border-t border-l border-[var(--border)]">
           {cells.map((dayNum, idx) => {
-            if (!dayNum) {
-              return (
-                <div key={`empty-${idx}`} className="border-b border-r border-[var(--border)] bg-[var(--bg)] min-h-[72px] sm:min-h-[88px]" />
-              );
-            }
-
+            if (!dayNum) return (
+              <div key={`empty-${idx}`} className="border-b border-r border-[var(--border)] bg-[var(--bg)] min-h-[72px] sm:min-h-[88px]" />
+            );
             const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`;
             const dayAppts = apptsByDate[dateStr] || [];
             const dayVacs = vacsByDate[dateStr] || [];
@@ -1302,53 +1347,31 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
             const isSelected = dateStr === selectedDate;
             const isPast = dateStr < todayStr;
             const MAX_VISIBLE = 3;
-
             return (
-              <div
-                key={dateStr}
-                onClick={() => onDayClick(dateStr)}
+              <div key={dateStr} onClick={() => onDayClick(dateStr)}
                 className={`border-b border-r border-[var(--border)] min-h-[72px] sm:min-h-[88px] p-1 cursor-pointer transition-colors select-none
                   ${isToday ? "bg-emerald-50" : isPast ? "bg-[var(--bg)]" : "bg-[var(--surface)]"}
-                  hover:bg-emerald-50/60 active:bg-emerald-100/60
-                `}
-              >
-                {/* Day number */}
+                  hover:bg-emerald-50/60 active:bg-emerald-100/60`}>
                 <div className="flex items-center justify-between mb-0.5">
                   <span className={`text-xs font-bold w-6 h-6 flex items-center justify-center rounded-full leading-none
-                    ${isToday ? "bg-emerald-500 text-white" : isSelected ? "bg-[var(--brand,#059669)] text-white" : "text-[var(--text-2)]"}
-                  `}>
+                    ${isToday ? "bg-emerald-500 text-white" : isSelected ? "bg-[var(--brand,#059669)] text-white" : "text-[var(--text-2)]"}`}>
                     {dayNum}
                   </span>
-                  {dayAppts.length > 0 && (
-                    <span className="text-[9px] font-bold text-[var(--text-3)]">{dayAppts.length}</span>
-                  )}
+                  {dayAppts.length > 0 && <span className="text-[9px] font-bold text-[var(--text-3)]">{dayAppts.length}</span>}
                 </div>
-
-                {/* Time block indicator */}
                 {dayVacs.length > 0 && (
                   <div className="text-[9px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 rounded px-1 py-0.5 mb-0.5 truncate leading-tight">
                     🚫 Blocked
                   </div>
                 )}
-
-                {/* Appointment chips */}
                 {dayAppts.slice(0, MAX_VISIBLE).map((a) => (
-                  <div
-                    key={a.id}
-                    className={`text-[9px] font-medium rounded px-1 py-0.5 mb-0.5 truncate leading-tight
-                      ${a.no_show ? "bg-gray-100 text-gray-500"
-                        : a.confirmed ? "bg-emerald-100 text-emerald-800"
-                        : "bg-amber-100 text-amber-800"}
-                    `}
-                  >
+                  <div key={a.id} className={`text-[9px] font-medium rounded px-1 py-0.5 mb-0.5 truncate leading-tight
+                    ${a.no_show ? "bg-gray-100 text-gray-500" : a.confirmed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
                     {a.time?.slice(0,5)} {a.pets?.name || "—"}
                   </div>
                 ))}
-
                 {dayAppts.length > MAX_VISIBLE && (
-                  <div className="text-[9px] text-[var(--text-3)] font-semibold px-1">
-                    +{dayAppts.length - MAX_VISIBLE} more
-                  </div>
+                  <div className="text-[9px] text-[var(--text-3)] font-semibold px-1">+{dayAppts.length - MAX_VISIBLE} more</div>
                 )}
               </div>
             );
@@ -1356,7 +1379,6 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
         </div>
       )}
 
-      {/* Legend */}
       <div className="flex flex-wrap gap-3 text-[10px] text-[var(--text-3)] px-1 pt-1">
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-100 border border-emerald-300 inline-block" /> Confirmed</span>
         <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-100 border border-amber-300 inline-block" /> Unconfirmed</span>
@@ -1381,8 +1403,8 @@ export default function Schedule() {
   const [viewMode, setViewMode] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "list" : "grid"
   );
-  const [monthOffset, setMonthOffset] = useState(0); // months from selectedDate's month
-  const [dayActionDate, setDayActionDate] = useState(null); // date string for DayActionModal
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [dayActionDate, setDayActionDate] = useState(null);
 
   const [petModalOpen, setPetModalOpen] = useState(false);
   const [modalSlot, setModalSlot] = useState(null);
@@ -1428,6 +1450,8 @@ export default function Schedule() {
   // Service pricing loaded from groomers.service_pricing
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
   const [serviceOptions, setServiceOptions] = useState(SERVICE_OPTIONS);
+  const [addonOptions, setAddonOptions] = useState([]);
+  const [feeOptions, setFeeOptions] = useState([]);
   const [groomer, setGroomer] = useState(null);
 
   // Load ALL pending booking requests across all future dates
@@ -1476,6 +1500,38 @@ export default function Schedule() {
       shot_records: grouped[a.pet_id] || [],
     }));
   };
+
+  /* Refetch appointments when tab regains focus — picks up bookings made in other tabs */
+  useEffect(() => {
+    if (!user || !selectedDate) return;
+
+    const handleVisible = async () => {
+      if (document.visibilityState !== "visible") return;
+
+      const { data: appts } = await supabase
+        .from("appointments")
+        .select(`
+          id, pet_id, groomer_id, date, time, duration_min, slot_weight,
+          services, notes, confirmed, no_show, paid, amount, reminder_enabled, source, appointment_group_id,
+          checked_in_at, checked_out_at, payment_method,
+          pets (
+            id, name, tags, client_id,
+            clients ( id, full_name, phone, email, sms_opt_in, street, city, state, zip )
+          )
+        `)
+        .eq("groomer_id", user.id)
+        .eq("date", selectedDate)
+        .order("time", { ascending: true });
+
+      if (appts) {
+        const withShots = await attachShotRecords(appts);
+        setAppointments(withShots);
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisible);
+    return () => document.removeEventListener("visibilitychange", handleVisible);
+  }, [user, selectedDate]);
 
   /* Load schedule data */
   useEffect(() => {
@@ -1547,7 +1603,22 @@ export default function Schedule() {
       } else if (groomer?.service_pricing) {
         setPricing({ ...DEFAULT_PRICING, ...groomer.service_pricing });
       }
+      setAddonOptions([]);
+      setFeeOptions([]);
       setGroomer(groomer);
+
+      // Fetch add-ons and fees separately — columns may not exist yet in older DBs
+      try {
+        const { data: extras } = await supabase
+          .from("groomers")
+          .select("custom_addons, custom_fees")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (extras) {
+          setAddonOptions(extras.custom_addons || []);
+          setFeeOptions(extras.custom_fees || []);
+        }
+      } catch (_) {}
       if (groomer?.plan_tier) {
         setPlanTier(groomer.plan_tier);
       }
@@ -2320,45 +2391,31 @@ export default function Schedule() {
             <button
               onClick={() => setViewMode("list")}
               style={{
-                padding: "6px 14px",
-                fontSize: 13,
-                fontWeight: 700,
-                borderRadius: "999px 0 0 999px",
-                border: "1px solid",
+                padding: "6px 14px", fontSize: 13, fontWeight: 700,
+                borderRadius: "999px 0 0 999px", border: "1px solid",
                 borderColor: viewMode === "list" ? "#059669" : "#d1d5db",
                 backgroundColor: viewMode === "list" ? "#059669" : "#ffffff",
-                color: viewMode === "list" ? "#ffffff" : "#6b7280",
-                cursor: "pointer",
+                color: viewMode === "list" ? "#ffffff" : "#6b7280", cursor: "pointer",
               }}
             >☰ List</button>
             <button
               onClick={() => setViewMode("grid")}
               style={{
-                padding: "6px 14px",
-                fontSize: 13,
-                fontWeight: 700,
-                borderRadius: "0",
-                border: "1px solid",
-                borderLeft: "none",
+                padding: "6px 14px", fontSize: 13, fontWeight: 700,
+                borderRadius: "0", border: "1px solid", borderLeft: "none",
                 borderColor: viewMode === "grid" ? "#059669" : "#d1d5db",
                 backgroundColor: viewMode === "grid" ? "#059669" : "#ffffff",
-                color: viewMode === "grid" ? "#ffffff" : "#6b7280",
-                cursor: "pointer",
+                color: viewMode === "grid" ? "#ffffff" : "#6b7280", cursor: "pointer",
               }}
             >⊞ Grid</button>
             <button
               onClick={() => { setViewMode("month"); setMonthOffset(0); }}
               style={{
-                padding: "6px 14px",
-                fontSize: 13,
-                fontWeight: 700,
-                borderRadius: "0 999px 999px 0",
-                border: "1px solid",
-                borderLeft: "none",
+                padding: "6px 14px", fontSize: 13, fontWeight: 700,
+                borderRadius: "0 999px 999px 0", border: "1px solid", borderLeft: "none",
                 borderColor: viewMode === "month" ? "#059669" : "#d1d5db",
                 backgroundColor: viewMode === "month" ? "#059669" : "#ffffff",
-                color: viewMode === "month" ? "#ffffff" : "#6b7280",
-                cursor: "pointer",
+                color: viewMode === "month" ? "#ffffff" : "#6b7280", cursor: "pointer",
               }}
             >📅 Month</button>
           </div>
@@ -3063,7 +3120,6 @@ export default function Schedule() {
             setSelectedDate(dayActionDate);
             setViewMode("list");
             setDayActionDate(null);
-            // Small delay to let day data load before opening slot picker
             setTimeout(() => openSlot("09:00"), 300);
           }}
           onAddTimeBlock={async (date, start, end, note, setSaving) => {
@@ -3111,6 +3167,8 @@ export default function Schedule() {
         breakSlots={breakSlots}
         planTier={planTier}
         serviceOptions={serviceOptions}
+        addonOptions={addonOptions}
+        feeOptions={feeOptions}
       />
 
       <AppointmentModal
@@ -3120,6 +3178,8 @@ export default function Schedule() {
         appt={editAppt}
         planTier={planTier}
         serviceOptions={serviceOptions}
+        addonOptions={addonOptions}
+        feeOptions={feeOptions}
         form={editForm}
         setForm={setEditForm}
         onSave={handleSaveEdit}

@@ -100,6 +100,9 @@ export default function Profile() {
         setMaxParallel(data.max_parallel ?? 1);
         setMaxApptsPerDay(data.max_appts_per_day ?? null);
 
+        setCustomAddons(data.custom_addons || []);
+        setCustomFees(data.custom_fees || []);
+
         // Load custom intake questions; seed defaults if never set
         if (data.custom_intake_questions) {
           setCustomIntakeQuestions(data.custom_intake_questions);
@@ -346,6 +349,8 @@ export default function Profile() {
   const [stripeConnected, setStripeConnected] = useState(false);
   const [reminderTemplate, setReminderTemplate] = useState("");
   const [customServices, setCustomServices] = useState(null);
+  const [customAddons, setCustomAddons] = useState([]);
+  const [customFees, setCustomFees] = useState([]);
   const [bookingRequiresApproval, setBookingRequiresApproval] = useState(false);
   const [stripeError, setStripeError] = useState("");
   const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
@@ -910,16 +915,166 @@ export default function Profile() {
             Multiple services are summed automatically. You can always override the amount per appointment.
           </p>
 
+          {/* ── ADD-ONS SECTION ── */}
+          <div className="pt-2 border-t border-[var(--border-med)]">
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <h3 className="font-bold text-[var(--text-1)]">Add-ons</h3>
+                <p className="text-xs text-[var(--text-3)] mt-0.5">
+                  Flat-rate extras clients can select when booking — tooth brush, ear pluck, nail grind, etc.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 mt-3">
+              {customAddons.map((addon, i) => (
+                <div key={addon.id || i} className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={addon.name}
+                      onChange={e => {
+                        const updated = [...customAddons];
+                        updated[i] = { ...updated[i], name: e.target.value };
+                        setCustomAddons(updated);
+                      }}
+                      placeholder="Add-on name"
+                      className="flex-1 border border-[var(--border-med)] rounded-xl px-3 py-2.5 text-sm font-semibold bg-[var(--bg)] text-[var(--text-1)]"
+                    />
+                    <div className="relative w-24 flex-shrink-0">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--text-3)]">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={addon.price === 0 ? "" : (addon.price ?? "")}
+                        onChange={e => {
+                          const updated = [...customAddons];
+                          updated[i] = { ...updated[i], price: e.target.value === "" ? 0 : Number(e.target.value) || 0 };
+                          setCustomAddons(updated);
+                        }}
+                        onFocus={e => e.target.select()}
+                        placeholder="0"
+                        className="w-full border border-[var(--border-med)] rounded-xl pl-6 pr-2 py-2.5 text-sm bg-[var(--bg)] text-[var(--text-1)]"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCustomAddons(prev => prev.filter((_, idx) => idx !== i))}
+                      className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-red-200 text-red-400 hover:text-red-600 hover:bg-red-50 transition font-bold text-sm"
+                      title="Remove add-on"
+                    >✕</button>
+                  </div>
+                  <input
+                    type="text"
+                    value={addon.description || ""}
+                    onChange={e => {
+                      const updated = [...customAddons];
+                      updated[i] = { ...updated[i], description: e.target.value };
+                      setCustomAddons(updated);
+                    }}
+                    placeholder="Description (optional) — shown to clients on the booking page"
+                    className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2 text-xs bg-[var(--bg)] text-[var(--text-2)]"
+                  />
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => setCustomAddons(prev => [...prev, { id: `a${Date.now()}`, name: "", price: 0, description: "" }])}
+                className="w-full py-2.5 rounded-xl border-2 border-dashed border-[var(--border-med)] text-[var(--text-3)] text-sm font-semibold hover:border-emerald-400 hover:text-emerald-600 transition-colors"
+              >
+                + Add Add-on
+              </button>
+            </div>
+          </div>
+
+          {/* ── FEES SECTION ── */}
+          <div className="pt-2 border-t border-[var(--border-med)]">
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <h3 className="font-bold text-[var(--text-1)]">Fees</h3>
+                <p className="text-xs text-[var(--text-3)] mt-0.5">
+                  Situational charges you apply manually — flea treatment, difficult dog, late cancel, etc. Never shown to clients.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3 mt-3">
+              {customFees.map((fee, i) => (
+                <div key={fee.id || i} className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={fee.name}
+                      onChange={e => {
+                        const updated = [...customFees];
+                        updated[i] = { ...updated[i], name: e.target.value };
+                        setCustomFees(updated);
+                      }}
+                      placeholder="Fee name"
+                      className="flex-1 border border-[var(--border-med)] rounded-xl px-3 py-2.5 text-sm font-semibold bg-[var(--bg)] text-[var(--text-1)]"
+                    />
+                    <div className="relative w-24 flex-shrink-0">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--text-3)]">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={fee.price === 0 ? "" : (fee.price ?? "")}
+                        onChange={e => {
+                          const updated = [...customFees];
+                          updated[i] = { ...updated[i], price: e.target.value === "" ? 0 : Number(e.target.value) || 0 };
+                          setCustomFees(updated);
+                        }}
+                        onFocus={e => e.target.select()}
+                        placeholder="0"
+                        className="w-full border border-[var(--border-med)] rounded-xl pl-6 pr-2 py-2.5 text-sm bg-[var(--bg)] text-[var(--text-1)]"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCustomFees(prev => prev.filter((_, idx) => idx !== i))}
+                      className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-red-200 text-red-400 hover:text-red-600 hover:bg-red-50 transition font-bold text-sm"
+                      title="Remove fee"
+                    >✕</button>
+                  </div>
+                  <input
+                    type="text"
+                    value={fee.description || ""}
+                    onChange={e => {
+                      const updated = [...customFees];
+                      updated[i] = { ...updated[i], description: e.target.value };
+                      setCustomFees(updated);
+                    }}
+                    placeholder="Internal note (optional) — e.g. when to apply this fee"
+                    className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2 text-xs bg-[var(--bg)] text-[var(--text-2)]"
+                  />
+                </div>
+              ))}
+
+              <button
+                type="button"
+                onClick={() => setCustomFees(prev => [...prev, { id: `f${Date.now()}`, name: "", price: 0, description: "" }])}
+                className="w-full py-2.5 rounded-xl border-2 border-dashed border-[var(--border-med)] text-[var(--text-3)] text-sm font-semibold hover:border-blue-400 hover:text-blue-600 transition-colors"
+              >
+                + Add Fee
+              </button>
+            </div>
+          </div>
+
           <button
             onClick={async () => {
               const { error } = await supabase
                 .from("groomers")
-                .update({ custom_services: customServices })
+                .update({
+                  custom_services: customServices,
+                  custom_addons: customAddons,
+                  custom_fees: customFees,
+                })
                 .eq("id", user.id);
               if (!error) {
                 setConfirmConfig({
                   title: "Saved!",
-                  message: "Your services and pricing have been updated.",
+                  message: "Your services, add-ons, and fees have been updated.",
                   confirmLabel: "OK",
                   onConfirm: () => {},
                 });
