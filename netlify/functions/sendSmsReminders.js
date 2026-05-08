@@ -5,14 +5,11 @@
 // of the scheduled reminder time.
 
 const { createClient } = require("@supabase/supabase-js");
-const { default: Telnyx } = require("telnyx");
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-
-const telnyx = Telnyx(process.env.TELNYX_API_KEY);
 
 /* ── Token interpolation ──────────────────────────────────── */
 function interpolate(template, vars) {
@@ -86,7 +83,7 @@ exports.handler = async (event) => {
 
   const now = new Date();
   const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const WINDOW = 15; // ±15 minutes tolerance
+  const WINDOW = 29; // ±29 minutes — pairs with 30-min cron to catch any appointment time
 
   try {
     // Load all active groomers with SMS numbers and reminder rules
@@ -181,13 +178,27 @@ exports.handler = async (event) => {
           const template = groomer.reminder_message_template || DEFAULT_REMINDER;
           const body = interpolate(template, vars);
 
-          // Send via Telnyx
+          // Send via Telnyx REST API
           try {
-            await telnyx.messages.create({
-              from: groomer.sms_number,
-              to: client.phone,
-              text: body,
+            const res = await fetch("https://api.telnyx.com/v2/messages", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${process.env.TELNYX_API_KEY}`,
+              },
+              body: JSON.stringify({
+                from: groomer.sms_number,
+                to: client.phone,
+                text: body,
+              }),
             });
+
+            if (!res.ok) {
+              const err = await res.text();
+              console.error(`SMS failed for appt ${appt.id}:`, err);
+              skipped++;
+              continue;
+            }
 
             // Stamp sent time
             await supabase
