@@ -1515,7 +1515,7 @@ export default function Schedule() {
           services, notes, confirmed, no_show, paid, amount, reminder_enabled, source, appointment_group_id,
           checked_in_at, checked_out_at, payment_method,
           pets (
-            id, name, tags, client_id,
+            id, name, tags, client_id, photo_url,
             clients ( id, full_name, phone, email, sms_opt_in, street, city, state, zip )
           )
         `)
@@ -1572,7 +1572,7 @@ export default function Schedule() {
             services, notes, confirmed, no_show, paid, amount, reminder_enabled, source, appointment_group_id,
             checked_in_at, checked_out_at, payment_method,
             pets (
-              id, name, tags, client_id,
+              id, name, tags, client_id, photo_url,
               clients (
                 id,
                 full_name,
@@ -1850,12 +1850,10 @@ export default function Schedule() {
         services, notes, confirmed, no_show, paid, amount, reminder_enabled,
         appointment_group_id,
         pets (
-          id, name, tags, client_id,
+          id, name, tags, client_id, photo_url,
           clients ( id, full_name, phone, email )
         )
       `);
-
-    setSavingNew(false);
 
     if (error) {
       setConfirmConfig({
@@ -1960,7 +1958,7 @@ export default function Schedule() {
         id, pet_id, groomer_id, date, time, duration_min, slot_weight,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled, appointment_group_id,
         payment_method, checked_in_at, checked_out_at, source,
-        pets ( id, name, tags, client_id, clients ( id, full_name, phone, email ) )
+        pets ( id, name, tags, client_id, photo_url, clients ( id, full_name, phone, email ) )
       `)
       .single();
 
@@ -2569,6 +2567,16 @@ export default function Schedule() {
                                     : ""}
                                 `}
                               >
+                                {/* Pet photo — only in the first slot of this appointment */}
+                                {appt.pets?.photo_url && slot === (appt.time || "").slice(0, 5) && (
+                                  <img
+                                    src={appt.pets.photo_url}
+                                    alt={appt.pets.name}
+                                    loading="lazy"
+                                    className="w-8 h-8 rounded-full object-cover border border-gray-200 mb-1"
+                                  />
+                                )}
+
                                 {/* Pet name + vaccine icon */}
                                 <div className="flex items-center justify-between gap-1">
                                   <span className="font-semibold text-[11px] text-gray-900 truncate leading-tight">
@@ -2837,28 +2845,39 @@ export default function Schedule() {
 
                   {/* Pet + Client + Tags */}
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                    <div>
-                      <div className="font-semibold text-gray-900">
-                        {displayName}{" "}
-                        {isMulti && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">Multi</span>}
-                        {!isMulti && <span className="text-xs text-gray-500">{size.label}</span>}
-                      </div>
-                      <div className="text-sm text-gray-700">
-                        {appt.pets?.clients?.full_name || "Client"}
-                      </div>
-
-                      {appt.pets?.tags?.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                          {appt.pets.tags.map((tag) => (
-                            <span
-                              key={tag}
-                              className="px-2 py-0.5 text-[11px] rounded bg-gray-100 text-gray-600"
-                            >
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
+                    <div className="flex items-start gap-3 min-w-0">
+                      {/* Pet photo — lazy, only single-pet appointments */}
+                      {!isMulti && appt.pets?.photo_url && (
+                        <img
+                          src={appt.pets.photo_url}
+                          alt={appt.pets.name}
+                          loading="lazy"
+                          className="w-12 h-12 rounded-full object-cover border border-gray-200 flex-shrink-0 mt-0.5"
+                        />
                       )}
+                      <div className="min-w-0">
+                        <div className="font-semibold text-gray-900">
+                          {displayName}{" "}
+                          {isMulti && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">Multi</span>}
+                          {!isMulti && <span className="text-xs text-gray-500">{size.label}</span>}
+                        </div>
+                        <div className="text-sm text-gray-700">
+                          {appt.pets?.clients?.full_name || "Client"}
+                        </div>
+
+                        {appt.pets?.tags?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {appt.pets.tags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="px-2 py-0.5 text-[11px] rounded bg-gray-100 text-gray-600"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Contact buttons */}
