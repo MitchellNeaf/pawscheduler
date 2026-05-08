@@ -20,12 +20,16 @@ export default function ConfirmPage() {
         .select(`
           id, date, time, confirmed, confirm_token,
           pets ( name, clients ( full_name ) ),
-          groomers: groomer_id ( full_name )
+          groomers ( full_name )
         `)
         .eq("confirm_token", token)
         .maybeSingle();
 
-      if (error || !data) { setStatus("error"); return; }
+      if (error || !data) {
+        console.error("ConfirmPage lookup error:", error, "data:", data);
+        setStatus("error");
+        return;
+      }
 
       if (data.confirmed) {
         setAppt(data);
@@ -33,13 +37,17 @@ export default function ConfirmPage() {
         return;
       }
 
-      // Confirm it
-      const { error: updateErr } = await supabase
-        .from("appointments")
-        .update({ confirmed: true, confirm_token: null })
-        .eq("id", data.id);
+      // Use the existing Netlify function to confirm — it uses service role key
+      // so no anon UPDATE policy needed on appointments
+      const confirmRes = await fetch(
+        `/.netlify/functions/confirmAppointment?id=${data.id}&token=${token}`
+      );
 
-      if (updateErr) { setStatus("error"); return; }
+      if (!confirmRes.ok) {
+        console.error("confirmAppointment function error:", await confirmRes.text());
+        setStatus("error");
+        return;
+      }
 
       setAppt(data);
       setStatus("success");
