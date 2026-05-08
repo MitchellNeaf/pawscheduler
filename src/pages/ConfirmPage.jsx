@@ -36,14 +36,15 @@ export default function ConfirmPage() {
         return;
       }
 
-      // Use the existing Netlify function to confirm — it uses service role key
-      // so no anon UPDATE policy needed on appointments
-      const confirmRes = await fetch(
-        `/.netlify/functions/confirmAppointment?id=${data.id}&token=${token}`
-      );
+      // Update directly — we already verified the token matches via the SELECT above
+      const { error: updateErr } = await supabase
+        .from("appointments")
+        .update({ confirmed: true, confirm_token: null })
+        .eq("id", data.id)
+        .eq("confirm_token", token);
 
-      if (!confirmRes.ok) {
-        console.error("confirmAppointment function error:", await confirmRes.text());
+      if (updateErr) {
+        console.error("confirm update error:", updateErr);
         setStatus("error");
         return;
       }
