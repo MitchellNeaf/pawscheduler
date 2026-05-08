@@ -31,6 +31,7 @@ import Waiver from "./pages/Waiver";
 import Intake from "./pages/Intake";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancelled from "./pages/PaymentCancelled";
+import ConfirmPage from "./pages/ConfirmPage";
 
 // Legal pages
 import Terms from "./pages/legal/Terms";
@@ -135,7 +136,6 @@ function ProtectedRoute({ children }) {
           .from("groomers")
           .update({ subscription_status: "free", plan_tier: "free" })
           .eq("id", groomer.id);
-        // Let them in on free tier — no redirect needed
       }
 
       // Hard expired accounts still get redirected
@@ -267,6 +267,7 @@ function AppShell() {
     location.pathname.startsWith("/book/") ||
     location.pathname.startsWith("/waiver/") ||
     location.pathname.startsWith("/intake/") ||
+    location.pathname.startsWith("/confirm/") ||
     location.pathname === "/payment-success" ||
     location.pathname === "/payment-cancelled" ||
     location.pathname === "/auth" ||
@@ -278,6 +279,7 @@ function AppShell() {
     location.pathname.startsWith("/book/") ||
     location.pathname.startsWith("/waiver/") ||
     location.pathname.startsWith("/intake/") ||
+    location.pathname.startsWith("/confirm/") ||
     location.pathname === "/payment-success" ||
     location.pathname === "/payment-cancelled" ||
     location.pathname === "/auth" ||
@@ -289,7 +291,6 @@ function AppShell() {
     window.location.href = "/auth";
   };
 
-  // ✅ Hamburger dropdown state
   const [mobileOpen, setMobileOpen] = useState(false);
   const menuRef = useRef(null);
 
@@ -306,20 +307,16 @@ function AppShell() {
     []
   );
 
-  // Close dropdown on route change
   useEffect(() => {
     setMobileOpen(false);
   }, [location.pathname]);
 
-  // Close dropdown on outside click
   useEffect(() => {
     if (!mobileOpen) return;
-
     const onDown = (e) => {
       if (!menuRef.current) return;
       if (!menuRef.current.contains(e.target)) setMobileOpen(false);
     };
-
     document.addEventListener("mousedown", onDown);
     document.addEventListener("touchstart", onDown, { passive: true });
     return () => {
@@ -328,7 +325,6 @@ function AppShell() {
     };
   }, [mobileOpen]);
 
-  // Close on Escape
   useEffect(() => {
     if (!mobileOpen) return;
     const onKey = (e) => {
@@ -368,7 +364,6 @@ function AppShell() {
                 onClick={() => setMobileOpen((v) => !v)}
                 className="btn-secondary px-3 py-2 rounded-xl"
               >
-                {/* Hamburger icon */}
                 <svg
                   width="20"
                   height="20"
@@ -385,7 +380,6 @@ function AppShell() {
                 </svg>
               </button>
 
-              {/* Dropdown */}
               {mobileOpen && (
                 <div className="absolute right-0 mt-2 w-56 rounded-2xl border border-gray-200 bg-white shadow-xl overflow-hidden z-50">
                   <div className="py-2">
@@ -430,6 +424,7 @@ function AppShell() {
         <Route path="/book/:slug" element={<Book />} />
         <Route path="/waiver/:slug" element={<Waiver />} />
         <Route path="/intake/:slug" element={<Intake />} />
+        <Route path="/confirm/:token" element={<ConfirmPage />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />
         <Route path="/payment-cancelled" element={<PaymentCancelled />} />
         <Route path="/reset-password" element={<ResetPassword />} />

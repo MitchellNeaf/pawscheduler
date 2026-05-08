@@ -83,6 +83,8 @@ export default function Profile() {
       if (data) {
         if (data.plan_tier) setPlanTier(data.plan_tier);
         if (data.reminder_message_template) setReminderTemplate(data.reminder_message_template || "");
+        if (data.sms_confirmation_template) setConfirmationTemplate(data.sms_confirmation_template || "");
+        if (data.reminder_rules) setReminderRules(data.reminder_rules);
         if (data.custom_services) {
           setCustomServices(data.custom_services);
         } else {
@@ -277,6 +279,8 @@ export default function Profile() {
         time_zone: timeZone,
         booking_requires_approval: bookingRequiresApproval,
         reminder_message_template: reminderTemplate.trim() || null,
+        sms_confirmation_template: confirmationTemplate.trim() || null,
+        reminder_rules: reminderRules.length ? reminderRules : [48],
         custom_services: customServices,
       })
       .eq("id", user.id);
@@ -348,6 +352,8 @@ export default function Profile() {
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
   const [reminderTemplate, setReminderTemplate] = useState("");
+  const [confirmationTemplate, setConfirmationTemplate] = useState("");
+  const [reminderRules, setReminderRules] = useState([48, 2]); // hours before appointment
   const [customServices, setCustomServices] = useState(null);
   const [customAddons, setCustomAddons] = useState([]);
   const [customFees, setCustomFees] = useState([]);
@@ -515,19 +521,165 @@ export default function Profile() {
             </div>
           </div>
 
-          {/* Custom Reminder Message */}
-          <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-2">
-            <h3 className="font-bold text-[var(--text-1)] text-sm">Custom Reminder Message</h3>
-            <p className="text-xs text-[var(--text-3)]">
-              Personalize the SMS sent the night before. Placeholders: {"{client}"} {"{pet}"} {"{time}"} {"{confirm_link}"}. Leave blank for the default.
-            </p>
-            <textarea
-              rows={3}
-              value={reminderTemplate}
-              onChange={(e) => setReminderTemplate(e.target.value)}
-              placeholder="Hi {client}, just a reminder that {pet} has a grooming appointment tomorrow at {time}. Confirm here: {confirm_link}"
-              className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm resize-none bg-[var(--bg)] text-[var(--text-1)]"
-            />
+          {/* ── SECTION 1: 48hr Confirmation (fixed timing, editable message) ── */}
+          <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-bold text-[var(--text-1)] text-sm">48hr Confirmation Request</h3>
+                <p className="text-xs text-[var(--text-3)] mt-0.5">
+                  Automatically sent 48 hours before every appointment. Timing is fixed — customize the wording below. Always includes a confirm link.
+                </p>
+              </div>
+              <span className="flex-shrink-0 text-[11px] font-bold px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-600 whitespace-nowrap">
+                Always 48hrs
+              </span>
+            </div>
+
+            {(() => {
+              const TOKENS = [
+                { label: "First name", value: "%first_name%" },
+                { label: "Pet", value: "%pet%" },
+                { label: "Date", value: "%date%" },
+                { label: "Time", value: "%time%" },
+                { label: "Services", value: "%services%" },
+                { label: "Confirm link", value: "%confirm_link%" },
+                { label: "Business name", value: "%business_name%" },
+              ];
+
+              const insertToken = (textareaId, token, getValue, setValue) => {
+                const el = document.getElementById(textareaId);
+                if (!el) return;
+                const start = el.selectionStart;
+                const end = el.selectionEnd;
+                const next = getValue().slice(0, start) + token + getValue().slice(end);
+                setValue(next);
+                setTimeout(() => {
+                  el.focus();
+                  el.setSelectionRange(start + token.length, start + token.length);
+                }, 0);
+              };
+
+              return (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {TOKENS.map((t) => (
+                      <button key={t.value} type="button"
+                        onClick={() => insertToken("confirm-template-input", t.value, () => confirmationTemplate, setConfirmationTemplate)}
+                        className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition">
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    id="confirm-template-input"
+                    rows={3}
+                    value={confirmationTemplate}
+                    onChange={(e) => setConfirmationTemplate(e.target.value)}
+                    placeholder={`Hi %first_name%, please confirm %pet%'s appointment on %date% at %time%: %confirm_link%`}
+                    className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm resize-none bg-[var(--bg)] text-[var(--text-1)]"
+                  />
+                  <p className="text-[11px] text-[var(--text-3)]">
+                    Leave blank for the default. The %confirm_link% token is always appended if not included.
+                  </p>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* ── SECTION 2: Custom Reminders (configurable timing + message) ── */}
+          <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-4">
+            <div>
+              <h3 className="font-bold text-[var(--text-1)] text-sm">Reminders</h3>
+              <p className="text-xs text-[var(--text-3)] mt-0.5">
+                Set when reminders fire and customize the message. Add %confirm_link% to any reminder if you want clients to be able to confirm from it too.
+              </p>
+            </div>
+
+            {(() => {
+              const TOKENS = [
+                { label: "First name", value: "%first_name%" },
+                { label: "Pet", value: "%pet%" },
+                { label: "Date", value: "%date%" },
+                { label: "Time", value: "%time%" },
+                { label: "Services", value: "%services%" },
+                { label: "Confirm link", value: "%confirm_link%" },
+                { label: "Business name", value: "%business_name%" },
+              ];
+
+              const insertToken = (token) => {
+                const el = document.getElementById("reminder-template-input");
+                if (!el) return;
+                const start = el.selectionStart;
+                const end = el.selectionEnd;
+                const next = reminderTemplate.slice(0, start) + token + reminderTemplate.slice(end);
+                setReminderTemplate(next);
+                setTimeout(() => {
+                  el.focus();
+                  el.setSelectionRange(start + token.length, start + token.length);
+                }, 0);
+              };
+
+              return (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {TOKENS.map((t) => (
+                      <button key={t.value} type="button"
+                        onClick={() => insertToken(t.value)}
+                        className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 transition">
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                  <textarea
+                    id="reminder-template-input"
+                    rows={3}
+                    value={reminderTemplate}
+                    onChange={(e) => setReminderTemplate(e.target.value)}
+                    placeholder={`Hi %first_name%, just a reminder that %pet% has a grooming appointment on %date% at %time%. Reply STOP to opt out.`}
+                    className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm resize-none bg-[var(--bg)] text-[var(--text-1)]"
+                  />
+                  <p className="text-[11px] text-[var(--text-3)]">Leave blank for the default wording.</p>
+                </div>
+              );
+            })()}
+
+            {/* Timing rules */}
+            <div className="space-y-2 pt-2 border-t border-[var(--border-med)]">
+              <div>
+                <h4 className="text-xs font-bold text-[var(--text-2)] uppercase tracking-wide">Send at</h4>
+                <p className="text-[11px] text-[var(--text-3)] mt-0.5">Each rule fires once at that many hours before the appointment.</p>
+              </div>
+              <div className="space-y-2">
+                {reminderRules.map((hrs, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="number" min={1} max={168}
+                      value={hrs}
+                      onChange={(e) => {
+                        const updated = [...reminderRules];
+                        updated[i] = Number(e.target.value) || 1;
+                        setReminderRules(updated);
+                      }}
+                      className="w-20 border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm bg-[var(--bg)] text-[var(--text-1)] text-center"
+                    />
+                    <span className="text-sm text-[var(--text-2)]">hours before</span>
+                    <button
+                      type="button"
+                      disabled={reminderRules.length <= 1}
+                      onClick={() => setReminderRules(prev => prev.filter((_, idx) => idx !== i))}
+                      className="ml-auto w-7 h-7 flex items-center justify-center rounded-lg border border-red-200 text-red-400 hover:text-red-600 hover:bg-red-50 transition disabled:opacity-30 disabled:cursor-not-allowed text-sm font-bold"
+                    >✕</button>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => setReminderRules(prev => [...prev, 2])}
+                className="text-sm px-3 py-1.5 rounded-xl border border-dashed border-[var(--border-med)] text-[var(--text-3)] hover:border-emerald-400 hover:text-emerald-600 transition font-semibold"
+              >
+                + Add reminder time
+              </button>
+            </div>
           </div>
 
           <div>

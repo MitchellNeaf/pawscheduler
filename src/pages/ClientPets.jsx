@@ -1,9 +1,74 @@
 import { useParams, Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "../supabase";
 import Loader from "../components/Loader";
 import ConfirmModal from "../components/ConfirmModal";
 import { SERVICE_OPTIONS } from "../utils/grooming";
+
+/* ---------------- Image compression ---------------- */
+// Resize + compress before upload — targets ~800px max, JPEG 0.82
+function compressImage(file) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 800;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+          else { width = Math.round((width * MAX) / height); height = MAX; }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        canvas.toBlob(
+          (blob) => resolve(new File([blob], "photo.jpg", { type: "image/jpeg" })),
+          "image/jpeg",
+          0.82
+        );
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ---------------- Lazy pet photo ---------------- */
+// Only loads the image URL when the element scrolls into view
+function LazyPetPhoto({ url, name }) {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (!url) return;
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
+      { rootMargin: "120px" }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [url]);
+
+  if (!url) return null;
+
+  return (
+    <div ref={ref} className="flex-shrink-0">
+      {visible ? (
+        <img
+          src={url}
+          alt={name}
+          className="w-16 h-16 rounded-full object-cover border-2 border-[var(--border-med)] shadow-sm"
+        />
+      ) : (
+        <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] border-2 border-[var(--border-med)]" />
+      )}
+    </div>
+  );
+}
 
 const TAG_OPTIONS = [
   "Bites",
@@ -28,6 +93,8 @@ function PetEditModal({
   setOtherTag,
   toggleTag,
   onSubmit,
+  photoPreview,
+  onPhotoChange,
 }) {
   if (!open) return null;
 
@@ -62,7 +129,26 @@ function PetEditModal({
             placeholder="Breed"
           />
 
-          {/* TAGS */}
+          {/* PHOTO UPLOAD */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Pet Photo</label>
+            <div className="flex items-center gap-3">
+              {photoPreview ? (
+                <img src={photoPreview} alt="Preview"
+                  className="w-14 h-14 rounded-full object-cover border border-gray-200" />
+              ) : (
+                <div className="w-14 h-14 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 text-xl">🐾</div>
+              )}
+              <label className="cursor-pointer">
+                <span className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition font-medium text-gray-700">
+                  {photoPreview ? "Change photo" : "Upload photo"}
+                </span>
+                <input type="file" accept="image/*" className="hidden"
+                  onChange={onPhotoChange} />
+              </label>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Auto-compressed to save space.</p>
+          </div>
           <div>
             <label className="font-medium block mb-1">
               Tags (behavior, medical, etc.)
@@ -348,6 +434,8 @@ export default function ClientPets() {
   // Modal state (UI only)
   const [petEditOpen, setPetEditOpen] = useState(false);
   const [shotModalOpen, setShotModalOpen] = useState(false);
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState(null);
 
   // ConfirmModal state
   const [confirmConfig, setConfirmConfig] = useState(null);
@@ -422,6 +510,16 @@ export default function ClientPets() {
     setOtherTag("");
     setEditingId(null);
     setPetEditOpen(false);
+    setPhotoFile(null);
+    setPhotoPreview(null);
+  };
+
+  const handlePhotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const compressed = await compressImage(file);
+    setPhotoFile(compressed);
+    setPhotoPreview(URL.createObjectURL(compressed));
   };
 
   const handleAddPet = () => {
@@ -447,6 +545,19 @@ export default function ClientPets() {
       ? [...form.tags.filter((t) => t !== "Other"), otherTag]
       : form.tags;
 
+    // Upload photo if a new one was selected
+    let photoUrl = photoPreview || null; // keep existing if no new file
+    if (photoFile) {
+      const path = `${user.id}/${editingId || `new-${Date.now()}`}/photo.jpg`;
+      const { error: uploadErr } = await supabase.storage
+        .from("pet-photos")
+        .upload(path, photoFile, { upsert: true, contentType: "image/jpeg" });
+      if (!uploadErr) {
+        const { data: pub } = supabase.storage.from("pet-photos").getPublicUrl(path);
+        photoUrl = pub.publicUrl + "?v=" + Date.now();
+      }
+    }
+
     if (editingId) {
       const { data, error } = await supabase
         .from("pets")
@@ -458,6 +569,7 @@ export default function ClientPets() {
           slot_weight: form.slot_weight,
           default_services: form.default_services.length ? form.default_services : null,
           default_duration_min: form.default_duration_min || null,
+          photo_url: photoUrl,
         })
         .eq("id", editingId)
         .eq("groomer_id", user.id)
@@ -471,19 +583,18 @@ export default function ClientPets() {
     } else {
       const { data, error } = await supabase
         .from("pets")
-        .insert([
-          {
-            client_id: clientId,
-            groomer_id: user.id,
-            name: form.name,
-            breed: form.breed,
-            notes: form.notes,
-            tags: finalTags,
-            slot_weight: form.slot_weight,
-            default_services: form.default_services.length ? form.default_services : null,
-            default_duration_min: form.default_duration_min || null,
-          },
-        ])
+        .insert([{
+          client_id: clientId,
+          groomer_id: user.id,
+          name: form.name,
+          breed: form.breed,
+          notes: form.notes,
+          tags: finalTags,
+          slot_weight: form.slot_weight,
+          default_services: form.default_services.length ? form.default_services : null,
+          default_duration_min: form.default_duration_min || null,
+          photo_url: photoUrl,
+        }])
         .select()
         .single();
 
@@ -515,6 +626,8 @@ export default function ClientPets() {
     }
 
     setEditingId(pet.id);
+    setPhotoFile(null);
+    setPhotoPreview(pet.photo_url || null);
     setPetEditOpen(true);
   };
 
@@ -733,8 +846,21 @@ export default function ClientPets() {
           pets.map((pet) => (
             <li key={pet.id} className="card">
               <div className="card-body">
-                <div className="font-semibold text-lg">{pet.name}</div>
-                <div className="text-gray-600">{pet.breed}</div>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="font-semibold text-lg">{pet.name}</div>
+                    <div className="text-gray-600">{pet.breed}</div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      className="text-xs px-2.5 py-1.5 rounded-lg border border-[var(--border-med)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-[var(--bg)] transition font-semibold"
+                      onClick={() => handleEdit(pet)}
+                    >
+                      ✏️ Edit
+                    </button>
+                    <LazyPetPhoto url={pet.photo_url} name={pet.name} />
+                  </div>
+                </div>
 
                 {pet.tags?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -841,6 +967,8 @@ export default function ClientPets() {
         setOtherTag={setOtherTag}
         toggleTag={toggleTag}
         onSubmit={handleSubmit}
+        photoPreview={photoPreview}
+        onPhotoChange={handlePhotoChange}
       />
 
       {/* SHOT MODAL */}
