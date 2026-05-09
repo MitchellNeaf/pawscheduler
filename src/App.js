@@ -32,6 +32,7 @@ import Intake from "./pages/Intake";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancelled from "./pages/PaymentCancelled";
 import ConfirmPage from "./pages/ConfirmPage";
+import OnboardingTour from "./components/OnboardingTour";
 
 // Legal pages
 import Terms from "./pages/legal/Terms";
@@ -56,6 +57,7 @@ function ProtectedRoute({ children }) {
 
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showTour, setShowTour] = useState(false);
   const showBanner = false;
 
   const pilot = searchParams.get("pilot");
@@ -89,6 +91,12 @@ function ProtectedRoute({ children }) {
         }
         setLoading(false);
         return;
+      }
+
+      // Show onboarding tour for new groomers who haven't seen it
+      if (groomer && !groomer.onboarding_complete && location.pathname === "/schedule") {
+        // Small delay so the schedule page renders first
+        setTimeout(() => setShowTour(true), 800);
       }
 
       // =============================
@@ -156,6 +164,12 @@ function ProtectedRoute({ children }) {
 
   return (
     <>
+      {showTour && (
+        <OnboardingTour
+          userId={user?.id}
+          onComplete={() => setShowTour(false)}
+        />
+      )}
       {showBanner && (
         <div className="bg-yellow-100 text-yellow-800 text-center py-2 font-semibold">
           ✨ You're on the Free plan — upgrade anytime to unlock reminders, intake forms, waivers, payments and more. <a href="/upgrade" style={{color:"#065f46",fontWeight:700}}>See plans →</a>
@@ -346,7 +360,15 @@ function AppShell() {
             {/* DESKTOP LINKS */}
             <div className="hidden sm:flex gap-6 text-sm font-medium items-center">
               {navItems.map((item) => (
-                <Link key={item.to} to={item.to}>
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  data-tour={
+                    item.to === "/clients" ? "tour-nav-clients" :
+                    item.to === "/profile" ? "tour-nav-profile" :
+                    undefined
+                  }
+                >
                   {item.label}
                 </Link>
               ))}
@@ -388,6 +410,11 @@ function AppShell() {
                         key={item.to}
                         to={item.to}
                         className="block px-4 py-3 text-sm text-gray-800 hover:bg-emerald-50 hover:text-emerald-700"
+                        data-tour={
+                          item.to === "/clients" ? "tour-nav-clients" :
+                          item.to === "/profile" ? "tour-nav-profile" :
+                          undefined
+                        }
                       >
                         {item.label}
                       </Link>

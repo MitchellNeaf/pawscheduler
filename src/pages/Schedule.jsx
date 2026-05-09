@@ -2346,7 +2346,7 @@ export default function Schedule() {
 
       <div className="mb-4 flex flex-col gap-3" style={{position:"relative", zIndex:10}}>
           {/* Date navigation — arrow buttons on mobile, date picker on desktop */}
-          <div className="flex items-center gap-2 w-full">
+          <div className="flex items-center gap-2 w-full" data-tour="tour-schedule-date">
             <button
               onClick={() => {
                 const d = parseYMD(selectedDate);
@@ -2385,7 +2385,7 @@ export default function Schedule() {
           </div>
 
           {/* View toggle — List / Grid / Month */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1" data-tour="tour-view-toggle">
             <button
               onClick={() => setViewMode("list")}
               style={{
@@ -2425,6 +2425,7 @@ export default function Schedule() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full border rounded px-3 py-2 text-sm"
+              data-tour="tour-add-appointment"
             />
 
             <div className="text-sm text-gray-600">
