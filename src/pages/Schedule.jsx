@@ -1184,37 +1184,37 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
 
   return (
     <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="rounded-2xl shadow-2xl border border-[var(--border-med)] w-full max-w-sm overflow-hidden"
-        style={{ background: "var(--surface, #ffffff)", isolation: "isolate" }}>
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
-          <h2 className="font-bold text-[var(--text-1)] text-sm">{label}</h2>
-          <button onClick={onClose} className="text-[var(--text-3)] hover:text-[var(--text-1)] text-lg leading-none">✕</button>
+      <div className="rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+        style={{ isolation: "isolate" }}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="font-bold text-sm text-gray-900 dark:text-gray-100">{label}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 text-lg leading-none">✕</button>
         </div>
 
         {mode === null && (
           <div className="p-4 space-y-2">
             <button onClick={onGoToDay}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[var(--border-med)] bg-[var(--bg)] hover:bg-[var(--surface-raised,#f9fafb)] transition text-left">
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-700 transition text-left">
               <span className="text-xl">📅</span>
               <div>
-                <div className="font-semibold text-sm text-[var(--text-1)]">Go to Day</div>
-                <div className="text-xs text-[var(--text-3)]">View and manage this day's schedule</div>
+                <div className="font-semibold text-sm text-gray-900 dark:text-gray-100">Go to Day</div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">View and manage this day's schedule</div>
               </div>
             </button>
             <button onClick={onAddBooking}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 transition text-left">
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition text-left">
               <span className="text-xl">🐾</span>
               <div>
-                <div className="font-semibold text-sm text-emerald-800">Add Booking</div>
-                <div className="text-xs text-emerald-600">Book a grooming appointment</div>
+                <div className="font-semibold text-sm text-emerald-800 dark:text-emerald-300">Add Booking</div>
+                <div className="text-xs text-emerald-600 dark:text-emerald-400">Book a grooming appointment</div>
               </div>
             </button>
             <button onClick={() => setMode("timeblock")}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-blue-200 bg-blue-50 hover:bg-blue-100 transition text-left">
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition text-left">
               <span className="text-xl">🚫</span>
               <div>
-                <div className="font-semibold text-sm text-blue-800">Add Time Block</div>
-                <div className="text-xs text-blue-600">Block time off (appointment, errand, etc.)</div>
+                <div className="font-semibold text-sm text-blue-800 dark:text-blue-300">Add Time Block</div>
+                <div className="text-xs text-blue-600 dark:text-blue-400">Block time off (appointment, errand, etc.)</div>
               </div>
             </button>
           </div>
@@ -1222,28 +1222,28 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
 
         {mode === "timeblock" && (
           <div className="p-4 space-y-3">
-            <p className="text-xs text-[var(--text-3)] mb-1">Block time off on <strong>{label}</strong></p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Block time off on <strong className="text-gray-800 dark:text-gray-200">{label}</strong></p>
             <div className="grid grid-cols-2 gap-3">
               <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-[var(--text-2)]">Start time</span>
+                <span className="font-medium text-gray-700 dark:text-gray-300">Start time</span>
                 <input type="time" value={tbStart} onChange={(e) => setTbStart(e.target.value)}
-                  className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm" />
+                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
               </label>
               <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-[var(--text-2)]">End time</span>
+                <span className="font-medium text-gray-700 dark:text-gray-300">End time</span>
                 <input type="time" value={tbEnd} onChange={(e) => setTbEnd(e.target.value)}
-                  className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm" />
+                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
               </label>
             </div>
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-[var(--text-2)]">Note (optional)</span>
+              <span className="font-medium text-gray-700 dark:text-gray-300">Note (optional)</span>
               <input type="text" value={tbNote} onChange={(e) => setTbNote(e.target.value)}
                 placeholder="e.g. Vet appointment, lunch, etc."
-                className="border border-[var(--border-med)] rounded-xl px-3 py-2 bg-[var(--surface)] text-[var(--text-1)] text-sm" />
+                className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
             </label>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setMode(null)}
-                className="flex-1 py-2.5 rounded-xl border border-[var(--border-med)] text-sm font-semibold text-[var(--text-2)] hover:bg-[var(--bg)] transition">
+                className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                 ← Back
               </button>
               <button onClick={() => onAddTimeBlock(date, tbStart, tbEnd, tbNote, setSaving)}
