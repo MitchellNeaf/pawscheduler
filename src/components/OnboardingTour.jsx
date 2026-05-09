@@ -106,10 +106,12 @@ function getBubbleStyle(rect, placement, bubbleWidth = 300) {
   if (!rect || placement === "center") {
     return {
       position: "fixed",
-      top: "50%",
-      left: "50%",
-      transform: "translate(-50%, -50%)",
-      width: Math.min(bubbleWidth, window.innerWidth - 32),
+      bottom: 24,
+      left: 16,
+      right: 16,
+      width: "auto",
+      maxWidth: 420,
+      margin: "0 auto",
     };
   }
 
@@ -122,7 +124,7 @@ function getBubbleStyle(rect, placement, bubbleWidth = 300) {
     top = rect.bottom + PAD + 8;
     left = rect.left + rect.width / 2 - bw / 2;
   } else if (placement === "top") {
-    top = rect.top - PAD - 8 - 200; // approx bubble height
+    top = rect.top - PAD - 8 - 200;
     left = rect.left + rect.width / 2 - bw / 2;
   } else if (placement === "right") {
     top = rect.top + rect.height / 2 - 100;
@@ -238,7 +240,15 @@ export default function OnboardingTour({ userId, onComplete }) {
     return () => { document.body.style.overflow = ""; };
   }, []);
 
-  const bubbleStyle = getBubbleStyle(rect, current.placement);
+  const bubbleStyle = window.innerWidth < 640
+    ? {
+        position: "fixed",
+        bottom: 24,
+        left: 16,
+        right: 16,
+        width: "auto",
+      }
+    : getBubbleStyle(rect, current.placement);
   const progress = ((step) / (STEPS.length - 1)) * 100;
 
   const overlay = (
