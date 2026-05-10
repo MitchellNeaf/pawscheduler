@@ -546,13 +546,16 @@ export default function ClientPets() {
       : form.tags;
 
     // Upload photo if a new one was selected
-    let photoUrl = photoPreview || null; // keep existing if no new file
+    let photoUrl = (photoPreview && !photoPreview.startsWith("blob:")) ? photoPreview : null;
     if (photoFile) {
       const path = `${user.id}/${editingId || `new-${Date.now()}`}/photo.jpg`;
       const { error: uploadErr } = await supabase.storage
         .from("pet-photos")
         .upload(path, photoFile, { upsert: true, contentType: "image/jpeg" });
-      if (!uploadErr) {
+      if (uploadErr) {
+        console.error("Pet photo upload failed:", uploadErr.message);
+        alert("Photo upload failed: " + uploadErr.message + "\nThe pet will be saved without the photo.");
+      } else {
         const { data: pub } = supabase.storage.from("pet-photos").getPublicUrl(path);
         photoUrl = pub.publicUrl + "?v=" + Date.now();
       }
