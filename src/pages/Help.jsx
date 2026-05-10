@@ -8,16 +8,20 @@ const SECTIONS = [
   { id: "vacation",      label: "Vacation & Closed Days",   icon: "🏖️" },
   { id: "slug",          label: "Booking Link",             icon: "🔗" },
   { id: "dog-sizing",    label: "Dog Sizes & Capacity",     icon: "🐶" },
-  { id: "pricing",       label: "Service Pricing",          icon: "💲" },
+  { id: "pricing",       label: "Services, Add-ons & Fees", icon: "💲" },
   { id: "clients",       label: "Clients & Pets",           icon: "🐾" },
+  { id: "pet-photos",    label: "Pet Photos",               icon: "📷" },
   { id: "intake",        label: "Intake Form",              icon: "📋" },
   { id: "waiver",        label: "Grooming Waiver",          icon: "✍️" },
   { id: "scheduling",    label: "Scheduling Appointments",  icon: "📆" },
+  { id: "calendar-views",label: "Calendar Views",           icon: "📅" },
   { id: "multipet",      label: "Multi-Pet Bookings",       icon: "🐕‍🦺" },
-  { id: "reminders",     label: "Reminders & Alerts",       icon: "🔔" },
+  { id: "reminders",     label: "SMS Reminders",            icon: "💬" },
+  { id: "confirmations", label: "SMS Confirmations",        icon: "✅" },
   { id: "vaccines",      label: "Vaccine Tracking",         icon: "💉" },
-  { id: "confirmation",  label: "Confirmations & No-Shows", icon: "✅" },
+  { id: "noshow",        label: "No-Shows & Paid",          icon: "💳" },
   { id: "revenue",       label: "Revenue & Unpaid",         icon: "💰" },
+  { id: "onboarding",    label: "Onboarding Tour",          icon: "🎓" },
   { id: "darkmode",      label: "Dark Mode",                icon: "🌙" },
   { id: "contact",       label: "Contact Support",          icon: "💬" },
 ];
@@ -275,7 +279,7 @@ export default function Help() {
           </Section>
 
           {/* ── PRICING ── */}
-          <Section id="pricing" title="Service Pricing" subtitle="Set your rates once — they auto-fill every time you create an appointment.">
+          <Section id="pricing" title="💲 Services, Add-ons & Fees" subtitle="Set your rates once — they auto-fill every time you create an appointment.">
             <div className="space-y-4 text-sm text-gray-700">
               <div className="rounded-xl border bg-gray-50 p-4">
                 <p className="font-semibold text-gray-900 mb-2">How it works</p>
@@ -309,6 +313,23 @@ export default function Help() {
               <Callout type="warn" title="If pricing auto-fills incorrectly, check the pet's size first.">
                 The auto-calculation uses the pet's saved size. Fix the size on their pet profile and the pricing will be correct going forward.
               </Callout>
+              <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
+                <p className="font-semibold text-gray-900">Add-ons (client-selectable)</p>
+                <BulletList items={[
+                  { title: "What they are", text: "Flat-fee extras that clients can select on the booking page — like a blueberry facial or bandana. Each has a fixed price regardless of dog size." },
+                  { title: "Where to set them", text: "Profile → Pricing tab → Add-ons section. Give each one a name, price, and optional description." },
+                  { title: "Booking page", text: "Add-ons appear in purple on the public booking page. Clients check them and the price is added to their total automatically." },
+                  { title: "Schedule view", text: "Add-ons appear alongside services when you view or edit an appointment.", tone: "tip" },
+                ]} />
+              </div>
+              <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
+                <p className="font-semibold text-gray-900">Fees (groomer-only)</p>
+                <BulletList items={[
+                  { title: "What they are", text: "Charges you apply manually — like a late cancellation fee or dematting surcharge. Clients never see these on the booking page." },
+                  { title: "Where to set them", text: "Profile → Pricing tab → Fees section." },
+                  { title: "When to use", text: "Apply fees from inside the appointment modal when you're creating or editing an appointment.", tone: "tip" },
+                ]} />
+              </div>
             </div>
           </Section>
 
@@ -336,6 +357,28 @@ export default function Help() {
                 <p className="font-semibold text-gray-900">Search</p>
                 <p>The search bar on the Clients page searches across client name, pet name, phone, email, and address all at once.</p>
               </div>
+            </div>
+          </Section>
+
+          {/* ── PET PHOTOS ── */}
+          <Section id="pet-photos" title="📷 Pet Photos" subtitle="Upload a photo for each pet — it shows on their card and on your schedule.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">How to upload a photo</p>
+                <ol className="list-decimal ml-5 space-y-1.5">
+                  <li>Go to <strong>Clients → View Client</strong></li>
+                  <li>Find the pet's card and tap <strong>✏️ Edit</strong> (top-right of the card)</li>
+                  <li>Tap <strong>Upload photo</strong> in the edit modal</li>
+                  <li>Pick a photo from your camera roll or files</li>
+                  <li>A preview appears — tap <strong>Update Pet</strong> to save</li>
+                </ol>
+              </div>
+              <BulletList items={[
+                { title: "Auto-compressed", text: "Photos are resized and compressed automatically before uploading — a 4MB phone photo becomes ~60-80KB. Saves storage and loads fast." },
+                { title: "Schedule list view", text: "A circular photo appears next to the pet's name on every appointment card." },
+                { title: "Schedule grid view", text: "A small circular photo appears in the first time slot of the appointment only — not repeated across every slot." },
+                { title: "Lazy loaded", text: "Photos only load when the card scrolls into view — zero bandwidth cost for off-screen appointments.", tone: "tip" },
+              ]} />
             </div>
           </Section>
 
@@ -470,6 +513,34 @@ export default function Help() {
             </div>
           </Section>
 
+          {/* ── CALENDAR VIEWS ── */}
+          <Section id="calendar-views" title="📅 Calendar Views" subtitle="Three ways to look at your schedule — each useful for different situations.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="grid md:grid-cols-3 gap-3">
+                <div className="rounded-xl border bg-white p-4 space-y-2">
+                  <p className="font-semibold text-gray-900">☰ List view</p>
+                  <p className="text-gray-600">Full appointment cards with all details — services, amount, contact buttons (Call/Text/Inbox), and action buttons (Edit, Rebook, Delete, Remind, Pay).</p>
+                  <p className="text-emerald-700 text-xs font-semibold">Best for: managing individual appointments</p>
+                </div>
+                <div className="rounded-xl border bg-white p-4 space-y-2">
+                  <p className="font-semibold text-gray-900">⊞ Grid view</p>
+                  <p className="text-gray-600">Visual time-block grid showing capacity at a glance. Color-coded: green = confirmed, amber = unconfirmed, red = full. Tap any open slot to book.</p>
+                  <p className="text-emerald-700 text-xs font-semibold">Best for: spotting open slots, booking by time</p>
+                </div>
+                <div className="rounded-xl border bg-white p-4 space-y-2">
+                  <p className="font-semibold text-gray-900">📅 Month view</p>
+                  <p className="text-gray-600">Full calendar overview of the month. Each day shows appointment chips. Tap any day to get options: Go to Day, Add Booking, or Add Time Block.</p>
+                  <p className="text-emerald-700 text-xs font-semibold">Best for: planning, spotting busy weeks</p>
+                </div>
+              </div>
+              <BulletList items={[
+                { title: "Month view — tap a day", text: "Opens a quick action sheet: Go to Day View, Add Booking for that day, or Add Time Block (vacation, errand, etc.)." },
+                { title: "Grid view — pet photos", text: "If you've uploaded a pet photo, it appears in the first time slot of their appointment in grid view." },
+                { title: "Auto-refresh", text: "If you leave the schedule open and switch tabs, it automatically refreshes when you come back — so new bookings made from the booking page appear without a manual reload.", tone: "tip" },
+              ]} />
+            </div>
+          </Section>
+
           {/* ── MULTI-PET ── */}
           <Section id="multipet" title="Multi-Pet Bookings" subtitle="Book multiple dogs from the same household in one action — each pet keeps its own services and price.">
             <div className="space-y-4 text-sm text-gray-700">
@@ -516,25 +587,65 @@ export default function Help() {
             </div>
           </Section>
 
-          {/* ── REMINDERS ── */}
-          <Section id="reminders" title="Reminders & Alerts" subtitle="Automated reminders so you spend less time chasing clients.">
+          {/* ── SMS REMINDERS ── */}
+          <Section id="reminders" title="💬 SMS Reminders" subtitle="Automated texts sent to clients before their appointments — fully customizable.">
             <div className="space-y-4 text-sm text-gray-700">
               <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
-                <p className="font-semibold text-gray-900">Appointment reminders (SMS)</p>
+                <p className="font-semibold text-gray-900">How reminders work</p>
                 <BulletList items={[
-                  { title: "Nightly automatic", text: "Every night, PawScheduler sends SMS reminders to clients whose pets have appointments the next day — but only if the client has a phone and sms_opt_in = true." },
-                  { title: "Manual reminder button", text: 'On the Schedule list view, each appointment card has a "💬 Remind" button. Tap it to send an immediate SMS reminder anytime.' },
-                  { title: "Opt-in required", text: "Clients must have SMS opted in. Set this from the Clients page → Edit SMS button next to each client.", tone: "warn" },
+                  { title: "Timing rules", text: "Set how many hours before each appointment to fire a reminder. Go to Profile → SMS section → Reminders card. Add multiple rules — e.g. 48 hours before AND 2 hours before." },
+                  { title: "Runs automatically", text: "PawScheduler checks every 30 minutes and sends reminders for appointments falling within the window of each rule." },
+                  { title: "Opt-in required", text: "The client must have a phone number saved and SMS opted in. Set this from the Clients page.", tone: "warn" },
+                  { title: "Manual reminder", text: "On the Schedule list view, tap the 💬 Remind button on any appointment card to send an immediate reminder anytime." },
                 ]} />
               </div>
               <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
-                <p className="font-semibold text-gray-900">Sending intake & waiver links</p>
+                <p className="font-semibold text-gray-900">Customizing the reminder message</p>
+                <p>Go to <strong>Profile → SMS section</strong> and edit the Reminder Message template. Use tokens that get replaced with real data when the message sends:</p>
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {["%first_name%", "%pet%", "%date%", "%time%", "%services%", "%confirm_link%", "%business_name%"].map((t) => (
+                    <span key={t} className="text-xs font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-1 rounded-full">{t}</span>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">Tap any token in the Profile SMS editor to insert it at your cursor position.</p>
+              </div>
+              <Callout type="tip" title="Add %confirm_link% to any reminder to let clients confirm from it too.">
+                You don't need a separate confirmation message — just include the confirm link token in your reminder and clients can tap to confirm right from the text.
+              </Callout>
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">Sending intake & waiver links</p>
                 <BulletList items={[
-                  { title: "📧 Email Waiver / Send Intake", text: "If the client has an email, tapping these buttons sends a branded email with a link directly to that client's form." },
+                  { title: "📧 Email Waiver / Send Intake", text: "If the client has an email, tapping these buttons sends a branded email with a link directly to their form." },
                   { title: "📱 SMS Waiver", text: "If the client has a phone and is SMS opted in, sends the waiver link via text." },
                   { title: "📋 Copy Link", text: "If no email or SMS, copies the link to your clipboard so you can paste it anywhere." },
                 ]} />
               </div>
+            </div>
+          </Section>
+
+          {/* ── SMS CONFIRMATIONS ── */}
+          <Section id="confirmations" title="✅ SMS Confirmations" subtitle="Clients confirm their appointment with one tap — no login required.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
+                <p className="font-semibold text-gray-900">How it works</p>
+                <ol className="list-decimal ml-5 space-y-1.5">
+                  <li>PawScheduler automatically sends a confirmation request SMS <strong>48 hours before every appointment</strong>.</li>
+                  <li>The text includes a unique link (one per appointment).</li>
+                  <li>Client taps the link — a page shows their pet name, date, and time.</li>
+                  <li>One tap confirms. Your schedule flips to <strong>Confirmed ✅</strong> immediately.</li>
+                  <li>The link expires after use — tapping it again shows "Already confirmed."</li>
+                </ol>
+              </div>
+              <BulletList items={[
+                { title: "48-hour timing is fixed", text: "The confirmation request always fires 48 hours before — this timing can't be changed. The message wording can be customized." },
+                { title: "Customize the message", text: "Go to Profile → SMS section → 48hr Confirmation Request card. Edit the wording and use tokens like %first_name%, %pet%, %date%, %time%, %confirm_link%.", tone: "tip" },
+                { title: "Confirmed badge", text: "Once confirmed, the appointment card shows a green Confirmed badge in list and grid view." },
+                { title: "No login required", text: "Clients confirm directly from the link — they don't need a PawScheduler account or any login." },
+                { title: "Manual confirm", text: "You can also tap the Confirmed checkbox on any appointment card yourself if the client calls to confirm verbally." },
+              ]} />
+              <Callout type="info" title="Want more than one confirmation touchpoint?">
+                Add %confirm_link% to any of your timed reminder messages. Clients can confirm from whichever reminder they see first.
+              </Callout>
             </div>
           </Section>
 
@@ -572,14 +683,15 @@ export default function Help() {
             </div>
           </Section>
 
-          {/* ── CONFIRMATIONS ── */}
-          <Section id="confirmation" title="Confirmations & No-Shows" subtitle="Track who's confirmed and who flaked — without extra admin work.">
+          {/* ── NO-SHOWS & PAID ── */}
+          <Section id="noshow" title="💳 No-Shows, Paid & Check-in" subtitle="Track who showed up, who paid, and who didn't — without extra admin work.">
             <div className="space-y-4 text-sm text-gray-700">
               <BulletList items={[
-                { title: "Confirmed toggle", text: "On each appointment card in List view, tap Confirmed to mark it. The grid view shows green for confirmed, amber for unconfirmed." },
+                { title: "Confirmed toggle", text: "On each appointment card in list view, tap Confirmed to mark it. The grid view shows green for confirmed, amber for unconfirmed." },
                 { title: "No-show toggle", text: "Mark no-shows directly from the appointment card. No-shows are tracked separately and excluded from unpaid totals." },
-                { title: "Paid toggle", text: "Mark appointments as paid from the list view or grid view. Unpaid past appointments appear on the Unpaid page." },
-                { title: "Day summary bar", text: "At the top of the Schedule page, a summary shows total appointments, confirmed count, today's revenue, and any vaccine alerts or unpaid amounts.", tone: "tip" },
+                { title: "Paid toggle", text: "Mark appointments as paid from the list or grid view. Unpaid past appointments appear on the Unpaid page." },
+                { title: "Check In / Check Out", text: "Tap the Check In button when a client arrives and Check Out when they leave. Timestamps are recorded on the appointment.", tone: "tip" },
+                { title: "Day summary bar", text: "At the top of the Schedule page, a summary shows total appointments, confirmed count, today's revenue, and any vaccine alerts or unpaid amounts." },
                 { title: "Best practice", text: "After 2 no-shows, many groomers require a deposit before booking. PawScheduler tracks the history so you can see the pattern.", tone: "warn" },
               ]} />
             </div>
@@ -607,6 +719,17 @@ export default function Help() {
                 ]} />
               </div>
             </div>
+          </Section>
+
+          {/* ── ONBOARDING TOUR ── */}
+          <Section id="onboarding" title="🎓 Onboarding Tour" subtitle="A guided walkthrough that runs automatically when you first log in.">
+            <BulletList items={[
+              { title: "When it runs", text: "The tour starts automatically 800ms after your first visit to the Schedule page. It never runs again after you complete or skip it." },
+              { title: "What it covers", text: "Date navigation, view modes (List/Grid/Month), adding appointments, the Clients page, Profile setup, and your booking link — 8 steps total." },
+              { title: "Skip anytime", text: "Tap Skip tour on any step to dismiss. Your progress is saved so you won't see it again." },
+              { title: "Replay the tour", text: "If you want to see it again, contact support and we can reset it for your account.", tone: "tip" },
+              { title: "Mobile friendly", text: "On mobile, the tour bubble anchors to the bottom of the screen so it doesn't cover the highlighted element." },
+            ]} />
           </Section>
 
           {/* ── DARK MODE ── */}
