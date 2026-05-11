@@ -66,13 +66,16 @@ const DEFAULT_PRICING = {
 };
 
 // Sum prices for selected services based on pet size (slot_weight)
-const calcAmount = (services, slotWeight, pricing) => {
+const calcAmount = (services, slotWeight, pricing, addonOptions = []) => {
   const p = { ...DEFAULT_PRICING, ...(pricing || {}) };
   const sz = slotWeight || 1;
-  return services.reduce((sum, svc) => {
-    const row = p[svc];
-    return sum + (row ? (row[sz] ?? row[1] ?? 0) : 0);
-  }, 0);
+  const addonNames = new Set((addonOptions || []).map(a => a.name));
+  return services
+    .filter(s => !addonNames.has(s))
+    .reduce((sum, svc) => {
+      const row = p[svc];
+      return sum + (row ? (row[sz] ?? row[1] ?? 0) : 0);
+    }, 0);
 };
 
 // Sum flat prices for selected add-ons or fees by name
@@ -419,7 +422,7 @@ function MultiPetAppointmentModal({
         ? entry.form.services.filter((s) => s !== svc)
         : [...entry.form.services, svc];
       const slotWeight = entry.pet.slot_weight || 1;
-      const serviceAmt = calcAmount(newServices, slotWeight, pricing);
+      const serviceAmt = calcAmount(newServices, slotWeight, pricing, addonOptions);
       const addonAmt   = calcFlatItems(newServices, addonOptions);
       const feeAmt     = calcFlatItems(newServices, feeOptions);
       return {
@@ -720,7 +723,7 @@ function AppointmentModal({
       const newServices = exists
         ? prev.services.filter((s) => s !== svc)
         : [...prev.services, svc];
-      const serviceAmt = calcAmount(newServices, slotWeight, pricing);
+      const serviceAmt = calcAmount(newServices, slotWeight, pricing, addonOptions);
       const addonAmt   = calcFlatItems(newServices, addonOptions);
       const feeAmt     = calcFlatItems(newServices, feeOptions);
       return {
@@ -1759,7 +1762,7 @@ export default function Schedule() {
             duration_min: pet.default_duration_min || 30,
             services: pet.default_services || [],
             amount: pet.default_services?.length
-              ? calcAmount(pet.default_services, pet.slot_weight || 1, pricing)
+              ? calcAmount(pet.default_services, pet.slot_weight || 1, pricing, addonOptions)
               : null,
           },
         },

@@ -46,11 +46,12 @@ const DEFAULT_PRICING = {
   "Other":       { 1: 0,  2: 0,  3: 0  },
 };
 
-const calcAmount = (services, slotWeight, pricing) => {
+const calcAmount = (services, slotWeight, pricing, addonOptions = []) => {
   const p = { ...DEFAULT_PRICING, ...(pricing || {}) };
   const sz = slotWeight || 1;
+  const addonNames = new Set((addonOptions || []).map(a => a.name));
   return services
-    .filter((s) => s !== "Other")
+    .filter((s) => s !== "Other" && !addonNames.has(s))
     .reduce((sum, svc) => {
       const row = p[svc];
       return sum + (row ? (row[sz] ?? row[1] ?? 0) : 0);
@@ -460,7 +461,7 @@ export default function BookPage() {
       const newServices = checked
         ? [...form.services, value]
         : form.services.filter((s) => s !== value);
-      const autoAmount = calcAmount(newServices, selectedPetWeight, pricing);
+      const autoAmount = calcAmount(newServices, selectedPetWeight, pricing, addonOptions);
       return setForm((p) => ({
         ...p,
         services: newServices,
@@ -490,7 +491,7 @@ export default function BookPage() {
     }
 
     const slotWeight = selectedPetWeight ?? 1;
-    const autoAmount = calcAmount(form.services, slotWeight, pricing) + calcAddons(form.services, addonOptions);
+    const autoAmount = calcAmount(form.services, slotWeight, pricing, addonOptions) + calcAddons(form.services, addonOptions);
 
     const { data: inserted, error } = await anonSupabase.from("appointments").insert([
       {
@@ -847,7 +848,7 @@ export default function BookPage() {
                   ⏱ {form.duration_min} min &nbsp;·&nbsp; Estimated total
                 </span>
                 <span style={{ fontWeight: 800, color: "#065f46", fontSize: "1rem" }}>
-                  ${(calcAmount(form.services, selectedPetWeight, pricing) + calcAddons(form.services, addonOptions)).toFixed(2)}
+                  ${(calcAmount(form.services, selectedPetWeight, pricing, addonOptions) + calcAddons(form.services, addonOptions)).toFixed(2)}
                 </span>
               </div>
             )}
