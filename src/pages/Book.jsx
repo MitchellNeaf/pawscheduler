@@ -139,7 +139,7 @@ export default function BookPage() {
     (async () => {
       const { data, error: gErr } = await anonSupabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services")
+        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval")
         .eq("slug", slug)
         .single();
 
@@ -500,12 +500,13 @@ export default function BookPage() {
         time: form.time,
         duration_min: Number(form.duration_min),
         services: form.services,
-        confirmed: false,
+        confirmed: groomer?.booking_requires_approval ? false : false,
         no_show: false,
         amount: autoAmount > 0 ? autoAmount : null,
         paid: false,
         notes: form.notes || "",
         slot_weight: slotWeight,
+        source: "booking_page",
       },
     ]).select("id");
 
@@ -685,11 +686,16 @@ export default function BookPage() {
           {/* Success banner after booking */}
           {submitted && (
             <div style={{ padding: "14px 16px", borderRadius: 12,
-              background: "#ecfdf5", border: "1px solid #6ee7b7", marginBottom: 4 }}>
-              <div style={{ fontWeight: 700, color: "#065f46", marginBottom: 6 }}>
-                ✅ Appointment booked!
+              background: groomer?.booking_requires_approval ? "#fffbeb" : "#ecfdf5",
+              border: `1px solid ${groomer?.booking_requires_approval ? "#fcd34d" : "#6ee7b7"}`,
+              marginBottom: 4 }}>
+              <div style={{ fontWeight: 700, color: groomer?.booking_requires_approval ? "#92400e" : "#065f46", marginBottom: 6 }}>
+                {groomer?.booking_requires_approval ? "⏳ Request submitted!" : "✅ Appointment booked!"}
               </div>
-              <div style={{ fontSize: "0.83rem", color: "#064e3b", lineHeight: 1.6 }}>
+              <div style={{ fontSize: "0.83rem", color: groomer?.booking_requires_approval ? "#78350f" : "#064e3b", lineHeight: 1.6 }}>
+                {groomer?.booking_requires_approval && (
+                  <div style={{ marginBottom: 6 }}>Your request is pending approval. You'll hear back soon.</div>
+                )}
                 <div><strong>Pet:</strong> {submitted.pet}</div>
                 <div><strong>Date:</strong> {submitted.date} at {fmtTime(submitted.time)}</div>
                 <div><strong>Services:</strong> {submitted.services.join(", ")}</div>
