@@ -521,6 +521,9 @@ export default function Profile() {
             </div>
           </div>
 
+          {/* ── SMS REMINDERS & CONFIRMATIONS — Basic+ ── */}
+          {(planTier === "basic" || planTier === "growth" || planTier === "pro") ? (
+          <>
           {/* ── SECTION 1: 48hr Confirmation (fixed timing, editable message) ── */}
           <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
@@ -681,6 +684,16 @@ export default function Profile() {
               </button>
             </div>
           </div>
+          </> ) : (
+            <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-6 text-center space-y-3">
+              <div className="text-3xl">💬</div>
+              <h3 className="font-bold text-[var(--text-1)]">SMS reminders require Basic or higher</h3>
+              <p className="text-sm text-[var(--text-2)]">Upgrade to send automatic SMS reminders, confirmation requests, and customize your message templates.</p>
+              <a href="/upgrade" className="inline-block px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
+                Upgrade to Basic — $29.99/mo →
+              </a>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium mb-1">Public Booking Slug</label>
@@ -1067,6 +1080,9 @@ export default function Profile() {
             Multiple services are summed automatically. You can always override the amount per appointment.
           </p>
 
+          {/* ── ADD-ONS & FEES — Basic+ ── */}
+          {(planTier === "basic" || planTier === "growth" || planTier === "pro") ? (
+          <>
           {/* ── ADD-ONS SECTION ── */}
           <div className="pt-2 border-t border-[var(--border-med)]">
             <div className="flex items-center justify-between mb-1">
@@ -1212,6 +1228,16 @@ export default function Profile() {
               </button>
             </div>
           </div>
+          </> ) : (
+            <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-5 text-center space-y-2 mt-2">
+              <div className="text-2xl">🔒</div>
+              <p className="font-semibold text-[var(--text-1)] text-sm">Add-ons & Fees require Basic or higher</p>
+              <p className="text-xs text-[var(--text-2)]">Upgrade to offer client-selectable add-ons and apply groomer-only fees to appointments.</p>
+              <a href="/upgrade" className="inline-block px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
+                Upgrade to Basic →
+              </a>
+            </div>
+          )}
 
           <button
             onClick={async () => {

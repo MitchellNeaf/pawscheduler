@@ -95,6 +95,7 @@ function PetEditModal({
   onSubmit,
   photoPreview,
   onPhotoChange,
+  planTier,
 }) {
   if (!open) return null;
 
@@ -129,7 +130,8 @@ function PetEditModal({
             placeholder="Breed"
           />
 
-          {/* PHOTO UPLOAD */}
+          {/* PHOTO UPLOAD — Basic+ */}
+          {(planTier === "basic" || planTier === "growth" || planTier === "pro") ? (
           <div>
             <label className="block text-sm font-medium mb-1">Pet Photo</label>
             <div className="flex items-center gap-3">
@@ -149,6 +151,11 @@ function PetEditModal({
             </div>
             <p className="text-xs text-gray-400 mt-1">Auto-compressed to save space.</p>
           </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-gray-200 p-3 text-center text-xs text-gray-400">
+              🔒 Pet photos require Basic or higher — <a href="/upgrade" className="text-emerald-600 font-semibold">Upgrade →</a>
+            </div>
+          )}
           <div>
             <label className="font-medium block mb-1">
               Tags (behavior, medical, etc.)
@@ -404,6 +411,7 @@ export default function ClientPets() {
   const [client, setClient] = useState(null);
   const [pets, setPets] = useState([]);
   const [user, setUser] = useState(null);
+  const [planTier, setPlanTier] = useState("free");
   const [loading, setLoading] = useState(true);
   const [savingClient, setSavingClient] = useState(false);
 
@@ -441,7 +449,14 @@ export default function ClientPets() {
   const [confirmConfig, setConfirmConfig] = useState(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
+    supabase.auth.getUser().then(({ data }) => {
+      const u = data.user || null;
+      setUser(u);
+      if (u) {
+        supabase.from("groomers").select("plan_tier").eq("id", u.id).maybeSingle()
+          .then(({ data: g }) => { if (g?.plan_tier) setPlanTier(g.plan_tier); });
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -972,6 +987,7 @@ export default function ClientPets() {
         onSubmit={handleSubmit}
         photoPreview={photoPreview}
         onPhotoChange={handlePhotoChange}
+        planTier={planTier}
       />
 
       {/* SHOT MODAL */}
