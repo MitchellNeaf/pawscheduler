@@ -1427,8 +1427,7 @@ export default function Schedule() {
   const FREE_LIMIT = 50;
   const [monthlyCount, setMonthlyCount] = useState(null);
   const [allPendingRequests, setAllPendingRequests] = useState([]);
-  const [requestingPayment, setRequestingPayment] = useState(null); // appt.id | null
-  const [paymentSentFor, setPaymentSentFor] = useState(new Set());
+  const [sendingReminder, setSendingReminder] = useState(null); // appointmentId | null
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editAppt, setEditAppt] = useState(null);
@@ -2003,45 +2002,8 @@ export default function Schedule() {
   /* Send manual SMS reminder */
   const [sendingReminder, setSendingReminder] = useState(null); // appointmentId | null
 
-  const handleRequestPayment = async (appt) => {
-    if (!user) return;
-    setRequestingPayment(appt.id);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch("/.netlify/functions/sendPaymentRequest", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.access_token}`,
-        },
-        body: JSON.stringify({ appointmentId: appt.id }),
-      });
-      const json = await res.json();
-      if (res.ok) {
-        setPaymentSentFor((prev) => new Set([...prev, appt.id]));
-        // If no SMS/email, copy link to clipboard
-        if (!json.smsSent && !json.emailSent && json.paymentUrl) {
-          navigator.clipboard.writeText(json.paymentUrl).catch(() => {});
-        }
-      } else {
-        setConfirmConfig({
-          title: "Payment Request Failed",
-          message: json.error || "Could not send payment request. Please try again.",
-          confirmLabel: "OK",
-          onConfirm: () => {},
-        });
-      }
-    } catch {
-      setConfirmConfig({
-        title: "Network Error",
-        message: "Could not send payment request. Please check your connection.",
-        confirmLabel: "OK",
-        onConfirm: () => {},
-      });
-    } finally {
-      setRequestingPayment(null);
-    }
-  };
+
+
 
   const handleSendReminder = async (appt) => {
     const client = appt.pets?.clients;
@@ -2993,21 +2955,14 @@ export default function Schedule() {
                       </button>
                     </div>
 
-                    {/* Row 2: Remind + Pay (conditional) */}
-                    {(planTier !== "free" || (!appt.paid && appt.amount > 0)) && (
-                      <div className="grid grid-cols-2 gap-2">
-                        {/* Remind */}
-                        {planTier === "free" ? (
-                          <a href="/upgrade"
-                            className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl border border-dashed border-gray-200 text-gray-400 text-xs font-semibold opacity-60 hover:opacity-90 hover:border-emerald-400 hover:text-emerald-600 transition">
-                            <span className="text-base">🔒</span>
-                            Remind
-                          </a>
-                        ) : appt.pets?.clients?.phone ? (
+                    {/* Row 2: Remind */}
+                    {planTier !== "free" && (
+                      <div>
+                        {appt.pets?.clients?.phone ? (
                           <button
                             onClick={() => handleSendReminder(appt)}
                             disabled={sendingReminder === appt.id}
-                            className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl border text-xs font-semibold transition disabled:opacity-50
+                            className={`w-full flex flex-col items-center justify-center gap-1 py-2 rounded-xl border text-xs font-semibold transition disabled:opacity-50
                               ${appt.pets.clients.sms_opt_in
                                 ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700"
                                 : "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
@@ -3021,27 +2976,6 @@ export default function Schedule() {
                           <div className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl border border-gray-100 text-gray-300 text-xs">
                             <span className="text-base">💬</span>
                             No phone
-                          </div>
-                        )}
-
-                        {/* Request Payment */}
-                        {!appt.paid && appt.amount > 0 && (planTier === "growth" || planTier === "pro") ? (
-                          <button
-                            onClick={() => handleRequestPayment(appt)}
-                            disabled={requestingPayment === appt.id}
-                            className={`flex flex-col items-center justify-center gap-1 py-2 rounded-xl border text-xs font-semibold transition disabled:opacity-50
-                              ${paymentSentFor.has(appt.id)
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : "border-violet-200 bg-violet-50 hover:bg-violet-100 text-violet-700"
-                              }`}
-                          >
-                            <span className="text-base">💳</span>
-                            {requestingPayment === appt.id ? "Sending…" : paymentSentFor.has(appt.id) ? "Sent ✓" : "Pay"}
-                          </button>
-                        ) : planTier === "free" ? null : (
-                          <div className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl border border-gray-100 text-gray-300 text-xs">
-                            <span className="text-base">💳</span>
-                            {appt.paid ? "Paid ✓" : "No amount"}
                           </div>
                         )}
                       </div>
