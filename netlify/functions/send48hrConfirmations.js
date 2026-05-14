@@ -107,8 +107,8 @@ exports.handler = async (event) => {
 
     for (const appt of appts) {
       const groomer = groomerMap[appt.groomer_id];
-      const pet = petMap[appt.pet_id];
-      const client = clientMap[pet?.client_id];
+      const pet = appt.pets;
+      const client = appt.pets?.clients;
       const petName = pet?.name || "your pet";
 
       // Skip if groomer is not on a paid plan

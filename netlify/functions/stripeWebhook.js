@@ -125,10 +125,13 @@ exports.handler = async (event) => {
     await supabase
       .from("groomers")
       .update({
-        subscription_status: status,
-        plan_tier:           planTier,
-        sms_bot_enabled:     planTier === "pro" && status === "active",
+        subscription_status:  status,
+        plan_tier:            planTier,
+        sms_bot_enabled:      planTier === "pro" && status === "active",
         cancel_at_period_end: subscription.cancel_at_period_end,
+        current_period_end:   subscription.current_period_end
+          ? new Date(subscription.current_period_end * 1000).toISOString()
+          : null,
       })
       .eq("stripe_customer_id", customerId);
 

@@ -37,12 +37,33 @@ exports.handler = async (event) => {
     }
 
     if (!groomer.stripe_customer_id) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          error: "No Stripe customer found — user has not subscribed yet."
-        })
-      };
+      // Auto-create a Stripe customer so billing portal works
+      try {
+        const { data: groomerFull } = await supabase
+          .from("groomers")
+          .select("email, full_name")
+          .eq("id", userId)
+          .single();
+
+        const customer = await stripe.customers.create({
+          email: groomerFull?.email || undefined,
+          name:  groomerFull?.full_name || undefined,
+          metadata: { groomer_id: userId },
+        });
+
+        await supabase
+          .from("groomers")
+          .update({ stripe_customer_id: customer.id })
+          .eq("id", userId);
+
+        groomer.stripe_customer_id = customer.id;
+      } catch (createErr) {
+        console.error("Failed to create Stripe customer:", createErr);
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: "No Stripe customer found — user has not subscribed yet." })
+        };
+      }
     }
 
     // Create billing portal session

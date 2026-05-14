@@ -147,7 +147,7 @@ exports.handler = async (event) => {
     .from("groomers")
     .select("id, full_name, business_name, plan_tier")
     .in("id", groomerIds)
-    .in("plan_tier", ["starter", "pro"]);
+    .in("plan_tier", ["growth", "pro"]);
 
   const groomerMap = {};
   (groomers || []).forEach(g => {
@@ -177,7 +177,7 @@ exports.handler = async (event) => {
       continue;
     }
 
-    // Skip if groomer not on starter/pro (groomerMap won't have them)
+    // Skip if groomer not on growth/pro (groomerMap won't have them)
     if (!groomerMap[pet.groomer_id]) {
       skipped++;
       continue;

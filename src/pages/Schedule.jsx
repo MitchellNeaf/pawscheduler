@@ -1460,7 +1460,7 @@ export default function Schedule() {
     if (!user) return;
     supabase
       .from("appointments")
-      .select("id, date, time, pets(name, clients(full_name))")
+      .select("id, date, time, waitlist, pets(name, clients(full_name))")
       .eq("groomer_id", user.id)
       .eq("source", "booking_page")
       .eq("confirmed", false)
@@ -2225,40 +2225,48 @@ export default function Schedule() {
       )}
 
       {/* Pending booking requests banner — shows ALL pending across all dates */}
-      {groomer?.booking_requires_approval && allPendingRequests.length > 0 && (
-        <div className="mx-4 mt-3 rounded-xl px-4 py-3 bg-amber-50 border border-amber-200 text-amber-800 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-bold">
-              📋 {allPendingRequests.length} booking request{allPendingRequests.length !== 1 ? "s" : ""} need{allPendingRequests.length === 1 ? "s" : ""} your approval
-            </span>
+      {groomer?.booking_requires_approval && allPendingRequests.length > 0 && (() => {
+        const pending    = allPendingRequests.filter(r => !r.waitlist);
+        const waitlisted = allPendingRequests.filter(r => r.waitlist);
+        return (
+          <div className="mx-4 mt-3 rounded-xl px-4 py-3 bg-amber-50 border border-amber-200 text-amber-800 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-bold">
+                📋 {pending.length > 0 && `${pending.length} request${pending.length !== 1 ? "s" : ""} need${pending.length === 1 ? "s" : ""} approval`}
+                {pending.length > 0 && waitlisted.length > 0 && " · "}
+                {waitlisted.length > 0 && `${waitlisted.length} on waitlist`}
+              </span>
+            </div>
+            <div className="space-y-1">
+              {allPendingRequests.map(req => {
+                const [y, m, d] = req.date.split("-").map(Number);
+                const dateStr = new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                return (
+                  <div key={req.id} className={`flex items-center justify-between rounded-lg px-3 py-2 ${req.waitlist ? "bg-blue-50 border border-blue-200" : "bg-amber-100"}`}>
+                    <span className="text-xs font-medium flex items-center gap-1.5">
+                      {req.waitlist && <span className="text-blue-600">⏸</span>}
+                      {req.pets?.name} ({req.pets?.clients?.full_name}) — {dateStr} at {req.time?.slice(0,5)}
+                      {req.waitlist && <span className="text-blue-600 font-semibold">· Waitlist</span>}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setSelectedDate(req.date);
+                        setTimeout(() => {
+                          const el = document.getElementById(`appt-${req.id}`);
+                          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                        }, 300);
+                      }}
+                      className={`text-xs font-bold px-2.5 py-1 rounded-lg text-white transition ml-2 whitespace-nowrap ${req.waitlist ? "bg-blue-500 hover:bg-blue-600" : "bg-amber-500 hover:bg-amber-600"}`}
+                    >
+                      Review →
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-          <div className="space-y-1">
-            {allPendingRequests.map(req => {
-              const [y, m, d] = req.date.split("-").map(Number);
-              const dateStr = new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-              return (
-                <div key={req.id} className="flex items-center justify-between bg-amber-100 rounded-lg px-3 py-2">
-                  <span className="text-xs font-medium">
-                    {req.pets?.name} ({req.pets?.clients?.full_name}) — {dateStr} at {req.time?.slice(0,5)}
-                  </span>
-                  <button
-                    onClick={() => {
-                      setSelectedDate(req.date);
-                      setTimeout(() => {
-                        const el = document.getElementById(`appt-${req.id}`);
-                        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-                      }, 300);
-                    }}
-                    className="text-xs font-bold px-2.5 py-1 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition ml-2 whitespace-nowrap"
-                  >
-                    Review →
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── DAY-AT-A-GLANCE SUMMARY BAR ── */}
       {appointments.length > 0 && (() => {
@@ -2706,16 +2714,23 @@ export default function Schedule() {
                 <div className="card-body space-y-3">
                   {/* Pending approval banner */}
                   {!appt.confirmed && appt.source === "booking_page" && groomer?.booking_requires_approval && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 mb-1 space-y-2">
+                    <div className={`border rounded-xl px-3 py-2.5 mb-1 space-y-2 ${appt.waitlist ? "bg-blue-50 border-blue-200" : "bg-amber-50 border-amber-200"}`}>
                       <div>
-                        <span className="text-xs font-bold text-amber-800">⏳ Booking Request</span>
-                        <p className="text-xs text-amber-700 mt-0.5">Client requested this appointment — approve or decline below</p>
+                        <span className={`text-xs font-bold ${appt.waitlist ? "text-blue-800" : "text-amber-800"}`}>
+                          {appt.waitlist ? "⏸ On Waitlist" : "⏳ Booking Request"}
+                        </span>
+                        <p className={`text-xs mt-0.5 ${appt.waitlist ? "text-blue-700" : "text-amber-700"}`}>
+                          {appt.waitlist
+                            ? "Client has been notified they're on the waitlist. Approve when a slot opens."
+                            : "Client requested this appointment — approve, waitlist, or decline below"}
+                        </p>
                       </div>
                       <div className="flex gap-2">
+                        {/* Approve */}
                         <button
                           onClick={async () => {
-                            await supabase.from("appointments").update({ confirmed: true }).eq("id", appt.id);
-                            setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, confirmed: true } : a));
+                            await supabase.from("appointments").update({ confirmed: true, waitlist: false }).eq("id", appt.id);
+                            setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, confirmed: true, waitlist: false } : a));
                             const clientEmail = appt.pets?.clients?.email;
                             if (clientEmail) {
                               fetch("/.netlify/functions/sendEmail", {
@@ -2740,11 +2755,46 @@ export default function Schedule() {
                           }}
                           className="flex-1 text-sm py-2 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition text-center"
                         >
-                          ✓ Approve
+                          ✓ {appt.waitlist ? "Approve" : "Approve"}
                         </button>
+
+                        {/* Waitlist — only show if not already waitlisted */}
+                        {!appt.waitlist && (
+                          <button
+                            onClick={async () => {
+                              await supabase.from("appointments").update({ waitlist: true }).eq("id", appt.id);
+                              setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, waitlist: true } : a));
+                              const clientEmail = appt.pets?.clients?.email;
+                              if (clientEmail) {
+                                fetch("/.netlify/functions/sendEmail", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    to: clientEmail,
+                                    subject: `You're on the waitlist — ${appt.pets?.name}`,
+                                    template: "booking_waitlisted",
+                                    data: {
+                                      groomer_id: appt.groomer_id,
+                                      client_name: appt.pets?.clients?.full_name || "there",
+                                      pet_name: appt.pets?.name || "your pet",
+                                      date: fmtEmailDate(appt.date),
+                                      time: appt.time?.slice(0,5),
+                                      groomer_phone: "",
+                                    }
+                                  })
+                                }).catch(() => {});
+                              }
+                            }}
+                            className="flex-1 text-sm py-2 rounded-lg bg-blue-100 text-blue-700 font-bold hover:bg-blue-200 transition text-center"
+                          >
+                            ⏸ Waitlist
+                          </button>
+                        )}
+
+                        {/* Decline */}
                         <button
                           onClick={async () => {
-                            if (window.confirm("Decline this booking request? The appointment will be deleted and the client notified by email.")) {
+                            if (window.confirm("Decline this booking request? The appointment will be deleted and the client notified.")) {
                               const clientEmail = appt.pets?.clients?.email;
                               if (clientEmail) {
                                 await fetch("/.netlify/functions/sendEmail", {

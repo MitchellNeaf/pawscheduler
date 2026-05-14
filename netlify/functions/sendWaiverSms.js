@@ -71,7 +71,7 @@ exports.handler = async (event) => {
   // ── Load groomer slug ───────────────────────────────────
   const { data: groomer } = await supabase
     .from("groomers")
-    .select("slug, full_name, business_name")
+    .select("slug, full_name, business_name, sms_number")
     .eq("id", user.id)
     .single();
 
@@ -96,7 +96,7 @@ exports.handler = async (event) => {
       Authorization: `Bearer ${process.env.TELNYX_API_KEY}`,
     },
     body: JSON.stringify({
-      from: process.env.TELNYX_PHONE_NUMBER,
+      from: groomer.sms_number || process.env.TELNYX_PHONE_NUMBER,
       to: client.phone,
       text: message,
     }),

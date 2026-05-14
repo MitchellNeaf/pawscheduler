@@ -431,7 +431,7 @@ export default function BookPage() {
     if (petIds.length > 0) {
       const { data, error: apptErr } = await anonSupabase
         .from("appointments")
-        .select("id, date, time, duration_min, services, pets(name)")
+        .select("id, date, time, duration_min, services, confirmed, waitlist, pets(name)")
         .eq("groomer_id", groomerId)
         .in("pet_id", petIds)
         .gte("date", today)
@@ -951,15 +951,34 @@ export default function BookPage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {upcomingAppts.map((appt) => {
-                // Check if within 24 hours
                 const [y, m, d] = appt.date.split("-").map(Number);
                 const [h = 0, min = 0] = (appt.time || "00:00").slice(0, 5).split(":").map(Number);
                 const apptMs = new Date(y, m - 1, d, h, min).getTime();
                 const withinCutoff = apptMs - Date.now() < 24 * 60 * 60 * 1000;
+                const isWaitlisted = appt.waitlist;
+                const isPending = !appt.confirmed && !appt.waitlist && appt.source === "booking_page";
 
                 return (
                 <div key={appt.id} style={{ padding: "14px 16px", borderRadius: 12,
-                  border: "1px solid #e5e7eb", background: "white" }}>
+                  border: `1px solid ${isWaitlisted ? "#bfdbfe" : isPending ? "#fcd34d" : "#e5e7eb"}`,
+                  background: isWaitlisted ? "#eff6ff" : isPending ? "#fffbeb" : "white" }}>
+
+                  {/* Status badge */}
+                  {(isWaitlisted || isPending) && (
+                    <div style={{
+                      display: "inline-block",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      padding: "3px 8px",
+                      borderRadius: 6,
+                      marginBottom: 8,
+                      background: isWaitlisted ? "#dbeafe" : "#fef3c7",
+                      color: isWaitlisted ? "#1e40af" : "#92400e",
+                    }}>
+                      {isWaitlisted ? "⏸ On Waitlist" : "⏳ Pending Approval"}
+                    </div>
+                  )}
+
                   <div style={{ display: "flex", justifyContent: "space-between",
                     alignItems: "flex-start", gap: 8 }}>
                     <div>

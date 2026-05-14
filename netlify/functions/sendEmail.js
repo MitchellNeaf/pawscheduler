@@ -76,6 +76,8 @@ exports.handler = async function(event) {
       fileName = "booking_approved.html";
     } else if (template === "booking_declined") {
       fileName = "booking_declined.html";
+    } else if (template === "booking_waitlisted") {
+      fileName = "booking_waitlisted.html";
     } else if (template === "booking_request") {
       fileName = "booking_request.html";
     } else {

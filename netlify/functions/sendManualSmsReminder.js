@@ -105,11 +105,12 @@ exports.handler = async (event) => {
   // ── Load groomer for business name + from number ────────────────
   const { data: groomer } = await supabase
     .from("groomers")
-    .select("full_name, business_name, business_phone")
+    .select("full_name, business_name, sms_number")
     .eq("id", user.id)
     .single();
 
   const groomerName = groomer?.business_name || groomer?.full_name || "Your groomer";
+  const fromNumber = groomer?.sms_number || process.env.TELNYX_PHONE_NUMBER;
 
   // ── Build message ───────────────────────────────────────────────
   const services = Array.isArray(appt.services) ? appt.services.join(", ") : appt.services || "";
@@ -130,7 +131,7 @@ exports.handler = async (event) => {
       Authorization: `Bearer ${process.env.TELNYX_API_KEY}`,
     },
     body: JSON.stringify({
-      from: process.env.TELNYX_PHONE_NUMBER,
+      from: fromNumber,
       to: client.phone,
       text: message,
     }),

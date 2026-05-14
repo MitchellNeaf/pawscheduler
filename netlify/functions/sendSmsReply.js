@@ -61,10 +61,10 @@ exports.handler = async (event) => {
     return { statusCode: 404, body: "Groomer not found" };
   }
 
-  // Plan gate — basic+ can use SMS inbox
-  const allowedPlans = ["starter", "pro"];
+  // Plan gate — growth+ can use SMS inbox
+  const allowedPlans = ["growth", "pro"];
   if (!allowedPlans.includes(groomer.plan_tier)) {
-    return { statusCode: 403, body: "SMS inbox requires Basic plan or higher" };
+    return { statusCode: 403, body: "SMS inbox requires Growth plan or higher" };
   }
 
   const fromNumber = groomer.sms_number || process.env.TELNYX_PHONE_NUMBER;
