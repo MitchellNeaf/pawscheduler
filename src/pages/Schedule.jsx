@@ -1427,7 +1427,6 @@ export default function Schedule() {
   const FREE_LIMIT = 50;
   const [monthlyCount, setMonthlyCount] = useState(null);
   const [allPendingRequests, setAllPendingRequests] = useState([]);
-  const [sendingReminder, setSendingReminder] = useState(null); // appointmentId | null
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editAppt, setEditAppt] = useState(null);
