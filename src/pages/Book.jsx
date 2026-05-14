@@ -140,7 +140,7 @@ export default function BookPage() {
     (async () => {
       const { data, error: gErr } = await anonSupabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval")
+        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, bio, business_address, business_phone")
         .eq("slug", slug)
         .single();
 
@@ -634,46 +634,139 @@ export default function BookPage() {
   };
 
   return (
-    <main style={{ maxWidth: 480, margin: "0 auto", padding: "24px 16px" }}>
+    <main style={{ maxWidth: 520, margin: "0 auto", padding: "0 0 40px" }}>
 
-      {/* HEADER */}
+      {/* ── HERO HEADER ── */}
       {groomer && (
-        <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <div style={{
+          background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
+          padding: "32px 24px 28px",
+          textAlign: "center",
+          marginBottom: 0,
+        }}>
           {groomer.logo_url && (
             <img src={groomer.logo_url} alt="Logo"
-              style={{ width: 72, height: 72, borderRadius: "50%",
-                objectFit: "cover", margin: "0 auto 10px" }} />
+              style={{ width: 80, height: 80, borderRadius: "50%",
+                objectFit: "cover", margin: "0 auto 12px",
+                border: "3px solid rgba(255,255,255,0.4)" }} />
           )}
-          <div style={{ fontSize: "1.1rem", fontWeight: 700 }}>{groomer.full_name}</div>
+          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "white", letterSpacing: "-0.3px" }}>
+            {groomer.full_name}
+          </div>
+          {groomer.business_address && (
+            <div style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.8)", marginTop: 4 }}>
+              📍 {groomer.business_address.split(",").slice(-2).join(",").trim()}
+            </div>
+          )}
+          {groomer.bio && (
+            <div style={{
+              fontSize: "0.87rem", color: "rgba(255,255,255,0.9)",
+              marginTop: 12, lineHeight: 1.6,
+              maxWidth: 380, margin: "12px auto 0",
+            }}>
+              {groomer.bio}
+            </div>
+          )}
+          {groomer.booking_requires_approval && (
+            <div style={{
+              marginTop: 12, display: "inline-block",
+              background: "rgba(255,255,255,0.2)", borderRadius: 20,
+              padding: "4px 12px", fontSize: "0.75rem", color: "white", fontWeight: 600,
+            }}>
+              ⏳ Appointments require approval
+            </div>
+          )}
         </div>
       )}
 
+      {/* ── SERVICES & PRICING ── */}
+      {(serviceOptions.length > 0 || addonOptions.length > 0) && view !== "book" && view !== "cancel" && (
+        <div style={{ padding: "20px 16px 4px" }}>
+          <div style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase",
+            letterSpacing: "0.08em", color: "#6b7280", marginBottom: 10 }}>
+            Services & Pricing
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {serviceOptions.map((svc) => {
+              const p = pricing[svc.name] || pricing[svc] || {};
+              const name = typeof svc === "string" ? svc : svc.name;
+              const desc = typeof svc === "object" ? svc.description : null;
+              return (
+                <div key={name} style={{
+                  background: "white", border: "1px solid #e5e7eb",
+                  borderRadius: 10, padding: "10px 14px",
+                  display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8,
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: "0.88rem", color: "#111827" }}>{name}</div>
+                    {desc && <div style={{ fontSize: "0.76rem", color: "#6b7280", marginTop: 2 }}>{desc}</div>}
+                  </div>
+                  <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    {p[1] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>S/M <strong>${p[1]}</strong></div>}
+                    {p[2] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>L <strong>${p[2]}</strong></div>}
+                    {p[3] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>XL <strong>${p[3]}</strong></div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {addonOptions.length > 0 && (
+            <>
+              <div style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase",
+                letterSpacing: "0.08em", color: "#6b7280", margin: "16px 0 8px" }}>
+                Add-ons
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {addonOptions.map((a) => (
+                  <div key={a.name} style={{
+                    background: "#f5f3ff", border: "1px solid #ddd6fe",
+                    borderRadius: 8, padding: "5px 10px",
+                    fontSize: "0.78rem", color: "#5b21b6", fontWeight: 600,
+                  }}>
+                    {a.name} — ${a.price}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── BOOKING SECTION ── */}
+      <div style={{ padding: "16px 16px 0" }}>
+
       {/* ── LOGIN VIEW ── */}
       {view === "login" && (
-        <div>
-          <h2 style={{ textAlign: "center", marginBottom: 16, fontSize: "1.1rem", fontWeight: 700 }}>
-            Enter your info to continue
-          </h2>
+        <div style={{ background: "white", borderRadius: 12, border: "1px solid #e5e7eb", padding: "20px 16px" }}>
+          <div style={{ textAlign: "center", marginBottom: 16 }}>
+            <div style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Book an Appointment</div>
+            <div style={{ fontSize: "0.82rem", color: "#6b7280", marginTop: 4 }}>Enter your name and last 4 digits of your phone number</div>
+          </div>
           <form onSubmit={handleClientLogin} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <input
               name="name" placeholder="First name"
               value={clientForm.name} onChange={handleChange}
-              className="border rounded px-2 py-1 w-full" required
+              style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "0.9rem" }}
+              required
             />
             <input
               name="last4" placeholder="Last 4 digits of phone"
               value={clientForm.last4} onChange={handleChange}
-              className="border rounded px-2 py-1 w-full"
+              style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "0.9rem" }}
               maxLength={4} inputMode="numeric" required
             />
             {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{error}</p>}
             <button type="submit"
-              style={{ marginTop: 4, padding: "10px", borderRadius: 8,
+              style={{ padding: "12px", borderRadius: 8,
                 background: "#10b981", color: "white", fontWeight: 700,
                 border: "none", cursor: "pointer", fontSize: "0.95rem" }}>
-              Continue
+              Continue →
             </button>
           </form>
+          <p style={{ textAlign: "center", fontSize: "0.75rem", color: "#9ca3af", marginTop: 12 }}>
+            New client? Contact us to get set up.
+          </p>
         </div>
       )}
 
@@ -1031,6 +1124,7 @@ export default function BookPage() {
         </div>
       )}
 
+      </div> {/* end booking section */}
     </main>
   );
 }

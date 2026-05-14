@@ -759,6 +759,22 @@ function AppointmentModal({
             <div className="text-xs text-gray-500">{clientName}</div>
           </div>
 
+          {/* Pet notes — shown prominently if set */}
+          {(isEdit ? appt.pets?.notes : pet.notes) && (
+            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 leading-relaxed">
+              <span className="font-bold">📋 Pet notes: </span>
+              {isEdit ? appt.pets?.notes : pet.notes}
+            </div>
+          )}
+
+          {/* Client notes — shown if set */}
+          {(isEdit ? appt.pets?.clients?.notes : pet.clients?.notes) && (
+            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800 leading-relaxed">
+              <span className="font-bold">👤 Client notes: </span>
+              {isEdit ? appt.pets?.clients?.notes : pet.clients?.notes}
+            </div>
+          )}
+
           {/* Rabies status */}
           {!rabies ? (
             <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">⚠️ No rabies record on file</div>
@@ -1573,13 +1589,14 @@ export default function Schedule() {
             services, notes, confirmed, no_show, paid, amount, reminder_enabled, source, appointment_group_id,
             checked_in_at, checked_out_at, payment_method,
             pets (
-              id, name, tags, client_id, photo_url,
+              id, name, tags, notes, client_id, photo_url,
               clients (
                 id,
                 full_name,
                 phone,
                 email,
                 sms_opt_in,
+                notes,
                 street,
                 city,
                 state,
@@ -1722,9 +1739,9 @@ export default function Schedule() {
       const { data } = await supabase
         .from("pets")
         .select(`
-          id, name, tags, client_id, slot_weight,
+          id, name, tags, notes, client_id, slot_weight,
           default_services, default_duration_min,
-          clients ( id, full_name )
+          clients ( id, full_name, notes )
         `)
         .eq("groomer_id", user.id)
         .order("name", { ascending: true });

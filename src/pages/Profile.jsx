@@ -45,6 +45,7 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
 
   const [fullName, setFullName] = useState("");
+  const [bio, setBio] = useState("");
   const [slug, setSlug] = useState("");
   const [logoUrl, setLogoUrl] = useState(null);
   const [user, setUser] = useState(null);
@@ -97,6 +98,7 @@ export default function Profile() {
         }
         setBookingRequiresApproval(data.booking_requires_approval || false);
         setFullName(data.full_name || "");
+        setBio(data.bio || "");
         setSlug(data.slug || "");
         setLogoUrl(data.logo_url || null);
         setMaxParallel(data.max_parallel ?? 1);
@@ -276,6 +278,7 @@ export default function Profile() {
       .from("groomers")
       .update({
         full_name: fullName,
+        bio: bio.trim() || null,
         slug: cleanSlug,
         max_parallel: maxParallel,
         max_appts_per_day: maxApptsPerDay || null,
@@ -507,6 +510,18 @@ export default function Profile() {
           <div>
             <label className="block text-sm font-medium mb-1">Business Name</label>
             <input value={fullName} onChange={(e) => setFullName(e.target.value)} className="border rounded w-full p-2" />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Bio / About</label>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value)}
+              rows={3}
+              placeholder="A short description of your grooming business — experience, specialties, location, etc. This appears on your public booking page."
+              className="border rounded w-full p-2 text-sm resize-none"
+            />
+            <p className="text-xs text-gray-400 mt-1">Shown publicly on your booking page below your name.</p>
           </div>
 
                     {/* Booking Approval */}
