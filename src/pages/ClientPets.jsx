@@ -795,6 +795,39 @@ export default function ClientPets() {
             </div>
           </div>
 
+          {/* Custom intake answers */}
+          {client.custom_answers && Object.keys(client.custom_answers).length > 0 && (
+            <div className="pt-2 border-t border-[var(--border-med)]">
+              <div className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide mb-2">
+                Intake Answers
+              </div>
+              <div className="space-y-2">
+                {Object.entries(client.custom_answers).map(([qId, answer]) => (
+                  <div key={qId} className="text-sm">
+                    <span className="text-gray-500 text-xs font-medium">{qId.replace(/_/g, " ")}</span>
+                    <div className="text-gray-800 mt-0.5">
+                      {Array.isArray(answer) ? answer.join(", ") : String(answer || "—")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Notes */}
+          <div className="pt-2 border-t border-[var(--border-med)]">
+            <div className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide mb-2">
+              Client Notes
+            </div>
+            <textarea
+              placeholder="Any notes about this client (e.g. always late, preferred parking, etc.)"
+              value={client.notes || ""}
+              onChange={(e) => setClient((prev) => ({ ...prev, notes: e.target.value }))}
+              rows={3}
+              className="w-full border rounded-xl px-3 py-2 text-sm resize-none"
+            />
+          </div>
+
           <div className="flex flex-wrap gap-3">
             <button
               className="btn-primary text-sm"
@@ -812,6 +845,7 @@ export default function ClientPets() {
                     zip: client.zip || null,
                     emergency_contact_name:  client.emergency_contact_name || null,
                     emergency_contact_phone: client.emergency_contact_phone || null,
+                    notes: client.notes || null,
                   })
                   .eq("id", client.id)
                   .eq("groomer_id", user.id);

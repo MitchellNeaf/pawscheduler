@@ -40,9 +40,9 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  let slug, clientData, emergencyData, petsData;
+  let slug, clientData, emergencyData, petsData, customAnswers;
   try {
-    ({ slug, client: clientData, emergency: emergencyData, pets: petsData } = JSON.parse(event.body || "{}"));
+    ({ slug, client: clientData, emergency: emergencyData, pets: petsData, custom_answers: customAnswers } = JSON.parse(event.body || "{}"));
   } catch {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON" }) };
   }
@@ -108,6 +108,7 @@ exports.handler = async (event) => {
     zip:                     clientData.zip?.trim() || null,
     emergency_contact_name:  emergencyData?.name?.trim() || null,
     emergency_contact_phone: emergencyData?.phone?.trim() || null,
+    custom_answers:          customAnswers && Object.keys(customAnswers).length > 0 ? customAnswers : null,
   };
 
   if (existingClients?.length > 0) {

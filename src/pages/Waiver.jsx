@@ -62,7 +62,7 @@ export default function WaiverPage() {
     (async () => {
       const { data, error: gErr } = await supabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url")
+        .select("id, full_name, slug, logo_url, waiver_text")
         .eq("slug", slug)
         .single();
 
@@ -168,6 +168,17 @@ export default function WaiverPage() {
             {groomer.full_name} · Please read carefully and sign below
           </p>
         </div>
+
+        {/* Custom groomer waiver intro text */}
+        {groomer.waiver_text && (
+          <div className="card">
+            <div className="card-body">
+              <p className="text-sm text-[var(--text-2)] leading-relaxed whitespace-pre-wrap">
+                {groomer.waiver_text}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Waiver sections */}
         <div className="card space-y-5">

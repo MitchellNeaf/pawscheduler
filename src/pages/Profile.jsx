@@ -112,6 +112,9 @@ export default function Profile() {
           setCustomIntakeQuestions(DEFAULT_INTAKE_QUESTIONS);
         }
 
+        // Load waiver text
+        setWaiverText(data.waiver_text || "");
+
         // Load service pricing — merge with defaults so new services always have a price
         // (custom_services handles the editor, this is legacy support)
 
@@ -361,6 +364,7 @@ export default function Profile() {
   const [stripeError, setStripeError] = useState("");
   const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
   const [customIntakeQuestions, setCustomIntakeQuestions] = useState(null);
+  const [waiverText, setWaiverText] = useState("");
   const [savingIntake, setSavingIntake] = useState(false);
 
   // ---------------- BILLING PORTAL ----------------
@@ -1506,19 +1510,9 @@ export default function Profile() {
                     .eq("id", user.id);
                   setSavingIntake(false);
                   if (!error) {
-                    setConfirmConfig({
-                      title: "Saved! ✓",
-                      message: "Your intake form questions have been updated.",
-                      confirmLabel: "OK",
-                      onConfirm: () => {},
-                    });
+                    setConfirmConfig({ title: "Saved! ✓", message: "Your intake form questions have been updated.", confirmLabel: "OK", onConfirm: () => {} });
                   } else {
-                    setConfirmConfig({
-                      title: "Could not save",
-                      message: error.message || "Something went wrong. Please try again.",
-                      confirmLabel: "OK",
-                      onConfirm: () => {},
-                    });
+                    setConfirmConfig({ title: "Could not save", message: error.message || "Something went wrong.", confirmLabel: "OK", onConfirm: () => {} });
                   }
                 }}
                 disabled={savingIntake}
@@ -1526,6 +1520,37 @@ export default function Profile() {
               >
                 {savingIntake ? "Saving…" : "Save Intake Questions"}
               </button>
+
+              {/* ── WAIVER TEXT ── */}
+              <div className="mt-6 pt-6 border-t border-[var(--border-med)] space-y-3">
+                <div>
+                  <h3 className="font-semibold text-[var(--text-1)]">Grooming Waiver Text</h3>
+                  <p className="text-xs text-[var(--text-3)] mt-1">
+                    This text appears at the top of your waiver page, before the standard clauses. Use it to add your business name, specific policies, or a personal intro.
+                  </p>
+                </div>
+                <textarea
+                  value={waiverText}
+                  onChange={(e) => setWaiverText(e.target.value)}
+                  rows={5}
+                  placeholder="e.g. Welcome to Sam's Grooming! By signing below you agree to our grooming policies..."
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none"
+                />
+                <button
+                  onClick={async () => {
+                    const { error } = await supabase
+                      .from("groomers")
+                      .update({ waiver_text: waiverText || null })
+                      .eq("id", user.id);
+                    if (!error) {
+                      setConfirmConfig({ title: "Saved! ✓", message: "Your waiver intro has been updated.", confirmLabel: "OK", onConfirm: () => {} });
+                    }
+                  }}
+                  className="btn-primary w-full"
+                >
+                  Save Waiver Text
+                </button>
+              </div>
             </>
           )}
         </div>
