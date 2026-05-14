@@ -96,6 +96,10 @@ function PetEditModal({
   photoPreview,
   onPhotoChange,
   planTier,
+  extraPhotos,
+  setExtraPhotos,
+  newPhotoFiles,
+  setNewPhotoFiles,
 }) {
   if (!open) return null;
 
@@ -133,23 +137,73 @@ function PetEditModal({
           {/* PHOTO UPLOAD — Basic+ */}
           {(planTier === "basic" || planTier === "growth" || planTier === "pro") ? (
           <div>
-            <label className="block text-sm font-medium mb-1">Pet Photo</label>
-            <div className="flex items-center gap-3">
-              {photoPreview ? (
-                <img src={photoPreview} alt="Preview"
-                  className="w-14 h-14 rounded-full object-cover border border-gray-200" />
-              ) : (
-                <div className="w-14 h-14 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-400 text-xl">🐾</div>
+            <label className="block text-sm font-medium mb-1">Pet Photos</label>
+
+            {/* Existing + new preview photos */}
+            <div className="flex flex-wrap gap-2 mb-2">
+              {/* Primary photo */}
+              {photoPreview && !photoPreview.startsWith("blob:") && (
+                <div className="relative">
+                  <img src={photoPreview} alt="Main"
+                    className="w-16 h-16 rounded-lg object-cover border-2 border-emerald-400" />
+                  <span className="absolute -top-1 -left-1 text-[9px] bg-emerald-500 text-white rounded px-1 font-bold">Main</span>
+                </div>
               )}
+              {/* Blob preview for new primary */}
+              {photoPreview && photoPreview.startsWith("blob:") && (
+                <div className="relative">
+                  <img src={photoPreview} alt="New main"
+                    className="w-16 h-16 rounded-lg object-cover border-2 border-emerald-400" />
+                  <span className="absolute -top-1 -left-1 text-[9px] bg-emerald-500 text-white rounded px-1 font-bold">Main</span>
+                </div>
+              )}
+              {/* Extra existing photos */}
+              {extraPhotos.map((url, i) => (
+                <div key={url} className="relative">
+                  <img src={url} alt={`Photo ${i + 2}`}
+                    className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
+                  <button
+                    type="button"
+                    onClick={() => setExtraPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                    className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center leading-none font-bold"
+                  >✕</button>
+                </div>
+              ))}
+              {/* Preview new files */}
+              {newPhotoFiles.map((file, i) => (
+                <div key={i} className="relative">
+                  <img src={URL.createObjectURL(file)} alt={`New ${i}`}
+                    className="w-16 h-16 rounded-lg object-cover border border-blue-300" />
+                  <button
+                    type="button"
+                    onClick={() => setNewPhotoFiles(prev => prev.filter((_, idx) => idx !== i))}
+                    className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[10px] flex items-center justify-center leading-none font-bold"
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+
+            {/* Upload buttons */}
+            <div className="flex gap-2 flex-wrap">
               <label className="cursor-pointer">
                 <span className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition font-medium text-gray-700">
-                  {photoPreview ? "Change photo" : "Upload photo"}
+                  {photoPreview ? "Change main photo" : "Set main photo"}
                 </span>
-                <input type="file" accept="image/*" className="hidden"
-                  onChange={onPhotoChange} />
+                <input type="file" accept="image/*" className="hidden" onChange={onPhotoChange} />
+              </label>
+              <label className="cursor-pointer">
+                <span className="text-sm px-3 py-1.5 rounded-lg border border-blue-300 bg-blue-50 hover:bg-blue-100 transition font-medium text-blue-700">
+                  + Add photo
+                </span>
+                <input type="file" accept="image/*" multiple className="hidden"
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files || []);
+                    const compressed = await Promise.all(files.map(f => compressImage(f)));
+                    setNewPhotoFiles(prev => [...prev, ...compressed]);
+                  }} />
               </label>
             </div>
-            <p className="text-xs text-gray-400 mt-1">Auto-compressed to save space.</p>
+            <p className="text-xs text-gray-400 mt-1">Main photo shows on schedule cards. All photos shown here.</p>
           </div>
           ) : (
             <div className="rounded-xl border border-dashed border-gray-200 p-3 text-center text-xs text-gray-400">
@@ -444,6 +498,12 @@ export default function ClientPets() {
   const [shotModalOpen, setShotModalOpen] = useState(false);
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState(null);
+  // Multiple pet photos
+  const [extraPhotos, setExtraPhotos] = useState([]); // array of existing URLs
+  const [newPhotoFiles, setNewPhotoFiles] = useState([]); // new files to upload
+  // Client photo
+  const [clientPhotoFile, setClientPhotoFile] = useState(null);
+  const [clientPhotoPreview, setClientPhotoPreview] = useState(null);
 
   // ConfirmModal state
   const [confirmConfig, setConfirmConfig] = useState(null);
@@ -527,6 +587,8 @@ export default function ClientPets() {
     setPetEditOpen(false);
     setPhotoFile(null);
     setPhotoPreview(null);
+    setExtraPhotos([]);
+    setNewPhotoFiles([]);
   };
 
   const handlePhotoChange = async (e) => {
@@ -535,6 +597,14 @@ export default function ClientPets() {
     const compressed = await compressImage(file);
     setPhotoFile(compressed);
     setPhotoPreview(URL.createObjectURL(compressed));
+  };
+
+  const handleClientPhotoChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const compressed = await compressImage(file);
+    setClientPhotoFile(compressed);
+    setClientPhotoPreview(URL.createObjectURL(compressed));
   };
 
   const handleAddPet = () => {
@@ -560,7 +630,7 @@ export default function ClientPets() {
       ? [...form.tags.filter((t) => t !== "Other"), otherTag]
       : form.tags;
 
-    // Upload photo if a new one was selected
+    // Upload primary photo if a new one was selected
     let photoUrl = (photoPreview && !photoPreview.startsWith("blob:")) ? photoPreview : null;
     if (photoFile) {
       const path = `${user.id}/${editingId || `new-${Date.now()}`}/photo.jpg`;
@@ -576,6 +646,27 @@ export default function ClientPets() {
       }
     }
 
+    // Upload additional photos
+    let allUrls = [...extraPhotos]; // start with existing kept photos
+    for (let i = 0; i < newPhotoFiles.length; i++) {
+      const file = newPhotoFiles[i];
+      const path = `${user.id}/${editingId || `new-${Date.now()}`}/extra-${Date.now()}-${i}.jpg`;
+      const { error: upErr } = await supabase.storage
+        .from("pet-photos")
+        .upload(path, file, { upsert: true, contentType: "image/jpeg" });
+      if (!upErr) {
+        const { data: pub } = supabase.storage.from("pet-photos").getPublicUrl(path);
+        allUrls.push(pub.publicUrl + "?v=" + Date.now());
+      } else {
+        console.error("Extra photo upload failed:", upErr.message);
+      }
+    }
+
+    // If no primary photo but we have extra photos, promote first extra
+    if (!photoUrl && allUrls.length > 0) {
+      photoUrl = allUrls[0];
+    }
+
     if (editingId) {
       const { data, error } = await supabase
         .from("pets")
@@ -588,6 +679,7 @@ export default function ClientPets() {
           default_services: form.default_services.length ? form.default_services : null,
           default_duration_min: form.default_duration_min || null,
           photo_url: photoUrl,
+          photo_urls: allUrls.length > 0 ? allUrls : null,
         })
         .eq("id", editingId)
         .eq("groomer_id", user.id)
@@ -612,6 +704,7 @@ export default function ClientPets() {
           default_services: form.default_services.length ? form.default_services : null,
           default_duration_min: form.default_duration_min || null,
           photo_url: photoUrl,
+          photo_urls: allUrls.length > 0 ? allUrls : null,
         }])
         .select()
         .single();
@@ -646,6 +739,8 @@ export default function ClientPets() {
     setEditingId(pet.id);
     setPhotoFile(null);
     setPhotoPreview(pet.photo_url || null);
+    setExtraPhotos(pet.photo_urls || []);
+    setNewPhotoFiles([]);
     setPetEditOpen(true);
   };
 
@@ -715,6 +810,29 @@ export default function ClientPets() {
       <div className="card mb-6">
         <div className="card-body space-y-3">
           <h2 className="font-semibold text-lg">Client Info</h2>
+
+          {/* Client photo */}
+          {(planTier === "basic" || planTier === "growth" || planTier === "pro") && (
+            <div className="flex items-center gap-3">
+              {(clientPhotoPreview || client.photo_url) ? (
+                <img
+                  src={clientPhotoPreview || client.photo_url}
+                  alt={client.full_name}
+                  className="w-16 h-16 rounded-full object-cover border-2 border-emerald-400"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center text-gray-400 text-2xl">
+                  👤
+                </div>
+              )}
+              <label className="cursor-pointer">
+                <span className="text-sm px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition font-medium text-gray-700">
+                  {client.photo_url ? "Change photo" : "Add client photo"}
+                </span>
+                <input type="file" accept="image/*" className="hidden" onChange={handleClientPhotoChange} />
+              </label>
+            </div>
+          )}
           <input
             placeholder="Client Name"
             value={client.full_name || ""}
@@ -834,6 +952,25 @@ export default function ClientPets() {
               disabled={savingClient}
               onClick={async () => {
                 setSavingClient(true);
+
+                // Upload client photo if changed
+                let clientPhotoUrl = client.photo_url || null;
+                if (clientPhotoFile) {
+                  const path = `clients/${client.id}/photo.jpg`;
+                  const { error: upErr } = await supabase.storage
+                    .from("pet-photos")
+                    .upload(path, clientPhotoFile, { upsert: true, contentType: "image/jpeg" });
+                  if (!upErr) {
+                    const { data: pub } = supabase.storage.from("pet-photos").getPublicUrl(path);
+                    clientPhotoUrl = pub.publicUrl + "?v=" + Date.now();
+                    setClient(prev => ({ ...prev, photo_url: clientPhotoUrl }));
+                    setClientPhotoFile(null);
+                    setClientPhotoPreview(null);
+                  } else {
+                    alert("Client photo upload failed: " + upErr.message);
+                  }
+                }
+
                 await supabase
                   .from("clients")
                   .update({
@@ -846,6 +983,7 @@ export default function ClientPets() {
                     emergency_contact_name:  client.emergency_contact_name || null,
                     emergency_contact_phone: client.emergency_contact_phone || null,
                     notes: client.notes || null,
+                    photo_url: clientPhotoUrl,
                   })
                   .eq("id", client.id)
                   .eq("groomer_id", user.id);
@@ -913,6 +1051,16 @@ export default function ClientPets() {
                     <LazyPetPhoto url={pet.photo_url} name={pet.name} />
                   </div>
                 </div>
+
+                {/* Photo gallery — show all photos if more than one */}
+                {pet.photo_urls && pet.photo_urls.length > 1 && (
+                  <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
+                    {pet.photo_urls.map((url, i) => (
+                      <img key={i} src={url} alt={`${pet.name} photo ${i + 1}`}
+                        className="w-14 h-14 rounded-lg object-cover border border-gray-200 flex-shrink-0" />
+                    ))}
+                  </div>
+                )}
 
                 {pet.tags?.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-2">
@@ -1022,6 +1170,10 @@ export default function ClientPets() {
         photoPreview={photoPreview}
         onPhotoChange={handlePhotoChange}
         planTier={planTier}
+        extraPhotos={extraPhotos}
+        setExtraPhotos={setExtraPhotos}
+        newPhotoFiles={newPhotoFiles}
+        setNewPhotoFiles={setNewPhotoFiles}
       />
 
       {/* SHOT MODAL */}
