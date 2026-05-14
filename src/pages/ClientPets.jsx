@@ -160,7 +160,7 @@ function PetEditModal({
               {/* Extra existing photos */}
               {extraPhotos.map((url, i) => (
                 <div key={url} className="relative">
-                  <img src={url} alt={`Photo ${i + 2}`}
+                  <img src={url} alt={`${i + 2}`}
                     className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
                   <button
                     type="button"
@@ -1056,7 +1056,7 @@ export default function ClientPets() {
                 {pet.photo_urls && pet.photo_urls.length > 1 && (
                   <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
                     {pet.photo_urls.map((url, i) => (
-                      <img key={i} src={url} alt={`${pet.name} photo ${i + 1}`}
+                      <img key={i} src={url} alt={`${pet.name} ${i + 1}`}
                         className="w-14 h-14 rounded-lg object-cover border border-gray-200 flex-shrink-0" />
                     ))}
                   </div>
