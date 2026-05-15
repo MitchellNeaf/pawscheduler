@@ -105,7 +105,7 @@ export default function Revenue() {
       const { data } = await supabase
         .from("appointments")
         .select(`
-          id, date, time, amount, paid, no_show, services, payment_method,
+          id, date, time, amount, tip, paid, no_show, services, payment_method,
           pets ( name, clients ( full_name ) )
         `)
         .eq("groomer_id", user.id)
@@ -144,6 +144,8 @@ export default function Revenue() {
   const paidOnly = useMemo(() => filtered.filter((a) => a.paid), [filtered]);
 
   const totalRevenue = paidOnly.reduce((s, a) => s + (a.amount || 0), 0);
+  const totalTips    = paidOnly.reduce((s, a) => s + (a.tip || 0), 0);
+  const totalWithTips = totalRevenue + totalTips;
   const apptCount    = filtered.length;
   const avgPerAppt   = paidOnly.length ? totalRevenue / paidOnly.length : 0;
   const unpaidCount  = filtered.filter((a) => !a.paid && !a.no_show).length;
@@ -323,6 +325,22 @@ export default function Revenue() {
           sub={startDate ? `${startDate} → ${endDate || "today"}` : "All time"}
           accent="var(--brand)"
         />
+        {totalTips > 0 && (
+          <StatCard
+            label="Tips"
+            value={`$${totalTips.toFixed(2)}`}
+            sub="recorded tips"
+            accent="#8b5cf6"
+          />
+        )}
+        {totalTips > 0 && (
+          <StatCard
+            label="Total w/ Tips"
+            value={`$${totalWithTips.toFixed(2)}`}
+            sub="revenue + tips"
+            accent="var(--brand)"
+          />
+        )}
         <StatCard label="Appointments" value={apptCount} sub={`${paidOnly.length} paid`} />
         <StatCard label="Avg per Appt" value={`$${avgPerAppt.toFixed(2)}`} sub="paid only" />
         <StatCard
@@ -470,6 +488,11 @@ export default function Revenue() {
                   <SortTh col="amount">Amount</SortTh>
                   <th style={{ fontSize: "0.72rem", fontWeight: 700,
                     textTransform: "uppercase", letterSpacing: ".06em",
+                    color: "var(--text-3)", paddingBottom: 8, paddingRight: 12 }}>
+                    Tip
+                  </th>
+                  <th style={{ fontSize: "0.72rem", fontWeight: 700,
+                    textTransform: "uppercase", letterSpacing: ".06em",
                     color: "var(--text-3)", paddingBottom: 8 }}>
                     Status
                   </th>
@@ -510,6 +533,11 @@ export default function Revenue() {
                       <td style={{ padding: "10px 12px", fontWeight: 700,
                         color: a.paid ? "var(--brand)" : "#ef4444", whiteSpace: "nowrap" }}>
                         ${Number(a.amount || 0).toFixed(2)}
+                      </td>
+                      <td style={{ padding: "10px 12px", whiteSpace: "nowrap",
+                        color: a.tip > 0 ? "#7c3aed" : "var(--text-3)",
+                        fontWeight: a.tip > 0 ? 600 : 400 }}>
+                        {a.tip > 0 ? `$${parseFloat(a.tip).toFixed(2)}` : "—"}
                       </td>
                       <td style={{ padding: "10px 12px" }}>
                         {a.no_show ? (

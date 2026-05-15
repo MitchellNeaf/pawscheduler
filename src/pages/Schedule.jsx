@@ -945,6 +945,28 @@ function AppointmentModal({
             )}
           </label>
 
+          {/* Tip — only shows when a payment method is selected */}
+          {form.payment_method && (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-gray-700">Tip</span>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500 text-sm">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={form.tip || ""}
+                  onChange={(e) => setForm((prev) => ({ ...prev, tip: e.target.value }))}
+                  className="border rounded px-3 py-2 text-sm w-28"
+                />
+                {form.tip && parseFloat(form.tip) > 0 && (
+                  <span className="text-xs text-emerald-600 font-medium">✓ ${parseFloat(form.tip).toFixed(2)} tip</span>
+                )}
+              </div>
+            </label>
+          )}
+
           {/* Reminder toggle */}
           {(planTier === "basic" || planTier === "growth" || planTier === "pro") && (
             <label className="flex items-center gap-2 text-sm">
@@ -1455,6 +1477,7 @@ export default function Schedule() {
     amount: null,
     reminder_enabled: false,
     payment_method: "",
+    tip: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -1529,7 +1552,7 @@ export default function Schedule() {
         .from("appointments")
         .select(`
           id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-          services, notes, confirmed, no_show, paid, amount, reminder_enabled, source, appointment_group_id,
+          services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id,
           checked_in_at, checked_out_at, payment_method,
           pets (
             id, name, tags, client_id, photo_url,
@@ -1586,7 +1609,7 @@ export default function Schedule() {
           .from("appointments")
           .select(`
             id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-            services, notes, confirmed, no_show, paid, amount, reminder_enabled, source, appointment_group_id,
+            services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id,
             checked_in_at, checked_out_at, payment_method,
             pets (
               id, name, tags, notes, client_id, photo_url,
@@ -1934,6 +1957,7 @@ export default function Schedule() {
       amount: appt.amount ?? null,
       reminder_enabled: appt.reminder_enabled ?? false,
       payment_method: appt.payment_method || "",
+      tip: appt.tip != null ? String(appt.tip) : "",
       paid: appt.paid ?? false,
     });
 
@@ -1966,6 +1990,7 @@ export default function Schedule() {
         amount: editForm.amount ?? null,
         reminder_enabled: editForm.reminder_enabled,
         payment_method: editForm.payment_method || null,
+        tip: editForm.tip ? parseFloat(editForm.tip) || null : null,
         paid: editForm.paid ?? false,
         reminder_sent: false,
         slot_weight: editAppt.slot_weight || 1,
@@ -2972,6 +2997,7 @@ export default function Schedule() {
                   {appt.payment_method && appt.paid && (
                     <div className="text-xs text-emerald-700 font-medium">
                       💰 Paid via {appt.payment_method === "cashapp" ? "Cash App" : appt.payment_method.charAt(0).toUpperCase() + appt.payment_method.slice(1)}
+                      {appt.tip > 0 && ` · $${parseFloat(appt.tip).toFixed(2)} tip`}
                     </div>
                   )}
                   {(servicesText || appt.notes) && (
