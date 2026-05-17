@@ -62,7 +62,7 @@ function ProtectedRoute({ children }) {
   const showBanner = false;
 
   const pilot = searchParams.get("pilot");
-
+  <SentryTest />
   useEffect(() => {
     if (pilot === "mobile60") {
       localStorage.setItem("pawscheduler_pilot", "mobile60");
