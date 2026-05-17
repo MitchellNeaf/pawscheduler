@@ -62,7 +62,7 @@ function ProtectedRoute({ children }) {
   const showBanner = false;
 
   const pilot = searchParams.get("pilot");
-  <SentryTest />
+
   useEffect(() => {
     if (pilot === "mobile60") {
       localStorage.setItem("pawscheduler_pilot", "mobile60");
@@ -568,18 +568,5 @@ export default function App() {
         <AppShell />
       </Router>
     </Sentry.ErrorBoundary>
-  );
-}
-import * as Sentry from '@sentry/react';
-// Add this button component to your app to test Sentry's error tracking
-function ErrorButton() {
-  return (
-    <button
-      onClick={() => {
-        throw new Error('This is your first error!');
-      }}
-    >
-      Break the world
-    </button>
   );
 }
