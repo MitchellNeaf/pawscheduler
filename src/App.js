@@ -1,4 +1,5 @@
 // App.js
+import * as Sentry from "@sentry/react";
 import {
   BrowserRouter as Router,
   Routes,
@@ -73,6 +74,9 @@ function ProtectedRoute({ children }) {
       const { data } = await supabase.auth.getSession();
       const currentUser = data.session?.user || null;
       setUser(currentUser);
+      if (currentUser) {
+        Sentry.setUser({ id: currentUser.id, email: currentUser.email });
+      }
 
       if (!currentUser) {
         setLoading(false);
@@ -549,8 +553,20 @@ function AppShell() {
 
 export default function App() {
   return (
-    <Router>
-      <AppShell />
-    </Router>
+    <Sentry.ErrorBoundary fallback={
+      <div style={{ padding: 40, textAlign: "center", fontFamily: "sans-serif" }}>
+        <h2>Something went wrong</h2>
+        <p style={{ color: "#6b7280" }}>This error has been reported. Please refresh the page.</p>
+        <button onClick={() => window.location.reload()}
+          style={{ marginTop: 16, padding: "10px 24px", background: "#059669",
+            color: "white", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
+          Refresh
+        </button>
+      </div>
+    }>
+      <Router>
+        <AppShell />
+      </Router>
+    </Sentry.ErrorBoundary>
   );
 }
