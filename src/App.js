@@ -569,4 +569,4 @@ export default function App() {
       </Router>
     </Sentry.ErrorBoundary>
   );
-}
+} 
