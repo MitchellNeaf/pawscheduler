@@ -564,16 +564,6 @@ export default function App() {
         </button>
       </div>
     }>
-      {/* TEMP: Sentry test — remove after confirming */}
-      <button
-        onClick={() => { throw new Error("Sentry test from PawScheduler"); }}
-        style={{ position: "fixed", bottom: 16, right: 16, zIndex: 9999,
-          background: "#dc2626", color: "white", padding: "8px 16px",
-          borderRadius: 8, fontWeight: 700, border: "none", cursor: "pointer",
-          fontSize: 14 }}
-      >
-        Test Sentry
-      </button>
       <Router>
         <AppShell />
       </Router>
