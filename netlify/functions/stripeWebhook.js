@@ -110,6 +110,43 @@ exports.handler = async (event) => {
     }
 
     console.log(`Subscription activated: ${planTier} plan for customer ${customerId}`);
+
+    // ── Alert Mitchell if growth/pro groomer needs a Telnyx number ──
+    if (planTier === "growth" || planTier === "pro") {
+      try {
+        // Load groomer to check if they already have an sms_number
+        const { data: groomer } = await supabase
+          .from("groomers")
+          .select("email, full_name, business_name, sms_number")
+          .eq("stripe_customer_id", customerId)
+          .single();
+
+        if (groomer && !groomer.sms_number) {
+          const groomerName = groomer.business_name || groomer.full_name || "Unknown";
+          await fetch("https://api.mailersend.com/v1/email", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${process.env.MAILERSEND_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from: { email: "noreply@pawscheduler.app", name: "PawScheduler" },
+              to: [{ email: "pawscheduler@gmail.com" }],
+              subject: `📱 Action needed: ${groomerName} upgraded to ${planTier} — needs Telnyx number`,
+              html: `
+                <p><strong>${groomerName}</strong> just upgraded to the <strong>${planTier}</strong> plan and does not have a dedicated SMS number yet.</p>
+                <p><strong>Email:</strong> ${groomer.email || "—"}</p>
+                <p><strong>Stripe Customer:</strong> ${customerId}</p>
+                <p>Log into Telnyx and assign them a number, then update their <code>sms_number</code> in Supabase.</p>
+              `,
+            }),
+          });
+          console.log(`Alert sent — ${groomerName} needs a Telnyx number`);
+        }
+      } catch (alertErr) {
+        console.error("Failed to send Telnyx alert email:", alertErr);
+      }
+    }
   }
 
   // ── customer.subscription.updated ───────────────────────
@@ -125,13 +162,10 @@ exports.handler = async (event) => {
     await supabase
       .from("groomers")
       .update({
-        subscription_status:  status,
-        plan_tier:            planTier,
-        sms_bot_enabled:      planTier === "pro" && status === "active",
+        subscription_status: status,
+        plan_tier:           planTier,
+        sms_bot_enabled:     planTier === "pro" && status === "active",
         cancel_at_period_end: subscription.cancel_at_period_end,
-        current_period_end:   subscription.current_period_end
-          ? new Date(subscription.current_period_end * 1000).toISOString()
-          : null,
       })
       .eq("stripe_customer_id", customerId);
 
