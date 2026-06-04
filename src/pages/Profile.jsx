@@ -47,6 +47,7 @@ export default function Profile() {
   const [fullName, setFullName] = useState("");
   const [bio, setBio] = useState("");
   const [slug, setSlug] = useState("");
+  const [copyMsg, setCopyMsg] = useState("");
   const [logoUrl, setLogoUrl] = useState(null);
   const [user, setUser] = useState(null);
   const [maxParallel, setMaxParallel] = useState(1);
@@ -716,11 +717,31 @@ export default function Profile() {
 
           <div>
             <label className="block text-sm font-medium mb-1">Public Booking Slug</label>
-            <input
-              value={slug}
-              onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, ""))}
-              className="border rounded w-full p-2"
-            />
+            <div className="flex gap-2">
+              <input
+                value={slug}
+                onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, ""))}
+                className="border rounded p-2 flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const link = `https://app.pawscheduler.app/book/${slug}`;
+                  navigator.clipboard.writeText(link).then(() => {
+                    setCopyMsg("Copied!");
+                    setTimeout(() => setCopyMsg(""), 2000);
+                  });
+                }}
+                className="px-3 py-2 rounded border border-emerald-300 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 transition whitespace-nowrap"
+              >
+                {copyMsg || "Copy Link"}
+              </button>
+            </div>
+            {slug && (
+              <p className="text-xs text-[var(--text-3)] mt-1 break-all">
+                app.pawscheduler.app/book/{slug}
+              </p>
+            )}
           </div>
 
           <div>

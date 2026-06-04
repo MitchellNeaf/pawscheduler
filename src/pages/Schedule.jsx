@@ -1440,6 +1440,7 @@ export default function Schedule() {
   const [selectedDate, setSelectedDate] = useState(() => toYMD(new Date()));
   const [workingRange, setWorkingRange] = useState([]);
   const [breakSlots, setBreakSlots] = useState([]);
+  const [dayBreaks, setDayBreaks] = useState([]);
   const [capacity, setCapacity] = useState(1);
   const [viewMode, setViewMode] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "list" : "grid"
@@ -1668,6 +1669,7 @@ export default function Schedule() {
         const apptsWithShots = await attachShotRecords(appts || []);
         setWorkingRange([]);
         setBreakSlots([]);
+        setDayBreaks([]);
         setAppointments(apptsWithShots);
         setLoading(false);
         return;
@@ -1689,8 +1691,7 @@ export default function Schedule() {
         TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakSet.add(s));
       });
       setBreakSlots([...breakSet]);
-
-      const apptsWithShots = await attachShotRecords(appts || []);
+      setDayBreaks(breaks || []);
       setAppointments(apptsWithShots);
       setLoading(false);
     };
@@ -2708,12 +2709,42 @@ export default function Schedule() {
       )}
 
       {/* LIST VIEW */}
-      {viewMode === "list" && (filteredAppointments.length === 0 ? (
-        <p className="text-gray-600 italic">
-          No appointments for this day (or search filter).
-        </p>
-      ) : (
+      {viewMode === "list" && (
         <div className="grid gap-4">
+          {/* Time block cards */}
+          {dayBreaks.map((b) => {
+            const fmt = (t) => {
+              if (!t) return "";
+              const [h, m] = t.slice(0, 5).split(":").map(Number);
+              const ampm = h >= 12 ? "PM" : "AM";
+              return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
+            };
+            return (
+              <div key={b.id} className="card border-l-4 border-l-gray-400 bg-gray-50 opacity-80">
+                <div className="card-body py-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-gray-600">
+                      🚫 {b.label || "Time Block"}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {fmt(b.break_start)} – {fmt(b.break_end)}
+                    </div>
+                  </div>
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-gray-200 text-gray-600 font-medium">
+                    Blocked
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+
+          {filteredAppointments.length === 0 && dayBreaks.length === 0 && (
+            <p className="text-gray-600 italic">No appointments for this day (or search filter).</p>
+          )}
+          {filteredAppointments.length === 0 && dayBreaks.length > 0 && (
+            <p className="text-gray-600 italic">No appointments — only time blocks.</p>
+          )}
+
           {groupedAppointments.map((group) => {
             const appt = group[0]; // primary appointment for shared fields
             const isMulti = group.length > 1;
@@ -3117,6 +3148,25 @@ export default function Schedule() {
                           ? `✓ In ${fmtCheckinTime(appt.checked_in_at)}`
                           : "Check In"}
                       </button>
+                      {appt.checked_in_at && (
+                        <input
+                          type="time"
+                          defaultValue={(() => {
+                            const d = new Date(appt.checked_in_at);
+                            return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+                          })()}
+                          onChange={async (e) => {
+                            if (!e.target.value) return;
+                            const [h, m] = e.target.value.split(":").map(Number);
+                            const base = new Date(appt.checked_in_at);
+                            base.setHours(h, m, 0, 0);
+                            await supabase.from("appointments").update({ checked_in_at: base.toISOString() }).eq("id", appt.id);
+                            setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, checked_in_at: base.toISOString() } : a));
+                          }}
+                          className="border rounded-lg px-1 py-1 text-xs w-20 text-center"
+                          title="Edit check-in time"
+                        />
+                      )}
 
                       {/* Check Out — only show after check in */}
                       {appt.checked_in_at && (
@@ -3137,6 +3187,25 @@ export default function Schedule() {
                             : "Check Out"}
                         </button>
                       )}
+                      {appt.checked_out_at && (
+                        <input
+                          type="time"
+                          defaultValue={(() => {
+                            const d = new Date(appt.checked_out_at);
+                            return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+                          })()}
+                          onChange={async (e) => {
+                            if (!e.target.value) return;
+                            const [h, m] = e.target.value.split(":").map(Number);
+                            const base = new Date(appt.checked_out_at);
+                            base.setHours(h, m, 0, 0);
+                            await supabase.from("appointments").update({ checked_out_at: base.toISOString() }).eq("id", appt.id);
+                            setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, checked_out_at: base.toISOString() } : a));
+                          }}
+                          className="border rounded-lg px-1 py-1 text-xs w-20 text-center"
+                          title="Edit check-out time"
+                        />
+                      )}
 
                       {/* Elapsed time */}
                       {appt.checked_in_at && appt.checked_out_at && (
@@ -3151,7 +3220,7 @@ export default function Schedule() {
             );
           })}
         </div>
-      ))}
+      )}
 
       {/* Month view — Day Action Modal */}
       {dayActionDate && (

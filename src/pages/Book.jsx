@@ -534,6 +534,20 @@ export default function BookPage() {
             },
           }),
         }).catch(() => {}); // don't block on email failure
+
+      // SMS alert to groomer (fire-and-forget)
+      fetch("/.netlify/functions/notifyGroomerSms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groomerId,
+          petName: pets.find((p) => p.id === selectedPetId)?.name || "a pet",
+          clientName: client?.full_name || "a client",
+          date: form.date,
+          time: form.time,
+          requiresApproval: groomer?.booking_requires_approval || false,
+        }),
+      }).catch(() => {});
       }
 
       const bookedPet = pets.find((p) => p.id === selectedPetId);

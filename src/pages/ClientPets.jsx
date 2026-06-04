@@ -463,6 +463,7 @@ function ShotModal({
 export default function ClientPets() {
   const { clientId } = useParams();
   const [client, setClient] = useState(null);
+  const [upcomingAppts, setUpcomingAppts] = useState([]);
   const [pets, setPets] = useState([]);
   const [user, setUser] = useState(null);
   const [planTier, setPlanTier] = useState("free");
@@ -542,6 +543,23 @@ export default function ClientPets() {
 
       setClient(clientData);
       setPets(petData || []);
+
+      // Load upcoming appointments for this client's pets
+      const petIds = (petData || []).map(p => p.id);
+      if (petIds.length > 0) {
+        const today = new Date().toISOString().slice(0, 10);
+        const { data: apptData } = await supabase
+          .from("appointments")
+          .select("id, date, time, confirmed, waitlist, services, pets(name)")
+          .in("pet_id", petIds)
+          .gte("date", today)
+          .or("no_show.is.null,no_show.eq.false")
+          .order("date", { ascending: true })
+          .order("time", { ascending: true })
+          .limit(10);
+        setUpcomingAppts(apptData || []);
+      }
+
       setLoading(false);
     };
 
@@ -805,6 +823,48 @@ export default function ClientPets() {
       </div>
 
       <h1 className="mt-2 mb-4">{client.full_name}'s Pets</h1>
+
+      {/* UPCOMING APPOINTMENTS */}
+      {upcomingAppts.length > 0 && (
+        <div className="card mb-6">
+          <div className="card-body space-y-2">
+            <h2 className="font-semibold text-base">Upcoming Appointments</h2>
+            {upcomingAppts.map((appt) => {
+              const [y, m, d] = appt.date.split("-").map(Number);
+              const dateStr = new Date(y, m - 1, d).toLocaleDateString("en-US", {
+                weekday: "short", month: "short", day: "numeric"
+              });
+              const [h, min] = (appt.time || "00:00").slice(0, 5).split(":").map(Number);
+              const ampm = h >= 12 ? "PM" : "AM";
+              const timeStr = `${h % 12 || 12}:${String(min).padStart(2, "0")} ${ampm}`;
+              const isWaitlisted = appt.waitlist;
+              const isConfirmed = appt.confirmed;
+              return (
+                <div key={appt.id} className="flex items-center justify-between gap-3 py-1.5 border-b border-[var(--border-light)] last:border-0">
+                  <div>
+                    <div className="text-sm font-medium">{appt.pets?.name}</div>
+                    <div className="text-xs text-[var(--text-3)]">{dateStr} at {timeStr}</div>
+                    {appt.services?.length > 0 && (
+                      <div className="text-xs text-[var(--text-3)]">
+                        {Array.isArray(appt.services) ? appt.services.join(", ") : appt.services}
+                      </div>
+                    )}
+                  </div>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${
+                    isWaitlisted
+                      ? "bg-blue-100 text-blue-700"
+                      : isConfirmed
+                      ? "bg-emerald-100 text-emerald-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}>
+                    {isWaitlisted ? "Waitlisted" : isConfirmed ? "Confirmed" : "Pending"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* CLIENT INFO */}
       <div className="card mb-6">
