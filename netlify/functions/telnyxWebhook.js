@@ -22,6 +22,61 @@ function verifyTelnyxSignature(payload, signature, timestamp, publicKey) {
   }
 }
 
+async function sendOneSignalPush({ groomerId, pushMessage, apiKey }) {
+  const payload = {
+    app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
+    include_aliases: {
+      external_id: [groomerId],
+    },
+    target_channel: "push",
+    headings: { en: "New Message" },
+    contents: { en: pushMessage },
+    url: "https://app.pawscheduler.app/inbox",
+  };
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const res = await fetch("https://api.onesignal.com/notifications", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `key ${apiKey}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const text = await res.text();
+
+      console.log(`Push attempt ${attempt} status:`, res.status);
+      console.log(`Push attempt ${attempt} response:`, text);
+
+      if (res.ok) {
+        return { success: true, status: res.status, response: text };
+      }
+
+      if (![429, 500, 502, 503, 504].includes(res.status)) {
+        return { success: false, status: res.status, response: text };
+      }
+
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
+    } catch (err) {
+      console.error(`Push attempt ${attempt} failed:`, err.message);
+
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1000));
+      }
+    }
+  }
+
+  return {
+    success: false,
+    status: "retry_exhausted",
+    response: "All retry attempts failed",
+  };
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method not allowed" };
@@ -152,28 +207,13 @@ exports.handler = async (event) => {
         crypto.createHash("sha256").update(apiKey).digest("hex").slice(0, 12)
       );
 
-      const pushRes = await fetch("https://api.onesignal.com/notifications", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `key ${apiKey}`,
-        },
-        body: JSON.stringify({
-          app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
-          include_aliases: {
-            external_id: [groomerId],
-          },
-          target_channel: "push",
-          headings: { en: "New Message" },
-          contents: { en: pushMessage },
-          url: "https://app.pawscheduler.app/inbox",
-        }),
+      const result = await sendOneSignalPush({
+        groomerId,
+        pushMessage,
+        apiKey,
       });
 
-      const pushText = await pushRes.text();
-
-      console.log("Push status:", pushRes.status);
-      console.log("Push response:", pushText);
+      console.log("Final push result:", JSON.stringify(result));
     } catch (e) {
       console.error("Push failed:", e.message);
     }
