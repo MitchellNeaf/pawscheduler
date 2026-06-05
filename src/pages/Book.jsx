@@ -534,6 +534,7 @@ export default function BookPage() {
             },
           }),
         }).catch(() => {}); // don't block on email failure
+      }
 
       // SMS alert to groomer (fire-and-forget)
       fetch("/.netlify/functions/notifyGroomerSms", {
@@ -560,7 +561,6 @@ export default function BookPage() {
           url: "https://app.pawscheduler.app/schedule",
         }),
       }).catch(() => {});
-      }
 
       const bookedPet = pets.find((p) => p.id === selectedPetId);
 
