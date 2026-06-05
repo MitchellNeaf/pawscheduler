@@ -39,7 +39,7 @@ exports.handler = async (event) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `key ${apiKey}`,
+        Authorization: `Key ${apiKey}`,
       },
       body: JSON.stringify({
         app_id: appId,
