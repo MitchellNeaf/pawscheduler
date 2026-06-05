@@ -153,7 +153,7 @@ exports.handler = async (event) => {
     // Fire push notification directly to OneSignal
     const pushMessage = body.length > 80 ? body.slice(0, 80) + "…" : body;
     try {
-      const pushRes = await fetch("https://api.onesignal.com", {
+      const pushRes = await fetch("https://api.onesignal.com/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
