@@ -153,11 +153,11 @@ exports.handler = async (event) => {
     // Fire push notification directly to OneSignal
     const pushMessage = body.length > 80 ? body.slice(0, 80) + "…" : body;
     try {
-      const pushRes = await fetch("https://api.onesignal.com/notifications", {
+      const pushRes = await fetch("https://onesignal.com/api/v1/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Basic ${process.env.ONESIGNAL_API_KEY}`,
+          Authorization: `key ${process.env.ONESIGNAL_API_KEY}`,
         },
         body: JSON.stringify({
           app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
@@ -169,8 +169,10 @@ exports.handler = async (event) => {
         }),
       });
       const pushJson = await pushRes.json();
-      console.log("Push result:", JSON.stringify(pushJson));
-    console.log("Key last 4:", (process.env.ONESIGNAL_API_KEY || "").slice(-4));
+      console.log("Push key prefix:", (process.env.ONESIGNAL_API_KEY || "").slice(0, 10));
+    console.log("Push key last 4:", (process.env.ONESIGNAL_API_KEY || "").slice(-4));
+    console.log("Push key length:", (process.env.ONESIGNAL_API_KEY || "").length);
+    console.log("Push result:", JSON.stringify(pushJson));
     } catch (e) {
       console.error("Push failed:", e.message);
     }
