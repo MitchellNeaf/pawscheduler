@@ -153,7 +153,7 @@ exports.handler = async (event) => {
     // Fire push notification directly to OneSignal
     const pushMessage = body.length > 80 ? body.slice(0, 80) + "…" : body;
     try {
-      const pushRes = await fetch("https://onesignal.com/api/v1/notifications", {
+      const pushRes = await fetch("https://api.onesignal.com", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -168,6 +168,7 @@ exports.handler = async (event) => {
           url: "https://app.pawscheduler.app/inbox",
         }),
       });
+      console.log("Push status:", pushRes.status);
       const pushJson = await pushRes.json();
       console.log("Push key prefix:", (process.env.ONESIGNAL_API_KEY || "").slice(0, 10));
     console.log("Push key last 4:", (process.env.ONESIGNAL_API_KEY || "").slice(-4));
