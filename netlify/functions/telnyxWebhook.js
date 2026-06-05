@@ -25,13 +25,11 @@ function verifyTelnyxSignature(payload, signature, timestamp, publicKey) {
 async function sendOneSignalPush({ groomerId, pushMessage, apiKey }) {
   const payload = {
     app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
-    include_aliases: {
-      external_id: [groomerId],
-    },
-    target_channel: "push",
+    included_segments: ["Subscribed Users"],
     headings: { en: "New Message" },
     contents: { en: pushMessage },
     url: "https://app.pawscheduler.app/inbox",
+    isAnyWeb: true,
   };
 
   for (let attempt = 1; attempt <= 3; attempt++) {
