@@ -84,6 +84,74 @@ const calcFlatItems = (services, items) =>
     .filter(item => services.includes(item.name))
     .reduce((sum, item) => sum + (item.price || 0), 0);
 
+/* ---------------- Push Notification Banner ---------------- */
+function PushNotificationBanner() {
+  const [state, setState] = useState("checking"); // checking | prompt | granted | denied | dismissed
+
+  useEffect(() => {
+    // Don't show in dev
+    if (process.env.NODE_ENV !== "production") { setState("granted"); return; }
+    // Check if already dismissed this session
+    if (sessionStorage.getItem("ps_push_dismissed")) { setState("dismissed"); return; }
+    // Check current permission
+    if (!("Notification" in window)) { setState("dismissed"); return; }
+    if (Notification.permission === "granted") { setState("granted"); return; }
+    if (Notification.permission === "denied") { setState("denied"); return; }
+    // Default — show prompt
+    setState("prompt");
+  }, []);
+
+  const handleEnable = async () => {
+    try {
+      if (window.OneSignal) {
+        await window.OneSignal.Notifications.requestPermission();
+        const granted = window.OneSignal.Notifications.permission;
+        setState(granted ? "granted" : "denied");
+      } else {
+        // Fallback to native browser prompt
+        const result = await Notification.requestPermission();
+        setState(result === "granted" ? "granted" : "denied");
+      }
+    } catch {
+      setState("denied");
+    }
+  };
+
+  const handleDismiss = () => {
+    sessionStorage.setItem("ps_push_dismissed", "1");
+    setState("dismissed");
+  };
+
+  if (state !== "prompt") return null;
+
+  return (
+    <div className="mx-0 rounded-xl px-4 py-3 bg-violet-50 border border-violet-200 flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="text-lg flex-shrink-0">🔔</span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-violet-900">Enable push notifications</p>
+          <p className="text-xs text-violet-700 mt-0.5">Get alerted for new bookings and messages — even when the app is closed.</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <button
+          onClick={handleEnable}
+          className="text-xs font-bold px-3 py-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 transition whitespace-nowrap"
+        >
+          Enable
+        </button>
+        <button
+          onClick={handleDismiss}
+          className="text-xs text-violet-400 hover:text-violet-600 transition px-1"
+          aria-label="Dismiss"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Trial Banner ---------------- */
 function ScheduleTrialBanner({ userId }) {
   const [status, setStatus] = useState(null);
@@ -2239,6 +2307,9 @@ export default function Schedule() {
       </div>
 
       {user && <ScheduleTrialBanner userId={user.id} />}
+
+      {/* Push notification permission banner */}
+      <PushNotificationBanner />
 
       {/* Free tier appointment counter banner */}
       {planTier === "free" && monthlyCount !== null && (
