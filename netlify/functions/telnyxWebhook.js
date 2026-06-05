@@ -25,11 +25,13 @@ function verifyTelnyxSignature(payload, signature, timestamp, publicKey) {
 async function sendOneSignalPush({ groomerId, pushMessage, apiKey }) {
   const payload = {
     app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
-    included_segments: ["Subscribed Users"],
+    include_aliases: {
+      external_id: [groomerId],
+    },
+    target_channel: "push",
     headings: { en: "New Message" },
     contents: { en: pushMessage },
     url: "https://app.pawscheduler.app/inbox",
-    isAnyWeb: true,
   };
 
   for (let attempt = 1; attempt <= 3; attempt++) {
@@ -196,22 +198,8 @@ exports.handler = async (event) => {
     const apiKey = (process.env.ONESIGNAL_API_KEY || "").trim();
 
     try {
-      console.log("Using OneSignal App ID:", "8c3bc536-e526-40ac-9ecd-19701c76b735");
-      console.log("Push key prefix:", apiKey.slice(0, 10));
-      console.log("Push key last 4:", apiKey.slice(-4));
-      console.log("Push key length:", apiKey.length);
-      console.log(
-        "Push key hash:",
-        crypto.createHash("sha256").update(apiKey).digest("hex").slice(0, 12)
-      );
-
-      const result = await sendOneSignalPush({
-        groomerId,
-        pushMessage,
-        apiKey,
-      });
-
-      console.log("Final push result:", JSON.stringify(result));
+      const result = await sendOneSignalPush({ groomerId, pushMessage, apiKey });
+      console.log("Push result:", JSON.stringify(result));
     } catch (e) {
       console.error("Push failed:", e.message);
     }
