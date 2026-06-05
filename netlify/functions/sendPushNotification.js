@@ -43,20 +43,15 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         app_id: appId,
-        // Target by external_id (groomer's Supabase user ID)
-        include_aliases: {
-          external_id: [groomerId],
-        },
-        target_channel: "push",
+        included_segments: ["All"],
         headings: { en: title },
         contents: { en: message },
         url: url || "https://app.pawscheduler.app/schedule",
-        // Show even when app is open
-        web_push_topic: "pawscheduler-alert",
       }),
     });
 
     const json = await res.json();
+    console.log("sendPushNotification status:", res.status, JSON.stringify(json));
 
     if (!res.ok) {
       console.error("OneSignal error:", JSON.stringify(json));
