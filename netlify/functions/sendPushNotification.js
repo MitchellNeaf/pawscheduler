@@ -26,7 +26,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: "Missing groomerId, title, or message" };
   }
 
-  const apiKey = process.env.ONESIGNAL_API_KEY;
+  const apiKey = process.env.ONESIGNAL_ORG_API_KEY || process.env.ONESIGNAL_API_KEY;
   const appId  = "8c3bc536-e526-40ac-9ecd-19701c76b735";
 
   if (!apiKey) {
@@ -43,15 +43,20 @@ exports.handler = async (event) => {
       },
       body: JSON.stringify({
         app_id: appId,
-        included_segments: ["All"],
+        // Target by external_id (groomer's Supabase user ID)
+        include_aliases: {
+          external_id: [groomerId],
+        },
+        target_channel: "push",
         headings: { en: title },
         contents: { en: message },
         url: url || "https://app.pawscheduler.app/schedule",
+        // Show even when app is open
+        web_push_topic: "pawscheduler-alert",
       }),
     });
 
     const json = await res.json();
-    console.log("sendPushNotification status:", res.status, JSON.stringify(json));
 
     if (!res.ok) {
       console.error("OneSignal error:", JSON.stringify(json));

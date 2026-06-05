@@ -199,7 +199,7 @@ exports.handler = async (event) => {
       ? (await supabase.from("clients").select("full_name").eq("id", client.id).single())?.data?.full_name
       : null;
     const pushTitle = clientName ? `Message from ${clientName.split(" ")[0]}` : "New Message";
-    const apiKey = (process.env.ONESIGNAL_API_KEY || "").trim();
+    const apiKey = (process.env.ONESIGNAL_ORG_API_KEY || process.env.ONESIGNAL_API_KEY || "").trim();
 
     try {
       const result = await sendOneSignalPush({ groomerId, pushMessage, pushTitle, apiKey });
