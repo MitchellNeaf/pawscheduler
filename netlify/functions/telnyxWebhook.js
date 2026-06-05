@@ -149,6 +149,20 @@ exports.handler = async (event) => {
     }
 
     console.log(`Stored inbound SMS from ${fromPhone} to groomer ${groomerId}`);
+
+    // Fire push notification to groomer (fire-and-forget)
+    const clientDisplay = client?.id ? fromPhone : fromPhone;
+    fetch(`${process.env.URL || "https://app.pawscheduler.app"}/.netlify/functions/sendPushNotification`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        groomerId,
+        title: "New Message",
+        message: body.length > 80 ? body.slice(0, 80) + "…" : body,
+        url: "https://app.pawscheduler.app/inbox",
+      }),
+    }).catch(() => {});
+
     return { statusCode: 200, body: "Message stored" };
   }
 

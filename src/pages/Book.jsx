@@ -548,6 +548,18 @@ export default function BookPage() {
           requiresApproval: groomer?.booking_requires_approval || false,
         }),
       }).catch(() => {});
+
+      // Push notification to groomer (fire-and-forget)
+      fetch("/.netlify/functions/sendPushNotification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groomerId,
+          title: groomer?.booking_requires_approval ? "New Booking Request" : "New Booking",
+          message: `${client?.full_name || "A client"} booked ${pets.find((p) => p.id === selectedPetId)?.name || "a pet"} on ${form.date}`,
+          url: "https://app.pawscheduler.app/schedule",
+        }),
+      }).catch(() => {});
       }
 
       const bookedPet = pets.find((p) => p.id === selectedPetId);

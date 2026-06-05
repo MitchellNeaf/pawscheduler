@@ -76,6 +76,10 @@ function ProtectedRoute({ children }) {
       setUser(currentUser);
       if (currentUser) {
         Sentry.setUser({ id: currentUser.id, email: currentUser.email });
+        // Initialize OneSignal push notifications
+        import("./onesignal").then(({ initOneSignal }) => {
+          initOneSignal(currentUser.id);
+        }).catch(() => {});
       }
 
       if (!currentUser) {
