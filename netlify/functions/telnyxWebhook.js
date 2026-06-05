@@ -157,7 +157,7 @@ exports.handler = async (event) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Basic ${process.env.ONESIGNAL_API_KEY}`,
+          Authorization: `Key ${process.env.ONESIGNAL_API_KEY}`,
         },
         body: JSON.stringify({
           app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
@@ -170,6 +170,7 @@ exports.handler = async (event) => {
       });
       const pushJson = await pushRes.json();
       console.log("Push result:", JSON.stringify(pushJson));
+    console.log("Key last 4:", (process.env.ONESIGNAL_API_KEY || "").slice(-4));
     } catch (e) {
       console.error("Push failed:", e.message);
     }
