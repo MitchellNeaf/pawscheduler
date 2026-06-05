@@ -1,24 +1,21 @@
 // netlify/functions/telnyxWebhook.js
-// Handles inbound SMS from Telnyx
-// Stores messages in sms_messages table
-// Handles STOP opt-outs
 
 const { createClient } = require("@supabase/supabase-js");
 const crypto = require("crypto");
 
-// Verify Telnyx webhook signature using Ed25519
 function verifyTelnyxSignature(payload, signature, timestamp, publicKey) {
   try {
     if (!signature || !timestamp || !publicKey) return false;
     const message = `${timestamp}|${payload}`;
     const sigBuffer = Buffer.from(signature, "base64");
     const keyBuffer = Buffer.from(publicKey, "base64");
-    // Use Node crypto to verify Ed25519 signature
+
     const key = crypto.createPublicKey({
       key: keyBuffer,
       format: "der",
       type: "spki",
     });
+
     return crypto.verify(null, Buffer.from(message), key, sigBuffer);
   } catch {
     return false;
@@ -30,11 +27,12 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: "Method not allowed" };
   }
 
-  // ── Verify Telnyx signature ──────────────────────────────
   const telnyxPublicKey = process.env.TELNYX_PUBLIC_KEY;
+
   if (telnyxPublicKey) {
     const signature = event.headers["telnyx-signature-ed25519"];
-    const timestamp  = event.headers["telnyx-timestamp"];
+    const timestamp = event.headers["telnyx-timestamp"];
+
     if (!verifyTelnyxSignature(event.body, signature, timestamp, telnyxPublicKey)) {
       console.error("Invalid Telnyx signature — rejecting webhook");
       return { statusCode: 403, body: "Invalid signature" };
@@ -55,20 +53,19 @@ exports.handler = async (event) => {
 
   const eventType = payload?.data?.event_type;
 
-  // ── Handle inbound messages ──────────────────────────────
   if (eventType === "message.received") {
     const msg = payload.data.payload;
     const fromPhone = msg?.from?.phone_number;
-    const toPhone   = msg?.to?.[0]?.phone_number;
-    const body      = msg?.text || "";
+    const toPhone = msg?.to?.[0]?.phone_number;
+    const body = msg?.text || "";
     const telnyxMsgId = payload.data.id;
 
     if (!fromPhone || !toPhone) {
       return { statusCode: 200, body: "Missing phone numbers" };
     }
 
-    // ── STOP opt-out handling ────────────────────────────────
     const normalized = body.trim().toUpperCase();
+
     if (["STOP", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"].includes(normalized)) {
       await supabase
         .from("clients")
@@ -79,8 +76,6 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: "Opt-out processed" };
     }
 
-    // ── Find which groomer owns this number ─────────────────
-    // Check groomer's dedicated number first, fall back to shared number
     let groomerId = null;
 
     const { data: groomerByDedicatedNum } = await supabase
@@ -92,16 +87,13 @@ exports.handler = async (event) => {
     if (groomerByDedicatedNum) {
       groomerId = groomerByDedicatedNum.id;
     } else {
-      // Shared number — try to find groomer by matching client phone
       const { data: clientMatch } = await supabase
         .from("clients")
         .select("groomer_id")
         .eq("phone", fromPhone)
         .single();
 
-      if (clientMatch) {
-        groomerId = clientMatch.groomer_id;
-      }
+      if (clientMatch) groomerId = clientMatch.groomer_id;
     }
 
     if (!groomerId) {
@@ -109,7 +101,6 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: "No groomer found" };
     }
 
-    // ── Find client record ───────────────────────────────────
     const { data: client } = await supabase
       .from("clients")
       .select("id")
@@ -117,7 +108,6 @@ exports.handler = async (event) => {
       .eq("groomer_id", groomerId)
       .single();
 
-    // ── Deduplicate ──────────────────────────────────────────
     if (telnyxMsgId) {
       const { data: existing } = await supabase
         .from("sms_messages")
@@ -130,17 +120,16 @@ exports.handler = async (event) => {
       }
     }
 
-    // ── Store message ────────────────────────────────────────
     const { error: insertError } = await supabase
       .from("sms_messages")
       .insert({
-        groomer_id:   groomerId,
+        groomer_id: groomerId,
         client_phone: fromPhone,
-        client_id:    client?.id || null,
-        direction:    "inbound",
-        body:         body,
+        client_id: client?.id || null,
+        direction: "inbound",
+        body,
         telnyx_msg_id: telnyxMsgId || null,
-        media_url:    msg?.media?.[0]?.url || null,
+        media_url: msg?.media?.[0]?.url || null,
       });
 
     if (insertError) {
@@ -150,30 +139,41 @@ exports.handler = async (event) => {
 
     console.log(`Stored inbound SMS from ${fromPhone} to groomer ${groomerId}`);
 
-    // Fire push notification directly to OneSignal
     const pushMessage = body.length > 80 ? body.slice(0, 80) + "…" : body;
+    const apiKey = (process.env.ONESIGNAL_API_KEY || "").trim();
+
     try {
+      console.log("Using OneSignal App ID:", "8c3bc536-e526-40ac-9ecd-19701c76b735");
+      console.log("Push key prefix:", apiKey.slice(0, 10));
+      console.log("Push key last 4:", apiKey.slice(-4));
+      console.log("Push key length:", apiKey.length);
+      console.log(
+        "Push key hash:",
+        crypto.createHash("sha256").update(apiKey).digest("hex").slice(0, 12)
+      );
+
       const pushRes = await fetch("https://api.onesignal.com/notifications", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `key ${process.env.ONESIGNAL_API_KEY}`,
+          Authorization: `key ${apiKey}`,
         },
         body: JSON.stringify({
           app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
-          include_aliases: { external_id: [groomerId] },
+          include_aliases: {
+            external_id: [groomerId],
+          },
           target_channel: "push",
           headings: { en: "New Message" },
           contents: { en: pushMessage },
           url: "https://app.pawscheduler.app/inbox",
         }),
       });
+
+      const pushText = await pushRes.text();
+
       console.log("Push status:", pushRes.status);
-      const pushJson = await pushRes.json();
-      console.log("Push key prefix:", (process.env.ONESIGNAL_API_KEY || "").slice(0, 10));
-    console.log("Push key last 4:", (process.env.ONESIGNAL_API_KEY || "").slice(-4));
-    console.log("Push key length:", (process.env.ONESIGNAL_API_KEY || "").length);
-    console.log("Push result:", JSON.stringify(pushJson));
+      console.log("Push response:", pushText);
     } catch (e) {
       console.error("Push failed:", e.message);
     }
@@ -181,14 +181,12 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: "Message stored" };
   }
 
-  // ── Handle delivery receipts (just log) ──────────────────
   if (eventType === "message.finalized") {
     const status = payload.data.payload?.to?.[0]?.status;
-    const msgId  = payload.data.id;
+    const msgId = payload.data.id;
     console.log(`Message ${msgId} finalized with status: ${status}`);
     return { statusCode: 200, body: "Receipt acknowledged" };
   }
 
-  // All other event types
   return { statusCode: 200, body: "Event acknowledged" };
 };
