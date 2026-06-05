@@ -150,27 +150,29 @@ exports.handler = async (event) => {
 
     console.log(`Stored inbound SMS from ${fromPhone} to groomer ${groomerId}`);
 
-    // Fire push notification directly to OneSignal (fire-and-forget)
+    // Fire push notification directly to OneSignal
     const pushMessage = body.length > 80 ? body.slice(0, 80) + "…" : body;
-    fetch("https://api.onesignal.com/notifications", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Key ${process.env.ONESIGNAL_API_KEY}`,
-      },
-      body: JSON.stringify({
-        app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
-        include_aliases: { external_id: [groomerId] },
-        target_channel: "push",
-        headings: { en: "New Message" },
-        contents: { en: pushMessage },
-        url: "https://app.pawscheduler.app/inbox",
-      }),
-    }).then(r => r.json()).then(j => {
-      console.log("Push sent:", j.id || JSON.stringify(j));
-    }).catch(e => {
+    try {
+      const pushRes = await fetch("https://api.onesignal.com/notifications", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Key ${process.env.ONESIGNAL_API_KEY}`,
+        },
+        body: JSON.stringify({
+          app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
+          include_aliases: { external_id: [groomerId] },
+          target_channel: "push",
+          headings: { en: "New Message" },
+          contents: { en: pushMessage },
+          url: "https://app.pawscheduler.app/inbox",
+        }),
+      });
+      const pushJson = await pushRes.json();
+      console.log("Push result:", JSON.stringify(pushJson));
+    } catch (e) {
       console.error("Push failed:", e.message);
-    });
+    }
 
     return { statusCode: 200, body: "Message stored" };
   }
