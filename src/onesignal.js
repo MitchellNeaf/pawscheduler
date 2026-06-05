@@ -1,28 +1,23 @@
 // src/onesignal.js
-const ONESIGNAL_APP_ID = "8c3bc536-e526-40ac-9ecd-19701c76b735";
+// OneSignal is initialized in index.html
+// This module just handles tagging the groomer after login
 
-let initialized = false;
+let loggedIn = false;
 
 export async function initOneSignal(groomerId) {
   if (process.env.NODE_ENV !== "production") return;
-  if (initialized) return;
-  initialized = true;
+  if (loggedIn) return;
+  loggedIn = true;
 
   window.OneSignalDeferred = window.OneSignalDeferred || [];
   window.OneSignalDeferred.push(async function(OneSignal) {
     try {
-      await OneSignal.init({
-        appId: ONESIGNAL_APP_ID,
-        notifyButton: { enable: false },
-      });
-
-      // Tag subscription with groomer ID for targeting
+      // Tag this subscription with the groomer's ID for targeting
       await OneSignal.login(groomerId);
-
-      console.log("OneSignal initialized for groomer:", groomerId);
+      console.log("OneSignal: logged in groomer", groomerId);
     } catch (err) {
-      console.error("OneSignal init error:", err.message);
-      initialized = false; // allow retry if init failed
+      console.error("OneSignal login error:", err.message);
+      loggedIn = false;
     }
   });
 }
