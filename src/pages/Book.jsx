@@ -549,7 +549,7 @@ export default function BookPage() {
         }),
       }).catch(() => {});
 
-      // Push notification to groomer (fire-and-forget)
+      // Push notification to groomer via backend (fire-and-forget)
       fetch("/.netlify/functions/sendPushNotification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
