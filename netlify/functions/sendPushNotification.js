@@ -27,7 +27,7 @@ exports.handler = async (event) => {
   }
 
   const apiKey = process.env.ONESIGNAL_API_KEY;
-  const appId  = "427113ca-0d9d-4d53-9067-5ee03bb2c1df";
+  const appId  = "8c3bc536-e526-40ac-9ecd-19701c76b735";
 
   if (!apiKey) {
     console.error("ONESIGNAL_API_KEY not set");

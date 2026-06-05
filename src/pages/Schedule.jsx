@@ -103,15 +103,12 @@ function PushNotificationBanner() {
 
   const handleEnable = async () => {
     try {
-      if (window.OneSignal) {
-        await window.OneSignal.Notifications.requestPermission();
-        const granted = window.OneSignal.Notifications.permission;
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      window.OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.Notifications.requestPermission();
+        const granted = OneSignal.Notifications.permission;
         setState(granted ? "granted" : "denied");
-      } else {
-        // Fallback to native browser prompt
-        const result = await Notification.requestPermission();
-        setState(result === "granted" ? "granted" : "denied");
-      }
+      });
     } catch {
       setState("denied");
     }
