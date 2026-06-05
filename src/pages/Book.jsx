@@ -513,6 +513,8 @@ export default function BookPage() {
 
     if (error) alert(error.message);
     else {
+      console.log("Booking success — firing notifications. groomerId:", groomerId);
+
       // Fire groomer notification email (fire-and-forget)
       if (groomer?.email) {
         fetch("/.netlify/functions/sendEmail", {
@@ -551,6 +553,7 @@ export default function BookPage() {
       }).catch(() => {});
 
       // Push notification to groomer via backend (fire-and-forget)
+      console.log("Firing push notification...");
       fetch("/.netlify/functions/sendPushNotification", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -560,7 +563,7 @@ export default function BookPage() {
           message: `${client?.full_name || "A client"} booked ${pets.find((p) => p.id === selectedPetId)?.name || "a pet"} on ${form.date}`,
           url: "https://app.pawscheduler.app/schedule",
         }),
-      }).catch(() => {});
+      }).then(r => r.json()).then(j => console.log("Push response:", j)).catch(e => console.error("Push error:", e));
 
       const bookedPet = pets.find((p) => p.id === selectedPetId);
 
