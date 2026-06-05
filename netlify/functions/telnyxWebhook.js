@@ -22,14 +22,14 @@ function verifyTelnyxSignature(payload, signature, timestamp, publicKey) {
   }
 }
 
-async function sendOneSignalPush({ groomerId, pushMessage, apiKey }) {
+async function sendOneSignalPush({ groomerId, pushMessage, pushTitle, apiKey }) {
   const payload = {
     app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
     include_aliases: {
       external_id: [groomerId],
     },
     target_channel: "push",
-    headings: { en: "New Message" },
+    headings: { en: pushTitle || "New Message" },
     contents: { en: pushMessage },
     url: "https://app.pawscheduler.app/inbox",
   };
@@ -195,10 +195,14 @@ exports.handler = async (event) => {
     console.log(`Stored inbound SMS from ${fromPhone} to groomer ${groomerId}`);
 
     const pushMessage = body.length > 80 ? body.slice(0, 80) + "…" : body;
+    const clientName = client?.id
+      ? (await supabase.from("clients").select("full_name").eq("id", client.id).single())?.data?.full_name
+      : null;
+    const pushTitle = clientName ? `Message from ${clientName.split(" ")[0]}` : "New Message";
     const apiKey = (process.env.ONESIGNAL_API_KEY || "").trim();
 
     try {
-      const result = await sendOneSignalPush({ groomerId, pushMessage, apiKey });
+      const result = await sendOneSignalPush({ groomerId, pushMessage, pushTitle, apiKey });
       console.log("Push result:", JSON.stringify(result));
     } catch (e) {
       console.error("Push failed:", e.message);
