@@ -169,8 +169,10 @@ exports.handler = async (event) => {
         }),
       });
       const pushJson = await pushRes.json();
-      console.log("Push result:", JSON.stringify(pushJson));
-    console.log("Key last 4:", (process.env.ONESIGNAL_API_KEY || "").slice(-4));
+      console.log("Push key prefix:", (process.env.ONESIGNAL_API_KEY || "").slice(0, 10));
+    console.log("Push key last 4:", (process.env.ONESIGNAL_API_KEY || "").slice(-4));
+    console.log("Push key length:", (process.env.ONESIGNAL_API_KEY || "").length);
+    console.log("Push result:", JSON.stringify(pushJson));
     } catch (e) {
       console.error("Push failed:", e.message);
     }
