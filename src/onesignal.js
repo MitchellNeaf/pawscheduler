@@ -1,12 +1,16 @@
 // src/onesignal.js
 const ONESIGNAL_APP_ID = "8c3bc536-e526-40ac-9ecd-19701c76b735";
 
+let initialized = false;
+
 export async function initOneSignal(groomerId) {
   if (process.env.NODE_ENV !== "production") return;
+  if (initialized) return;
+  initialized = true;
 
-  try {
-    window.OneSignalDeferred = window.OneSignalDeferred || [];
-    window.OneSignalDeferred.push(async function(OneSignal) {
+  window.OneSignalDeferred = window.OneSignalDeferred || [];
+  window.OneSignalDeferred.push(async function(OneSignal) {
+    try {
       await OneSignal.init({
         appId: ONESIGNAL_APP_ID,
         notifyButton: { enable: false },
@@ -16,10 +20,11 @@ export async function initOneSignal(groomerId) {
       await OneSignal.login(groomerId);
 
       console.log("OneSignal initialized for groomer:", groomerId);
-    });
-  } catch (err) {
-    console.error("OneSignal init error:", err.message);
-  }
+    } catch (err) {
+      console.error("OneSignal init error:", err.message);
+      initialized = false; // allow retry if init failed
+    }
+  });
 }
 
 export async function requestNotificationPermission() {
