@@ -15,14 +15,14 @@ const anonSupabase = createClient(
    BOOKING PAGE THEMES
 -------------------------------------------- */
 const BOOKING_THEMES = {
-  forest:   { grad: "linear-gradient(135deg, #059669 0%, #10b981 100%)", text: "#ffffff", accent: "#059669", addonBg: "#f0fdf4", addonBorder: "#86efac", addonText: "#166534" },
-  ocean:    { grad: "linear-gradient(135deg, #0369a1 0%, #0ea5e9 100%)", text: "#ffffff", accent: "#0369a1", addonBg: "#eff6ff", addonBorder: "#bfdbfe", addonText: "#1e40af" },
-  lavender: { grad: "linear-gradient(135deg, #6d28d9 0%, #a78bfa 100%)", text: "#ffffff", accent: "#6d28d9", addonBg: "#f5f3ff", addonBorder: "#ddd6fe", addonText: "#5b21b6" },
-  rose:     { grad: "linear-gradient(135deg, #be185d 0%, #f472b6 100%)", text: "#ffffff", accent: "#be185d", addonBg: "#fdf2f8", addonBorder: "#fbcfe8", addonText: "#9d174d" },
-  sunrise:  { grad: "linear-gradient(135deg, #ea580c 0%, #fbbf24 100%)", text: "#ffffff", accent: "#ea580c", addonBg: "#fff7ed", addonBorder: "#fed7aa", addonText: "#c2410c" },
-  slate:    { grad: "linear-gradient(135deg, #1e293b 0%, #475569 100%)", text: "#ffffff", accent: "#334155", addonBg: "#f1f5f9", addonBorder: "#cbd5e1", addonText: "#334155" },
-  blush:    { grad: "linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)", text: "#9d174d", accent: "#db2777", addonBg: "#fdf2f8", addonBorder: "#fbcfe8", addonText: "#9d174d" },
-  mint:     { grad: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)", text: "#166534", accent: "#16a34a", addonBg: "#f0fdf4", addonBorder: "#86efac", addonText: "#166534" },
+  forest:   { grad: "linear-gradient(135deg, #059669 0%, #10b981 100%)", text: "#ffffff", accent: "#059669", pageBg: "#f0fdf4", cardBg: "#ffffff", cardBorder: "#bbf7d0", sectionLabel: "#166534", addonBg: "#dcfce7", addonBorder: "#86efac", addonText: "#166534" },
+  ocean:    { grad: "linear-gradient(135deg, #0369a1 0%, #0ea5e9 100%)", text: "#ffffff", accent: "#0369a1", pageBg: "#eff6ff", cardBg: "#ffffff", cardBorder: "#bfdbfe", sectionLabel: "#1e40af", addonBg: "#dbeafe", addonBorder: "#93c5fd", addonText: "#1e40af" },
+  lavender: { grad: "linear-gradient(135deg, #6d28d9 0%, #a78bfa 100%)", text: "#ffffff", accent: "#6d28d9", pageBg: "#f5f3ff", cardBg: "#ffffff", cardBorder: "#ddd6fe", sectionLabel: "#4c1d95", addonBg: "#ede9fe", addonBorder: "#c4b5fd", addonText: "#5b21b6" },
+  rose:     { grad: "linear-gradient(135deg, #be185d 0%, #f472b6 100%)", text: "#ffffff", accent: "#be185d", pageBg: "#fdf2f8", cardBg: "#ffffff", cardBorder: "#fbcfe8", sectionLabel: "#831843", addonBg: "#fce7f3", addonBorder: "#f9a8d4", addonText: "#9d174d" },
+  sunrise:  { grad: "linear-gradient(135deg, #ea580c 0%, #fbbf24 100%)", text: "#ffffff", accent: "#ea580c", pageBg: "#fff7ed", cardBg: "#ffffff", cardBorder: "#fed7aa", sectionLabel: "#9a3412", addonBg: "#ffedd5", addonBorder: "#fdba74", addonText: "#c2410c" },
+  slate:    { grad: "linear-gradient(135deg, #1e293b 0%, #475569 100%)", text: "#ffffff", accent: "#334155", pageBg: "#f1f5f9", cardBg: "#ffffff", cardBorder: "#cbd5e1", sectionLabel: "#334155", addonBg: "#e2e8f0", addonBorder: "#94a3b8", addonText: "#334155" },
+  blush:    { grad: "linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)", text: "#9d174d", accent: "#db2777", pageBg: "#fdf2f8", cardBg: "#fff0f7", cardBorder: "#fbcfe8", sectionLabel: "#9d174d", addonBg: "#fce7f3", addonBorder: "#f9a8d4", addonText: "#9d174d" },
+  mint:     { grad: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)", text: "#166534", accent: "#16a34a", pageBg: "#f0fdf4", cardBg: "#f7fef9", cardBorder: "#86efac", sectionLabel: "#166534", addonBg: "#dcfce7", addonBorder: "#6ee7b7", addonText: "#065f46" },
 };
 function getTheme(key) { return BOOKING_THEMES[key] || BOOKING_THEMES.forest; }
 
@@ -674,8 +674,14 @@ export default function BookPage() {
     return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
   };
 
+  const pageTheme = getTheme(groomer?.brand_color);
+
   return (
-    <main style={{ maxWidth: 520, margin: "0 auto", padding: "0 0 40px" }}>
+    <main style={{
+      maxWidth: 520, margin: "0 auto", padding: "0 0 40px",
+      minHeight: "100vh",
+      background: groomer ? pageTheme.pageBg : "#f9fafb",
+    }}>
 
       {/* ── HERO HEADER ── */}
       {groomer && (() => {
@@ -730,7 +736,7 @@ export default function BookPage() {
         return (
         <div style={{ padding: "20px 16px 4px" }}>
           <div style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase",
-            letterSpacing: "0.08em", color: "#6b7280", marginBottom: 10 }}>
+            letterSpacing: "0.08em", color: theme.sectionLabel, marginBottom: 10 }}>
             Services & Pricing
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -740,7 +746,7 @@ export default function BookPage() {
               const desc = typeof svc === "object" ? svc.description : null;
               return (
                 <div key={name} style={{
-                  background: "white", border: "1px solid #e5e7eb",
+                  background: theme.cardBg, border: `1px solid ${theme.cardBorder}`,
                   borderRadius: 10, padding: "10px 14px",
                   display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8,
                 }}>
@@ -761,7 +767,7 @@ export default function BookPage() {
           {addonOptions.length > 0 && (
             <>
               <div style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase",
-                letterSpacing: "0.08em", color: "#6b7280", margin: "16px 0 8px" }}>
+                letterSpacing: "0.08em", color: theme.sectionLabel, margin: "16px 0 8px" }}>
                 Add-ons
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -786,7 +792,7 @@ export default function BookPage() {
 
       {/* ── LOGIN VIEW ── */}
       {view === "login" && (
-        <div style={{ background: "white", borderRadius: 12, border: "1px solid #e5e7eb", padding: "20px 16px" }}>
+        <div style={{ background: pageTheme.cardBg, borderRadius: 12, border: `1px solid ${pageTheme.cardBorder}`, padding: "20px 16px" }}>
           <div style={{ textAlign: "center", marginBottom: 16 }}>
             <div style={{ fontSize: "1rem", fontWeight: 700, color: "#111827" }}>Book an Appointment</div>
             <div style={{ fontSize: "0.82rem", color: "#6b7280", marginTop: 4 }}>Enter your name and last 4 digits of your phone number</div>
