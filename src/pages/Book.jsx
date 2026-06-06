@@ -140,7 +140,7 @@ export default function BookPage() {
     (async () => {
       const { data, error: gErr } = await anonSupabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, bio, business_address, business_phone")
+        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, bio, business_address, business_phone, brand_color")
         .eq("slug", slug)
         .single();
 
@@ -665,7 +665,9 @@ export default function BookPage() {
       {/* ── HERO HEADER ── */}
       {groomer && (
         <div style={{
-          background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
+          background: groomer.brand_color
+            ? `linear-gradient(135deg, ${groomer.brand_color} 0%, ${groomer.brand_color}cc 100%)`
+            : "linear-gradient(135deg, #059669 0%, #10b981 100%)",
           padding: "32px 24px 28px",
           textAlign: "center",
           marginBottom: 0,
@@ -785,7 +787,7 @@ export default function BookPage() {
             {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{error}</p>}
             <button type="submit"
               style={{ padding: "12px", borderRadius: 8,
-                background: "#10b981", color: "white", fontWeight: 700,
+                background: groomer?.brand_color || "#10b981", color: "white", fontWeight: 700,
                 border: "none", cursor: "pointer", fontSize: "0.95rem" }}>
               Continue →
             </button>

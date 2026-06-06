@@ -46,6 +46,7 @@ export default function Profile() {
 
   const [fullName, setFullName] = useState("");
   const [bio, setBio] = useState("");
+  const [brandColor, setBrandColor] = useState("#059669");
   const [slug, setSlug] = useState("");
   const [copyMsg, setCopyMsg] = useState("");
   const [logoUrl, setLogoUrl] = useState(null);
@@ -100,6 +101,7 @@ export default function Profile() {
         setBookingRequiresApproval(data.booking_requires_approval || false);
         setFullName(data.full_name || "");
         setBio(data.bio || "");
+        setBrandColor(data.brand_color || "#059669");
         setSlug(data.slug || "");
         setLogoUrl(data.logo_url || null);
         setMaxParallel(data.max_parallel ?? 1);
@@ -280,6 +282,7 @@ export default function Profile() {
       .update({
         full_name: fullName,
         bio: bio.trim() || null,
+        brand_color: brandColor || "#059669",
         slug: cleanSlug,
         max_parallel: maxParallel,
         max_appts_per_day: maxApptsPerDay || null,
@@ -523,6 +526,32 @@ export default function Profile() {
               className="border rounded w-full p-2 text-sm resize-none"
             />
             <p className="text-xs text-gray-400 mt-1">Shown publicly on your booking page below your name.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Booking Page Color</label>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={brandColor}
+                onChange={(e) => setBrandColor(e.target.value)}
+                className="w-10 h-10 rounded cursor-pointer border border-gray-200"
+              />
+              <div className="flex gap-2 flex-wrap">
+                {["#059669","#2563eb","#7c3aed","#db2777","#ea580c","#0891b2","#111827"].map(c => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setBrandColor(c)}
+                    style={{ background: c }}
+                    className={`w-7 h-7 rounded-full border-2 transition ${brandColor === c ? "border-gray-800 scale-110" : "border-transparent"}`}
+                    title={c}
+                  />
+                ))}
+              </div>
+              <span className="text-xs text-gray-400 font-mono">{brandColor}</span>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Used as the header color on your public booking page.</p>
           </div>
 
                     {/* Booking Approval */}
