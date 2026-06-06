@@ -529,29 +529,42 @@ export default function Profile() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Booking Page Color</label>
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={brandColor}
-                onChange={(e) => setBrandColor(e.target.value)}
-                className="w-10 h-10 rounded cursor-pointer border border-gray-200"
-              />
-              <div className="flex gap-2 flex-wrap">
-                {["#059669","#2563eb","#7c3aed","#db2777","#ea580c","#0891b2","#111827"].map(c => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setBrandColor(c)}
-                    style={{ background: c }}
-                    className={`w-7 h-7 rounded-full border-2 transition ${brandColor === c ? "border-gray-800 scale-110" : "border-transparent"}`}
-                    title={c}
-                  />
-                ))}
-              </div>
-              <span className="text-xs text-gray-400 font-mono">{brandColor}</span>
+            <label className="block text-sm font-medium mb-1">Booking Page Theme</label>
+            <p className="text-xs text-gray-400 mb-3">Choose the look of your public booking page.</p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { key: "forest",   label: "Forest",   grad: "linear-gradient(135deg, #059669 0%, #10b981 100%)", text: "#ffffff", accent: "#059669" },
+                { key: "ocean",    label: "Ocean",    grad: "linear-gradient(135deg, #0369a1 0%, #0ea5e9 100%)", text: "#ffffff", accent: "#0369a1" },
+                { key: "lavender", label: "Lavender", grad: "linear-gradient(135deg, #6d28d9 0%, #a78bfa 100%)", text: "#ffffff", accent: "#6d28d9" },
+                { key: "rose",     label: "Rose",     grad: "linear-gradient(135deg, #be185d 0%, #f472b6 100%)", text: "#ffffff", accent: "#be185d" },
+                { key: "sunrise",  label: "Sunrise",  grad: "linear-gradient(135deg, #ea580c 0%, #fbbf24 100%)", text: "#ffffff", accent: "#ea580c" },
+                { key: "slate",    label: "Slate",    grad: "linear-gradient(135deg, #1e293b 0%, #475569 100%)", text: "#ffffff", accent: "#1e293b" },
+                { key: "blush",    label: "Blush",    grad: "linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)", text: "#9d174d", accent: "#db2777" },
+                { key: "mint",     label: "Mint",     grad: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)", text: "#166534", accent: "#16a34a" },
+              ].map(theme => (
+                <button
+                  key={theme.key}
+                  type="button"
+                  onClick={() => setBrandColor(theme.key)}
+                  className={`relative rounded-xl overflow-hidden border-2 transition ${
+                    brandColor === theme.key
+                      ? "border-emerald-500 ring-2 ring-emerald-300"
+                      : "border-transparent hover:border-gray-300"
+                  }`}
+                >
+                  {/* Preview */}
+                  <div style={{ background: theme.grad, height: 52 }} />
+                  <div className="py-1.5 px-2 bg-white text-center">
+                    <span className="text-xs font-semibold text-gray-700">{theme.label}</span>
+                  </div>
+                  {brandColor === theme.key && (
+                    <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">✓</span>
+                    </div>
+                  )}
+                </button>
+              ))}
             </div>
-            <p className="text-xs text-gray-400 mt-1">Used as the header color on your public booking page.</p>
           </div>
 
                     {/* Booking Approval */}

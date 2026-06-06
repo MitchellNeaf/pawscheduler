@@ -12,6 +12,21 @@ const anonSupabase = createClient(
 );
 
 /* --------------------------------------------
+   BOOKING PAGE THEMES
+-------------------------------------------- */
+const BOOKING_THEMES = {
+  forest:   { grad: "linear-gradient(135deg, #059669 0%, #10b981 100%)", text: "#ffffff", accent: "#059669", addonBg: "#f0fdf4", addonBorder: "#86efac", addonText: "#166534" },
+  ocean:    { grad: "linear-gradient(135deg, #0369a1 0%, #0ea5e9 100%)", text: "#ffffff", accent: "#0369a1", addonBg: "#eff6ff", addonBorder: "#bfdbfe", addonText: "#1e40af" },
+  lavender: { grad: "linear-gradient(135deg, #6d28d9 0%, #a78bfa 100%)", text: "#ffffff", accent: "#6d28d9", addonBg: "#f5f3ff", addonBorder: "#ddd6fe", addonText: "#5b21b6" },
+  rose:     { grad: "linear-gradient(135deg, #be185d 0%, #f472b6 100%)", text: "#ffffff", accent: "#be185d", addonBg: "#fdf2f8", addonBorder: "#fbcfe8", addonText: "#9d174d" },
+  sunrise:  { grad: "linear-gradient(135deg, #ea580c 0%, #fbbf24 100%)", text: "#ffffff", accent: "#ea580c", addonBg: "#fff7ed", addonBorder: "#fed7aa", addonText: "#c2410c" },
+  slate:    { grad: "linear-gradient(135deg, #1e293b 0%, #475569 100%)", text: "#ffffff", accent: "#334155", addonBg: "#f1f5f9", addonBorder: "#cbd5e1", addonText: "#334155" },
+  blush:    { grad: "linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)", text: "#9d174d", accent: "#db2777", addonBg: "#fdf2f8", addonBorder: "#fbcfe8", addonText: "#9d174d" },
+  mint:     { grad: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)", text: "#166534", accent: "#16a34a", addonBg: "#f0fdf4", addonBorder: "#86efac", addonText: "#166534" },
+};
+function getTheme(key) { return BOOKING_THEMES[key] || BOOKING_THEMES.forest; }
+
+/* --------------------------------------------
    TIME SLOTS
 -------------------------------------------- */
 const TIME_SLOTS = [];
@@ -663,52 +678,56 @@ export default function BookPage() {
     <main style={{ maxWidth: 520, margin: "0 auto", padding: "0 0 40px" }}>
 
       {/* ── HERO HEADER ── */}
-      {groomer && (
-        <div style={{
-          background: groomer.brand_color
-            ? `linear-gradient(135deg, ${groomer.brand_color} 0%, ${groomer.brand_color}cc 100%)`
-            : "linear-gradient(135deg, #059669 0%, #10b981 100%)",
-          padding: "32px 24px 28px",
-          textAlign: "center",
-          marginBottom: 0,
-        }}>
-          {groomer.logo_url && (
-            <img src={groomer.logo_url} alt="Logo"
-              style={{ width: 80, height: 80, borderRadius: "50%",
-                objectFit: "cover", margin: "0 auto 12px",
-                border: "3px solid rgba(255,255,255,0.4)" }} />
-          )}
-          <div style={{ fontSize: "1.4rem", fontWeight: 800, color: "white", letterSpacing: "-0.3px" }}>
-            {groomer.full_name}
+      {groomer && (() => {
+        const theme = getTheme(groomer.brand_color);
+        return (
+          <div style={{
+            background: theme.grad,
+            padding: "32px 24px 28px",
+            textAlign: "center",
+            marginBottom: 0,
+          }}>
+            {groomer.logo_url && (
+              <img src={groomer.logo_url} alt="Logo"
+                style={{ width: 80, height: 80, borderRadius: "50%",
+                  objectFit: "cover", margin: "0 auto 12px",
+                  border: `3px solid ${theme.text === "#ffffff" ? "rgba(255,255,255,0.4)" : "rgba(0,0,0,0.15)"}` }} />
+            )}
+            <div style={{ fontSize: "1.4rem", fontWeight: 800, color: theme.text, letterSpacing: "-0.3px" }}>
+              {groomer.full_name}
+            </div>
+            {groomer.business_address && (
+              <div style={{ fontSize: "0.82rem", color: theme.text === "#ffffff" ? "rgba(255,255,255,0.8)" : "rgba(0,0,0,0.5)", marginTop: 4 }}>
+                📍 {groomer.business_address.split(",").slice(-2).join(",").trim()}
+              </div>
+            )}
+            {groomer.bio && (
+              <div style={{
+                fontSize: "0.87rem",
+                color: theme.text === "#ffffff" ? "rgba(255,255,255,0.9)" : "rgba(0,0,0,0.7)",
+                marginTop: 12, lineHeight: 1.6,
+                maxWidth: 380, margin: "12px auto 0",
+              }}>
+                {groomer.bio}
+              </div>
+            )}
+            {groomer.booking_requires_approval && (
+              <div style={{
+                marginTop: 12, display: "inline-block",
+                background: "rgba(255,255,255,0.2)", borderRadius: 20,
+                padding: "4px 12px", fontSize: "0.75rem", color: theme.text, fontWeight: 600,
+              }}>
+                ⏳ Appointments require approval
+              </div>
+            )}
           </div>
-          {groomer.business_address && (
-            <div style={{ fontSize: "0.82rem", color: "rgba(255,255,255,0.8)", marginTop: 4 }}>
-              📍 {groomer.business_address.split(",").slice(-2).join(",").trim()}
-            </div>
-          )}
-          {groomer.bio && (
-            <div style={{
-              fontSize: "0.87rem", color: "rgba(255,255,255,0.9)",
-              marginTop: 12, lineHeight: 1.6,
-              maxWidth: 380, margin: "12px auto 0",
-            }}>
-              {groomer.bio}
-            </div>
-          )}
-          {groomer.booking_requires_approval && (
-            <div style={{
-              marginTop: 12, display: "inline-block",
-              background: "rgba(255,255,255,0.2)", borderRadius: 20,
-              padding: "4px 12px", fontSize: "0.75rem", color: "white", fontWeight: 600,
-            }}>
-              ⏳ Appointments require approval
-            </div>
-          )}
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── SERVICES & PRICING ── */}
-      {(serviceOptions.length > 0 || addonOptions.length > 0) && view !== "book" && view !== "cancel" && (
+      {(serviceOptions.length > 0 || addonOptions.length > 0) && view !== "book" && view !== "cancel" && (() => {
+        const theme = getTheme(groomer?.brand_color);
+        return (
         <div style={{ padding: "20px 16px 4px" }}>
           <div style={{ fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase",
             letterSpacing: "0.08em", color: "#6b7280", marginBottom: 10 }}>
@@ -730,9 +749,9 @@ export default function BookPage() {
                     {desc && <div style={{ fontSize: "0.76rem", color: "#6b7280", marginTop: 2 }}>{desc}</div>}
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    {p[1] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>S/M <strong>${p[1]}</strong></div>}
-                    {p[2] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>L <strong>${p[2]}</strong></div>}
-                    {p[3] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>XL <strong>${p[3]}</strong></div>}
+                    {p[1] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>S/M <strong style={{ color: theme.accent }}>${p[1]}</strong></div>}
+                    {p[2] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>L <strong style={{ color: theme.accent }}>${p[2]}</strong></div>}
+                    {p[3] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>XL <strong style={{ color: theme.accent }}>${p[3]}</strong></div>}
                   </div>
                 </div>
               );
@@ -748,9 +767,9 @@ export default function BookPage() {
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {addonOptions.map((a) => (
                   <div key={a.name} style={{
-                    background: "#f5f3ff", border: "1px solid #ddd6fe",
+                    background: theme.addonBg, border: `1px solid ${theme.addonBorder}`,
                     borderRadius: 8, padding: "5px 10px",
-                    fontSize: "0.78rem", color: "#5b21b6", fontWeight: 600,
+                    fontSize: "0.78rem", color: theme.addonText, fontWeight: 600,
                   }}>
                     {a.name} — ${a.price}
                   </div>
@@ -759,7 +778,8 @@ export default function BookPage() {
             </>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {/* ── BOOKING SECTION ── */}
       <div style={{ padding: "16px 16px 0" }}>
@@ -787,8 +807,8 @@ export default function BookPage() {
             {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{error}</p>}
             <button type="submit"
               style={{ padding: "12px", borderRadius: 8,
-                background: groomer?.brand_color || "#10b981", color: "white", fontWeight: 700,
-                border: "none", cursor: "pointer", fontSize: "0.95rem" }}>
+                background: getTheme(groomer?.brand_color).accent, color: getTheme(groomer?.brand_color).text === "#ffffff" ? "white" : "#fff",
+                fontWeight: 700, border: "none", cursor: "pointer", fontSize: "0.95rem" }}>
               Continue →
             </button>
           </form>
