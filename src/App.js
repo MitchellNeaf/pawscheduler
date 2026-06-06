@@ -78,7 +78,7 @@ function ProtectedRoute({ children }) {
         Sentry.setUser({ id: currentUser.id, email: currentUser.email });
         // Initialize OneSignal push notifications
         import("./onesignal").then(({ initOneSignal }) => {
-          initOneSignal(currentUser.id);
+          initOneSignal(currentUser.id, supabase);
         }).catch(() => {});
       }
 

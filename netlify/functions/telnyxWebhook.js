@@ -22,17 +22,22 @@ function verifyTelnyxSignature(payload, signature, timestamp, publicKey) {
   }
 }
 
-async function sendOneSignalPush({ groomerId, pushMessage, pushTitle, apiKey }) {
-  const payload = {
-    app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
-    include_aliases: {
-      external_id: [groomerId],
-    },
-    target_channel: "push",
-    headings: { en: pushTitle || "New Message" },
-    contents: { en: pushMessage },
-    url: "https://app.pawscheduler.app/inbox",
-  };
+async function sendOneSignalPush({ groomerId, pushMessage, pushTitle, apiKey, playerId }) {
+  const payload = playerId
+    ? {
+        app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
+        include_player_ids: [playerId],
+        headings: { en: pushTitle || "New Message" },
+        contents: { en: pushMessage },
+        url: "https://app.pawscheduler.app/inbox",
+      }
+    : {
+        app_id: "8c3bc536-e526-40ac-9ecd-19701c76b735",
+        included_segments: ["All"],
+        headings: { en: pushTitle || "New Message" },
+        contents: { en: pushMessage },
+        url: "https://app.pawscheduler.app/inbox",
+      };
 
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
@@ -199,10 +204,18 @@ exports.handler = async (event) => {
       ? (await supabase.from("clients").select("full_name").eq("id", client.id).single())?.data?.full_name
       : null;
     const pushTitle = clientName ? `Message from ${clientName.split(" ")[0]}` : "New Message";
-    const apiKey = (process.env.ONESIGNAL_ORG_API_KEY || process.env.ONESIGNAL_API_KEY || "").trim();
+    const apiKey = (process.env.ONESIGNAL_API_KEY || "").trim();
+
+    // Load groomer's OneSignal player ID for targeted push
+    const { data: groomerData } = await supabase
+      .from("groomers")
+      .select("onesignal_player_id")
+      .eq("id", groomerId)
+      .single();
+    const playerId = groomerData?.onesignal_player_id || null;
 
     try {
-      const result = await sendOneSignalPush({ groomerId, pushMessage, pushTitle, apiKey });
+      const result = await sendOneSignalPush({ groomerId, pushMessage, pushTitle, apiKey, playerId });
       console.log("Push result:", JSON.stringify(result));
     } catch (e) {
       console.error("Push failed:", e.message);
