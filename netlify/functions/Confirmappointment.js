@@ -13,7 +13,7 @@ exports.handler = async (event) => {
       statusCode: 400,
       headers: { "Content-Type": "text/html" },
       body: `<html><body style="font-family:sans-serif;text-align:center;padding:40px">
-        <h2>❌ Invalid confirmation link</h2>
+        <h2>❌ Invalid confirmation link.</h2>
         <p>This link is missing a token. Please contact your groomer.</p>
       </body></html>`,
     };
