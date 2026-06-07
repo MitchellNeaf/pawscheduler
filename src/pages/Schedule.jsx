@@ -1767,6 +1767,8 @@ export default function Schedule() {
         _source: "vacation_days",
       }));
       setDayBreaks([...(breaks || []).map(b => ({ ...b, _source: "working_breaks" })), ...vacBreaks]);
+
+      const apptsWithShots = await attachShotRecords(appts || []);
       setAppointments(apptsWithShots);
       setLoading(false);
     };
