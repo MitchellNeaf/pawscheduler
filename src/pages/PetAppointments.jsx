@@ -559,7 +559,9 @@ export default function PetAppointments() {
         template: "confirmation",
         data: {
           groomer_id: user.id,
-          confirm_url: `https://app.pawscheduler.app/.netlify/functions/confirmAppointment?id=${data.id}`,
+          confirm_url: data.confirm_token
+            ? `https://app.pawscheduler.app/confirm/${data.confirm_token}`
+            : `https://app.pawscheduler.app/confirm/${data.id}`,
           logo_url: user?.logo_url ?? "",
           business_name: user?.business_name ?? "",
           business_address: user?.business_address ?? "",

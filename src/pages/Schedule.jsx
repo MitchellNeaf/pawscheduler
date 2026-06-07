@@ -239,9 +239,13 @@ function buildNotesBlockHtml(notes) {
 }
 
 /** Build confirm URL for email button */
-function buildConfirmUrl(appointmentId) {
-  if (typeof window === "undefined") return "";
-  return `${window.location.origin}/.netlify/functions/confirmAppointment?id=${appointmentId}`;
+function buildConfirmUrl(appointment) {
+  const base = typeof window !== "undefined" ? window.location.origin : "https://app.pawscheduler.app";
+  // Use confirm_token if available, otherwise fall back to id
+  if (appointment.confirm_token) {
+    return `${base}/confirm/${appointment.confirm_token}`;
+  }
+  return `${base}/confirm/${appointment.id}`;
 }
 
 /** Fire-and-forget sendEmail confirmation */
@@ -253,7 +257,7 @@ async function sendConfirmationEmail({ appointment, groomerId }) {
 
     const servicesHtml = buildServicesHtml(appointment.services);
     const notesBlock = buildNotesBlockHtml(appointment.notes || "");
-    const confirmUrl = buildConfirmUrl(appointment.id);
+    const confirmUrl = buildConfirmUrl(appointment);
 
     await fetch("/.netlify/functions/sendEmail", {
       method: "POST",
@@ -1301,64 +1305,6 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
   );
 }
 
-/* ---------------- Edit Time Block Modal ---------------- */
-function EditTimeBlockModal({ block, onClose, onSave }) {
-  const [start, setStart] = useState((block.break_start || block.start_time || "").slice(0, 5));
-  const [end, setEnd] = useState((block.break_end || block.end_time || "").slice(0, 5));
-  const [note, setNote] = useState(block.reason || block.label || block.note || "");
-  const [saving, setSaving] = useState(false);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="font-bold text-gray-900 dark:text-gray-100">Edit Time Block</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
-        </div>
-        <div className="p-4 space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-gray-700 dark:text-gray-300">Start time</span>
-              <input type="time" value={start} onChange={(e) => setStart(e.target.value)}
-                className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-            </label>
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-gray-700 dark:text-gray-300">End time</span>
-              <input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
-                className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-            </label>
-          </div>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700 dark:text-gray-300">Note (optional)</span>
-            <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Lunch break, Vet appointment"
-              className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-          </label>
-          {end && start && end <= start && (
-            <p className="text-xs text-red-500">End time must be after start time.</p>
-          )}
-          <div className="flex gap-2 pt-1">
-            <button onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition">
-              Cancel
-            </button>
-            <button
-              disabled={saving || !start || !end || end <= start}
-              onClick={async () => {
-                setSaving(true);
-                await onSave(block.id, start, end, note);
-                setSaving(false);
-              }}
-              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50">
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------- Month View Component ---------------- */
 function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffset }) {
   const [monthAppts, setMonthAppts] = useState([]);
@@ -1499,7 +1445,6 @@ export default function Schedule() {
   const [workingRange, setWorkingRange] = useState([]);
   const [breakSlots, setBreakSlots] = useState([]);
   const [dayBreaks, setDayBreaks] = useState([]);
-  const [editingBlock, setEditingBlock] = useState(null);
   const [capacity, setCapacity] = useState(1);
   const [viewMode, setViewMode] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "list" : "grid"
@@ -1648,7 +1593,6 @@ export default function Schedule() {
         { data: hours },
         { data: breaks },
         { data: appts },
-        { data: vacDays },
       ] = await Promise.all([
         supabase
           .from("groomers")
@@ -1692,11 +1636,6 @@ export default function Schedule() {
           .eq("groomer_id", user.id)
           .eq("date", selectedDate)
           .order("time", { ascending: true }),
-        supabase
-          .from("vacation_days")
-          .select("id, date, start_time, end_time, reason")
-          .eq("groomer_id", user.id)
-          .eq("date", selectedDate),
       ]);
 
       setCapacity(groomer?.max_parallel || 1);
@@ -1756,19 +1695,7 @@ export default function Schedule() {
         TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakSet.add(s));
       });
       setBreakSlots([...breakSet]);
-
-      // Merge working_breaks and vacation_days into dayBreaks
-      // Normalize fields so edit/delete work on both
-      const vacBreaks = (vacDays || []).map(v => ({
-        ...v,
-        break_start: v.start_time,
-        break_end: v.end_time,
-        label: v.reason,
-        _source: "vacation_days",
-      }));
-      setDayBreaks([...(breaks || []).map(b => ({ ...b, _source: "working_breaks" })), ...vacBreaks]);
-
-      const apptsWithShots = await attachShotRecords(appts || []);
+      setDayBreaks(breaks || []);
       setAppointments(apptsWithShots);
       setLoading(false);
     };
@@ -2797,51 +2724,19 @@ export default function Schedule() {
               return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
             };
             return (
-              <div key={b.id} className="card border-l-4 border-l-gray-400 bg-gray-50">
+              <div key={b.id} className="card border-l-4 border-l-gray-400 bg-gray-50 opacity-80">
                 <div className="card-body py-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
+                  <div>
                     <div className="text-sm font-semibold text-gray-600">
-                      🚫 {b.label || b.reason || b.note || "Time Block"}
+                      🚫 {b.label || "Time Block"}
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
-                      {fmt(b.break_start || b.start_time)} – {fmt(b.break_end || b.end_time)}
+                      {fmt(b.break_start)} – {fmt(b.break_end)}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {b._source === "vacation_days" && (
-                      <>
-                        <button
-                          onClick={() => setEditingBlock(b)}
-                          className="text-xs px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 transition"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (!window.confirm("Delete this time block?")) return;
-                            await supabase.from("vacation_days").delete().eq("id", b.id);
-                            setDayBreaks(prev => prev.filter(x => x.id !== b.id));
-                            const remaining = dayBreaks.filter(x => x.id !== b.id);
-                            const breakSet = new Set();
-                            remaining.forEach(br => {
-                              const bi = TIME_SLOTS.indexOf((br.break_start || br.start_time || "").slice(0, 5));
-                              const ei = TIME_SLOTS.indexOf((br.break_end || br.end_time || "").slice(0, 5));
-                              if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
-                            });
-                            setBreakSlots([...breakSet]);
-                          }}
-                          className="text-xs px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition"
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
-                    {b._source === "working_breaks" && (
-                      <span className="text-xs px-2.5 py-1 rounded-full bg-gray-200 text-gray-500 font-medium">
-                        Recurring
-                      </span>
-                    )}
-                  </div>
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-gray-200 text-gray-600 font-medium">
+                    Blocked
+                  </span>
                 </div>
               </div>
             );
@@ -3362,42 +3257,6 @@ export default function Schedule() {
             } else {
               setDayActionDate(null);
             }
-          }}
-        />
-      )}
-
-      {/* Edit Time Block Modal */}
-      {editingBlock && (
-        <EditTimeBlockModal
-          block={editingBlock}
-          onClose={() => setEditingBlock(null)}
-          onSave={async (id, start, end, note) => {
-            const { error } = await supabase
-              .from("vacation_days")
-              .update({ start_time: start, end_time: end, reason: note || null })
-              .eq("id", id);
-            if (error) {
-              alert("Could not update time block: " + error.message);
-              return;
-            }
-            // Update local state
-            setDayBreaks(prev => prev.map(b =>
-              b.id === id
-                ? { ...b, break_start: start, start_time: start, break_end: end, end_time: end, reason: note, label: note }
-                : b
-            ));
-            // Recalculate break slots
-            const updated = dayBreaks.map(b =>
-              b.id === id ? { ...b, break_start: start, break_end: end } : b
-            );
-            const breakSet = new Set();
-            updated.forEach(br => {
-              const bi = TIME_SLOTS.indexOf((br.break_start || br.start_time || "").slice(0, 5));
-              const ei = TIME_SLOTS.indexOf((br.break_end || br.end_time || "").slice(0, 5));
-              if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
-            });
-            setBreakSlots([...breakSet]);
-            setEditingBlock(null);
           }}
         />
       )}

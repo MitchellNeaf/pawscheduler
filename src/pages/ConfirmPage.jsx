@@ -14,18 +14,31 @@ export default function ConfirmPage() {
     if (!token) { setStatus("error"); return; }
 
     (async () => {
-      // Look up the appointment by confirm_token
-      const { data, error } = await supabase
+      // Look up by confirm_token first, then fall back to id
+      let query = supabase
         .from("appointments")
         .select(`
           id, date, time, confirmed, confirm_token,
           pets ( name, clients ( full_name ) )
-        `)
+        `);
+
+      // Try as token first (UUID format matches both, so try confirm_token first)
+      const { data: byToken } = await supabase
+        .from("appointments")
+        .select(`id, date, time, confirmed, confirm_token, pets ( name, clients ( full_name ) )`)
         .eq("confirm_token", token)
         .maybeSingle();
 
-      if (error || !data) {
-        console.error("ConfirmPage lookup error:", error, "data:", data);
+      const { data: byId } = byToken ? { data: null } : await supabase
+        .from("appointments")
+        .select(`id, date, time, confirmed, confirm_token, pets ( name, clients ( full_name ) )`)
+        .eq("id", token)
+        .maybeSingle();
+
+      const data = byToken || byId;
+
+      if (!data) {
+        console.error("ConfirmPage lookup failed for token/id:", token);
         setStatus("error");
         return;
       }

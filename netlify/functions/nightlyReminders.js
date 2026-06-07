@@ -127,7 +127,9 @@ exports.handler = async (event) => {
         notes_block: a.notes
           ? `<tr><td><strong>Notes:</strong> ${a.notes}</td></tr>`
           : "",
-        confirm_url: `https://app.pawscheduler.app/.netlify/functions/confirmAppointment?id=${a.id}`
+        confirm_url: a.confirm_token
+          ? `https://app.pawscheduler.app/confirm/${a.confirm_token}`
+          : `https://app.pawscheduler.app/confirm/${a.id}`
       });
 
       const res = await fetch("https://api.mailersend.com/v1/email", {
