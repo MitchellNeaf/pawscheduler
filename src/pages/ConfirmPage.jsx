@@ -41,12 +41,11 @@ export default function ConfirmPage() {
         return;
       }
 
-      // Update directly — we already verified the token matches via the SELECT above
+      // Update — use id only since token param may be either confirm_token or appointment id
       const { error: updateErr } = await supabase
         .from("appointments")
         .update({ confirmed: true, confirm_token: null })
-        .eq("id", data.id)
-        .eq("confirm_token", token);
+        .eq("id", data.id);
 
       if (updateErr) {
         console.error("confirm update error:", updateErr);
