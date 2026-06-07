@@ -239,13 +239,9 @@ function buildNotesBlockHtml(notes) {
 }
 
 /** Build confirm URL for email button */
-function buildConfirmUrl(appointment) {
-  const base = typeof window !== "undefined" ? window.location.origin : "https://app.pawscheduler.app";
-  // Use confirm_token if available, otherwise fall back to id
-  if (appointment.confirm_token) {
-    return `${base}/confirm/${appointment.confirm_token}`;
-  }
-  return `${base}/confirm/${appointment.id}`;
+function buildConfirmUrl(appointmentId) {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}/.netlify/functions/confirmAppointment?id=${appointmentId}`;
 }
 
 /** Fire-and-forget sendEmail confirmation */
@@ -257,7 +253,7 @@ async function sendConfirmationEmail({ appointment, groomerId }) {
 
     const servicesHtml = buildServicesHtml(appointment.services);
     const notesBlock = buildNotesBlockHtml(appointment.notes || "");
-    const confirmUrl = buildConfirmUrl(appointment);
+    const confirmUrl = buildConfirmUrl(appointment.id);
 
     await fetch("/.netlify/functions/sendEmail", {
       method: "POST",
@@ -1441,7 +1437,15 @@ export default function Schedule() {
   const [search, setSearch] = useState("");
   const [user, setUser] = useState(null);
 
-  const [selectedDate, setSelectedDate] = useState(() => toYMD(new Date()));
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const saved = sessionStorage.getItem("ps_selected_date");
+    return saved || toYMD(new Date());
+  });
+
+  // Keep sessionStorage in sync with selectedDate
+  useEffect(() => {
+    sessionStorage.setItem("ps_selected_date", selectedDate);
+  }, [selectedDate]);
   const [workingRange, setWorkingRange] = useState([]);
   const [breakSlots, setBreakSlots] = useState([]);
   const [dayBreaks, setDayBreaks] = useState([]);
@@ -1725,6 +1729,9 @@ export default function Schedule() {
           console.error("Delete error:", error.message);
           return;
         }
+
+        // Remove from local state immediately — no reload needed
+        setAppointments((prev) => prev.filter((a) => a.id !== id));
       },
     });
   };
