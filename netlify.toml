@@ -9,6 +9,16 @@
   status = 200
 
 [[redirects]]
+  from = "/.netlify/functions/confirmAppointment"
+  to = "/.netlify/functions/confirmAppointment"
+  status = 200
+
+[[redirects]]
+  from = "/.netlify/functions/confirmAppointmentSms"
+  to = "/.netlify/functions/confirmAppointmentSms"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
