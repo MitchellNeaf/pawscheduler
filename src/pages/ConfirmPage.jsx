@@ -14,15 +14,7 @@ export default function ConfirmPage() {
     if (!token) { setStatus("error"); return; }
 
     (async () => {
-      // Look up by confirm_token first, then fall back to id
-      let query = supabase
-        .from("appointments")
-        .select(`
-          id, date, time, confirmed, confirm_token,
-          pets ( name, clients ( full_name ) )
-        `);
-
-      // Try as token first (UUID format matches both, so try confirm_token first)
+      // Try by confirm_token first, then fall back to id
       const { data: byToken } = await supabase
         .from("appointments")
         .select(`id, date, time, confirmed, confirm_token, pets ( name, clients ( full_name ) )`)
