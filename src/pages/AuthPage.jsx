@@ -40,14 +40,26 @@ export default function AuthPage() {
       });
 
     if (loginError) {
-      setError(loginError.message);
+      // Translate technical Supabase errors into human-friendly messages
+      const msg = loginError.message.toLowerCase();
+      if (msg.includes("invalid login") || msg.includes("invalid credentials") || msg.includes("wrong password")) {
+        setError("Incorrect email or password. Please try again.");
+      } else if (msg.includes("email not confirmed") || msg.includes("not confirmed")) {
+        setError("Please check your email and confirm your account before logging in.");
+      } else if (msg.includes("too many requests") || msg.includes("rate limit")) {
+        setError("Too many attempts. Please wait a minute and try again.");
+      } else if (msg.includes("network") || msg.includes("fetch")) {
+        setError("Network error. Please check your connection and try again.");
+      } else {
+        setError(loginError.message);
+      }
       setLoading(false);
       return;
     }
 
     const user = data?.user;
     if (!user) {
-      setError("Login failed.");
+      setError("Login failed. Please try again.");
       setLoading(false);
       return;
     }
@@ -101,7 +113,10 @@ export default function AuthPage() {
           </p>
 
           {error && (
-            <p className="text-red-500 text-sm mb-3 text-center">{error}</p>
+            <div className="bg-red-50 border border-red-300 rounded-xl px-4 py-3 mb-4 flex items-start gap-2">
+              <span className="text-red-500 text-lg flex-shrink-0 leading-none mt-0.5">⚠</span>
+              <p className="text-red-700 text-sm font-medium">{error}</p>
+            </div>
           )}
 
           <input
@@ -150,6 +165,10 @@ export default function AuthPage() {
           >
             {loading ? "Signing in…" : "Log in"}
           </button>
+
+          {loading && (
+            <p className="text-xs text-gray-400 text-center mt-2">This may take a moment…</p>
+          )}
 
           <p className="text-center mt-4 text-sm">
             New here?{" "}
