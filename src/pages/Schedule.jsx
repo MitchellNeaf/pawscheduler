@@ -1696,6 +1696,8 @@ export default function Schedule() {
       });
       setBreakSlots([...breakSet]);
       setDayBreaks(breaks || []);
+
+      const apptsWithShots = await attachShotRecords(appts || []);
       setAppointments(apptsWithShots);
       setLoading(false);
     };
