@@ -27,14 +27,14 @@ exports.handler = async (event) => {
   const { data: appt, error } = await supabase
     .from("appointments")
     .select(`
-      id, confirmed, date, time,
-      pets ( name, clients ( full_name ) ),
-      groomers ( full_name, business_name )
+      id, confirmed, date, time, groomer_id,
+      pets ( name, clients ( full_name ) )
     `)
     .eq("confirm_token", token)
-    .single();
+    .maybeSingle();
 
   if (error || !appt) {
+    console.error("Token lookup failed:", error, "token:", token);
     return {
       statusCode: 404,
       headers: { "Content-Type": "text/html" },
@@ -45,9 +45,16 @@ exports.handler = async (event) => {
     };
   }
 
+  // Load groomer name separately
+  const { data: groomerData } = await supabase
+    .from("groomers")
+    .select("full_name")
+    .eq("id", appt.groomer_id)
+    .maybeSingle();
+  const groomerName = groomerData?.full_name || "your groomer";
+
   // Already confirmed
   if (appt.confirmed) {
-    const groomerName = appt.groomers?.business_name || appt.groomers?.full_name || "your groomer";
     const petName = appt.pets?.name || "your pet";
     const [y, m, d] = appt.date.split("-").map(Number);
     const dateStr = new Date(y, m - 1, d).toLocaleDateString("en-US", {
@@ -83,7 +90,6 @@ exports.handler = async (event) => {
     };
   }
 
-  const groomerName = appt.groomers?.business_name || appt.groomers?.full_name || "your groomer";
   const petName = appt.pets?.name || "your pet";
   const [y, m, d] = appt.date.split("-").map(Number);
   const dateStr = new Date(y, m - 1, d).toLocaleDateString("en-US", {
