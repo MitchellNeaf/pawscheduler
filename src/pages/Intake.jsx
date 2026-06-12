@@ -1,6 +1,6 @@
 // src/pages/Intake.jsx
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabase";
 
 const SIZE_OPTIONS = [
@@ -56,6 +56,8 @@ const WAIVER_SECTIONS = [
 
 export default function IntakePage() {
   const { slug } = useParams();
+  const [searchParams] = useSearchParams();
+  const cid = searchParams.get("cid");
 
   const [groomer, setGroomer] = useState(null);
   const [pageError, setPageError] = useState("");
@@ -127,12 +129,51 @@ export default function IntakePage() {
 
       if (error || !data) {
         setPageError("Intake form not found.");
-      } else {
-        setGroomer(data);
+        setLoading(false);
+        return;
       }
+      setGroomer(data);
+
+      // Pre-fill from existing client if cid is provided
+      if (cid) {
+        const { data: client } = await supabase
+          .from("clients")
+          .select("id, full_name, phone, email, street, city, state, zip")
+          .eq("id", cid)
+          .eq("groomer_id", data.id)
+          .maybeSingle();
+
+        if (client) {
+          setFullName(client.full_name || "");
+          setPhone(client.phone || "");
+          setEmail(client.email || "");
+          setStreet(client.street || "");
+          setCity(client.city || "");
+          setState(client.state || "");
+          setZip(client.zip || "");
+
+          // Pre-fill pets
+          const { data: existingPets } = await supabase
+            .from("pets")
+            .select("name, breed, slot_weight, tags, notes")
+            .eq("client_id", cid)
+            .eq("groomer_id", data.id);
+
+          if (existingPets?.length > 0) {
+            setPets(existingPets.map(p => ({
+              name: p.name || "",
+              breed: p.breed || "",
+              slot_weight: p.slot_weight || 1,
+              tags: p.tags || [],
+              notes: p.notes || "",
+            })));
+          }
+        }
+      }
+
       setLoading(false);
     })();
-  }, [slug]);
+  }, [slug, cid]);
 
   const handleSubmit = async () => {
     setSubmitError("");
