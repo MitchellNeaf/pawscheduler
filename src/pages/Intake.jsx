@@ -18,6 +18,42 @@ const labelCls = "block text-sm font-semibold text-[var(--text-2)] mb-1.5";
 const inputCls = "w-full border border-[var(--border-med)] rounded-xl px-3 py-2.5 text-sm bg-[var(--surface)] text-[var(--text-1)] focus:outline-none focus:ring-2 focus:ring-[var(--brand)] focus:border-transparent transition";
 const sectionCls = "space-y-4";
 
+/* ── Waiver content (shown inline after intake submission) ── */
+const WAIVER_SECTIONS = [
+  {
+    title: "General Authorization",
+    body: `I authorize the groomer to perform grooming services on my pet(s). I confirm that my pet(s) is/are current on all required vaccinations, including rabies, and I agree to provide proof upon request. I understand that grooming may be stressful for some animals and agree to disclose any known behavioral issues, medical conditions, or physical limitations prior to grooming.`,
+  },
+  {
+    title: "Medical & Emergency Authorization",
+    body: `In the event of a medical emergency, I authorize the groomer to seek veterinary care for my pet at my expense. I understand that every effort will be made to contact me first. I release the groomer from financial responsibility for emergency veterinary costs incurred on my behalf.`,
+  },
+  {
+    title: "Matting & Coat Condition",
+    body: `I understand that severely matted coats may require shaving for the health and comfort of my pet. Dematting can be painful and stressful, and in some cases the groomer may determine it is not in the animal's best interest to dematt. If shaving is required, I authorize this procedure. I release the groomer from any liability for skin conditions revealed after coat removal, including but not limited to irritation, sores, or pre-existing conditions.`,
+  },
+  {
+    title: "Senior & Special Needs Pets",
+    body: `I understand that grooming older, ill, or medically fragile pets carries additional risk. Grooming procedures may expose pre-existing conditions or aggravate existing health issues. I agree that the groomer will exercise reasonable care but cannot be held liable for conditions related to my pet's age or health status.`,
+  },
+  {
+    title: "Accidents & Liability",
+    body: `I understand that accidents can occur during grooming. The groomer will exercise all reasonable care. However, I release the groomer from liability for minor nicks, cuts, or abrasions that may occur during grooming, particularly in difficult areas such as pads, ears, and around the face. In the event of a serious injury, the groomer will attempt to contact me immediately.`,
+  },
+  {
+    title: "Aggressive or Difficult Pets",
+    body: `I understand that if my pet exhibits aggressive or dangerous behavior, the groomer reserves the right to stop the grooming session and return my pet to me without completing services. A handling fee may apply. I accept full financial responsibility for any injuries caused by my pet to the groomer or staff.`,
+  },
+  {
+    title: "Photography",
+    body: `I authorize the groomer to photograph or video my pet before, during, or after grooming for business purposes including social media and marketing. I understand no personally identifiable information will be shared without my consent.`,
+  },
+  {
+    title: "Agreement",
+    body: `By signing below, I confirm that I am the legal owner or authorized agent for the pet(s) described, that all information provided is accurate, and that I have read and agree to all terms of this grooming release and waiver.`,
+  },
+];
+
 export default function IntakePage() {
   const { slug } = useParams();
 
@@ -27,6 +63,15 @@ export default function IntakePage() {
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+
+  // Waiver step (shown after successful intake submission)
+  const [showWaiver, setShowWaiver] = useState(false);
+  const [waiverClientId, setWaiverClientId] = useState(null);
+  const [waiverSignerName, setWaiverSignerName] = useState("");
+  const [waiverAgreed, setWaiverAgreed] = useState(false);
+  const [waiverSubmitting, setWaiverSubmitting] = useState(false);
+  const [waiverSigned, setWaiverSigned] = useState(false);
+  const [waiverError, setWaiverError] = useState("");
 
   // Client fields
   const [fullName, setFullName]   = useState("");
@@ -76,7 +121,7 @@ export default function IntakePage() {
     (async () => {
       const { data, error } = await supabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, custom_intake_questions")
+        .select("id, full_name, slug, logo_url, custom_intake_questions, waiver_text")
         .eq("slug", slug)
         .single();
 
@@ -126,11 +171,50 @@ export default function IntakePage() {
         setSubmitError(json.error || "Something went wrong. Please try again.");
       } else {
         setSubmitted(true);
+        if (json.clientId) {
+          setWaiverClientId(json.clientId);
+          setWaiverSignerName(fullName.trim());
+          setShowWaiver(true);
+        }
       }
     } catch {
       setSubmitError("Network error. Please check your connection and try again.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSignWaiver = async () => {
+    if (!waiverSignerName.trim()) {
+      setWaiverError("Please type your full name to sign.");
+      return;
+    }
+    if (!waiverAgreed) {
+      setWaiverError("Please check the box to confirm you agree.");
+      return;
+    }
+
+    setWaiverSubmitting(true);
+    setWaiverError("");
+
+    try {
+      const res = await fetch("/.netlify/functions/signWaiver", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug, signerName: waiverSignerName.trim(), clientId: waiverClientId }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setWaiverError(json.error || "Something went wrong. Please try again.");
+      } else {
+        setWaiverSigned(true);
+      }
+    } catch {
+      setWaiverError("Network error. Please check your connection and try again.");
+    } finally {
+      setWaiverSubmitting(false);
     }
   };
 
@@ -146,6 +230,122 @@ export default function IntakePage() {
     return (
       <main className="min-h-screen flex items-center justify-center p-4">
         <p className="text-red-600 font-semibold">{pageError}</p>
+      </main>
+    );
+  }
+
+  // ── Waiver step (shown after intake submission, before final success) ──
+  if (submitted && showWaiver && !waiverSigned) {
+    return (
+      <main className="min-h-screen bg-[var(--bg)] py-8 px-4">
+        <div className="max-w-2xl mx-auto space-y-6">
+
+          {/* Header */}
+          <div className="text-center space-y-2">
+            {groomer.logo_url && (
+              <img src={groomer.logo_url} alt="Logo"
+                className="w-16 h-16 rounded-full object-cover mx-auto ring-2 ring-[var(--border)] shadow-md mb-3" />
+            )}
+            <div className="text-3xl">✅</div>
+            <h1 className="text-2xl font-bold text-[var(--text-1)]">
+              One last step — Grooming Waiver
+            </h1>
+            <p className="text-sm text-[var(--text-3)]">
+              {groomer.full_name} · Please read carefully and sign below
+            </p>
+          </div>
+
+          {/* Custom groomer waiver intro text */}
+          {groomer.waiver_text && (
+            <div className="card">
+              <div className="card-body">
+                <p className="text-sm text-[var(--text-2)] leading-relaxed whitespace-pre-wrap">
+                  {groomer.waiver_text}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Waiver sections */}
+          <div className="card">
+            <div className="card-body space-y-5">
+              {WAIVER_SECTIONS.map((section, i) => (
+                <div key={i}>
+                  <h2 className="font-semibold text-sm text-[var(--text-1)] mb-1">
+                    {i + 1}. {section.title}
+                  </h2>
+                  <p className="text-sm text-[var(--text-2)] leading-relaxed">
+                    {section.body}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Signature section */}
+          <div className="card">
+            <div className="card-body space-y-4">
+              <h2 className="font-bold text-[var(--text-1)]">Sign Below</h2>
+
+              <div>
+                <label className={labelCls}>Full name (typed signature)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Jane Smith"
+                  value={waiverSignerName}
+                  onChange={(e) => setWaiverSignerName(e.target.value)}
+                  className={inputCls}
+                  autoComplete="name"
+                />
+              </div>
+
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={waiverAgreed}
+                  onChange={(e) => setWaiverAgreed(e.target.checked)}
+                  className="mt-0.5 w-5 h-5 rounded accent-emerald-500 flex-shrink-0"
+                />
+                <span className="text-sm text-[var(--text-2)] leading-relaxed">
+                  I have read and understand the grooming release and waiver above.
+                  I agree to all terms and confirm I am the legal owner or authorized
+                  agent for the pet(s) being groomed.
+                </span>
+              </label>
+
+              {waiverError && (
+                <p className="text-sm text-red-600 font-medium bg-red-50 rounded-xl px-3 py-2">
+                  {waiverError}
+                </p>
+              )}
+
+              <button
+                onClick={handleSignWaiver}
+                disabled={waiverSubmitting || !waiverSignerName.trim() || !waiverAgreed}
+                className="w-full py-3.5 rounded-xl font-bold text-sm transition
+                  bg-emerald-600 text-white border-2 border-emerald-600
+                  hover:bg-emerald-700 hover:border-emerald-700
+                  active:bg-emerald-800
+                  disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
+              >
+                {waiverSubmitting ? "Signing…" : "Sign Waiver"}
+              </button>
+
+              <button
+                onClick={() => setShowWaiver(false)}
+                className="w-full py-2.5 rounded-xl font-semibold text-sm text-[var(--text-3)] hover:text-[var(--text-2)] transition"
+              >
+                Skip for now
+              </button>
+
+              <p className="text-xs text-[var(--text-3)] text-center">
+                Your name and the date/time of signing will be recorded.
+                This constitutes a legally binding electronic signature.
+              </p>
+            </div>
+          </div>
+
+        </div>
       </main>
     );
   }
@@ -166,6 +366,11 @@ export default function IntakePage() {
             <strong>{pets.filter(p => p.name.trim()).map(p => p.name).join(' & ')}</strong>'s profile have been saved.{" "}
             {groomer.full_name} will be in touch to confirm your appointment.
           </p>
+          {waiverSigned && (
+            <p className="text-sm text-emerald-700 bg-emerald-50 rounded-xl px-4 py-2.5 font-medium">
+              ✅ Grooming waiver signed — thank you!
+            </p>
+          )}
           <p className="text-sm text-[var(--text-3)]">
             You can close this page.
           </p>
