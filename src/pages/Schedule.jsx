@@ -1214,6 +1214,7 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
   const [tbStart, setTbStart] = useState("08:00");
   const [tbEnd, setTbEnd] = useState("09:00");
   const [tbNote, setTbNote] = useState("");
+  const [tbFullDay, setTbFullDay] = useState(false);
   const [saving, setSaving] = useState(false);
 
   if (!date) return null;
@@ -1264,18 +1265,27 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
         {mode === "timeblock" && (
           <div className="p-4 space-y-3">
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Block time off on <strong className="text-gray-800 dark:text-gray-200">{label}</strong></p>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Start time</span>
-                <input type="time" value={tbStart} onChange={(e) => setTbStart(e.target.value)}
-                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-gray-700 dark:text-gray-300">End time</span>
-                <input type="time" value={tbEnd} onChange={(e) => setTbEnd(e.target.value)}
-                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-              </label>
-            </div>
+
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+              <input type="checkbox" checked={tbFullDay} onChange={(e) => setTbFullDay(e.target.checked)}
+                className="w-4 h-4 accent-blue-600" />
+              All day (no specific time range)
+            </label>
+
+            {!tbFullDay && (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Start time</span>
+                  <input type="time" value={tbStart} onChange={(e) => setTbStart(e.target.value)}
+                    className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">End time</span>
+                  <input type="time" value={tbEnd} onChange={(e) => setTbEnd(e.target.value)}
+                    className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
+                </label>
+              </div>
+            )}
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-gray-700 dark:text-gray-300">Note (optional)</span>
               <input type="text" value={tbNote} onChange={(e) => setTbNote(e.target.value)}
@@ -1287,13 +1297,13 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                 ← Back
               </button>
-              <button onClick={() => onAddTimeBlock(date, tbStart, tbEnd, tbNote, setSaving)}
-                disabled={saving || !tbStart || !tbEnd || tbEnd <= tbStart}
+              <button onClick={() => onAddTimeBlock(date, tbFullDay ? null : tbStart, tbFullDay ? null : tbEnd, tbNote, setSaving)}
+                disabled={saving || (!tbFullDay && (!tbStart || !tbEnd || tbEnd <= tbStart))}
                 className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50">
                 {saving ? "Saving…" : "Save Block"}
               </button>
             </div>
-            {tbEnd <= tbStart && <p className="text-xs text-red-500">End time must be after start time.</p>}
+            {!tbFullDay && tbEnd <= tbStart && <p className="text-xs text-red-500">End time must be after start time.</p>}
           </div>
         )}
       </div>
@@ -1374,7 +1384,7 @@ function EditTimeBlockModal({ block, onClose, onSave }) {
 }
 
 /* ---------------- Month View Component ---------------- */
-function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffset }) {
+function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffset, refreshKey }) {
   const [monthAppts, setMonthAppts] = useState([]);
   const [loadingMonth, setLoadingMonth] = useState(false);
   const [vacationDays, setVacationDays] = useState([]);
@@ -1404,7 +1414,7 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
       setVacationDays(vacs || []);
       setLoadingMonth(false);
     });
-  }, [userId, monthStart, monthEnd]);
+  }, [userId, monthStart, monthEnd, refreshKey]);
 
   const firstWeekday = new Date(year, month, 1).getDay();
   const totalCells = firstWeekday + lastDay;
@@ -1522,6 +1532,7 @@ export default function Schedule() {
   const [breakSlots, setBreakSlots] = useState([]);
   const [dayBreaks, setDayBreaks] = useState([]);
   const [editingBlock, setEditingBlock] = useState(null);
+  const [monthRefreshKey, setMonthRefreshKey] = useState(0);
   const [capacity, setCapacity] = useState(1);
   const [viewMode, setViewMode] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "list" : "grid"
@@ -2820,6 +2831,7 @@ export default function Schedule() {
               monthOffset={monthOffset}
               setMonthOffset={setMonthOffset}
               onDayClick={(dateStr) => setDayActionDate(dateStr)}
+              refreshKey={monthRefreshKey}
             />
           </div>
         </div>
@@ -2878,6 +2890,7 @@ export default function Schedule() {
                               }
                             });
                             setBreakSlots([...breakSet]);
+                            setMonthRefreshKey(k => k + 1);
                           }}
                           className="text-xs px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition"
                         >
@@ -3399,17 +3412,41 @@ export default function Schedule() {
           onAddTimeBlock={async (date, start, end, note, setSaving) => {
             if (!user) return;
             setSaving(true);
-            const { error } = await supabase.from("vacation_days").insert([{
+            const { data, error } = await supabase.from("vacation_days").insert([{
               groomer_id: user.id,
               date,
               start_time: start || null,
               end_time: end || null,
-            }]);
+              reason: note || null,
+            }]).select().single();
             setSaving(false);
             if (error) {
               alert("Could not save time block: " + error.message);
             } else {
               setDayActionDate(null);
+              setMonthRefreshKey(k => k + 1);
+              // If the block was added for the currently selected day, refresh dayBreaks
+              if (date === selectedDate && data) {
+                const fullDay = !data.start_time || !data.end_time;
+                const newBlock = {
+                  ...data,
+                  break_start: data.start_time,
+                  break_end: data.end_time,
+                  label: data.reason,
+                  fullDay,
+                  _source: "vacation_days",
+                };
+                setDayBreaks(prev => [...prev, newBlock]);
+                if (fullDay) {
+                  setBreakSlots(prev => [...new Set([...prev, ...workingRange])]);
+                } else {
+                  const bi = TIME_SLOTS.indexOf((data.start_time || "").slice(0, 5));
+                  const ei = TIME_SLOTS.indexOf((data.end_time || "").slice(0, 5));
+                  if (bi !== -1 && ei !== -1) {
+                    setBreakSlots(prev => [...new Set([...prev, ...TIME_SLOTS.slice(bi, ei + 1)])]);
+                  }
+                }
+              }
             }
           }}
         />
@@ -3454,6 +3491,7 @@ export default function Schedule() {
             });
             setBreakSlots([...breakSet]);
             setEditingBlock(null);
+            setMonthRefreshKey(k => k + 1);
           }}
         />
       )}
