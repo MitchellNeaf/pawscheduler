@@ -1301,6 +1301,78 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
   );
 }
 
+/* ---------------- Edit Time Block Modal ---------------- */
+function EditTimeBlockModal({ block, onClose, onSave }) {
+  const [fullDay, setFullDay] = useState(!!block.fullDay);
+  const [start, setStart] = useState((block.break_start || "").slice(0, 5));
+  const [end, setEnd] = useState((block.break_end || "").slice(0, 5));
+  const [note, setNote] = useState(block.label || block.reason || "");
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+          <h2 className="font-bold text-gray-900 dark:text-gray-100">Edit Time Block</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+        <div className="p-4 space-y-3">
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+            <input type="checkbox" checked={fullDay} onChange={(e) => setFullDay(e.target.checked)}
+              className="w-4 h-4 accent-blue-600" />
+            All day (no specific time range)
+          </label>
+
+          {!fullDay && (
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-gray-700 dark:text-gray-300">Start time</span>
+                <input type="time" value={start} onChange={(e) => setStart(e.target.value)}
+                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-gray-700 dark:text-gray-300">End time</span>
+                <input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
+                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
+              </label>
+            </div>
+          )}
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700 dark:text-gray-300">Reason / Note (optional)</span>
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. Lunch break, Vet appointment, Off"
+              className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
+          </label>
+          {!fullDay && end && start && end <= start && (
+            <p className="text-xs text-red-500">End time must be after start time.</p>
+          )}
+          <div className="flex gap-2 pt-1">
+            <button onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition">
+              Cancel
+            </button>
+            <button
+              disabled={saving || (!fullDay && (!start || !end || end <= start))}
+              onClick={async () => {
+                setSaving(true);
+                if (fullDay) {
+                  await onSave(block.id, null, null, note);
+                } else {
+                  await onSave(block.id, start, end, note);
+                }
+                setSaving(false);
+              }}
+              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50">
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Month View Component ---------------- */
 function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffset }) {
   const [monthAppts, setMonthAppts] = useState([]);
@@ -1449,6 +1521,7 @@ export default function Schedule() {
   const [workingRange, setWorkingRange] = useState([]);
   const [breakSlots, setBreakSlots] = useState([]);
   const [dayBreaks, setDayBreaks] = useState([]);
+  const [editingBlock, setEditingBlock] = useState(null);
   const [capacity, setCapacity] = useState(1);
   const [viewMode, setViewMode] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "list" : "grid"
@@ -1597,6 +1670,7 @@ export default function Schedule() {
         { data: hours },
         { data: breaks },
         { data: appts },
+        { data: vacDays },
       ] = await Promise.all([
         supabase
           .from("groomers")
@@ -1640,6 +1714,11 @@ export default function Schedule() {
           .eq("groomer_id", user.id)
           .eq("date", selectedDate)
           .order("time", { ascending: true }),
+        supabase
+          .from("vacation_days")
+          .select("id, date, start_time, end_time, reason")
+          .eq("groomer_id", user.id)
+          .eq("date", selectedDate),
       ]);
 
       setCapacity(groomer?.max_parallel || 1);
@@ -1698,8 +1777,33 @@ export default function Schedule() {
         if (bi === -1 || ei === -1) return;
         TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakSet.add(s));
       });
+
+      // Merge vacation_days (date-specific blocks) into the break set too
+      (vacDays || []).forEach((v) => {
+        if (!v.start_time || !v.end_time) {
+          // Full-day block — mark entire working range as blocked
+          range.forEach((s) => breakSet.add(s));
+          return;
+        }
+        const bi = TIME_SLOTS.indexOf(v.start_time.slice(0, 5));
+        const ei = TIME_SLOTS.indexOf(v.end_time.slice(0, 5));
+        if (bi === -1 || ei === -1) return;
+        TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakSet.add(s));
+      });
+
       setBreakSlots([...breakSet]);
-      setDayBreaks(breaks || []);
+
+      // Normalize both sources into dayBreaks for display/edit
+      const workingBreaks = (breaks || []).map(b => ({ ...b, _source: "working_breaks" }));
+      const vacationBreaks = (vacDays || []).map(v => ({
+        ...v,
+        break_start: v.start_time,
+        break_end: v.end_time,
+        label: v.reason,
+        fullDay: !v.start_time || !v.end_time,
+        _source: "vacation_days",
+      }));
+      setDayBreaks([...workingBreaks, ...vacationBreaks]);
 
       const apptsWithShots = await attachShotRecords(appts || []);
       setAppointments(apptsWithShots);
@@ -2733,19 +2837,60 @@ export default function Schedule() {
               return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
             };
             return (
-              <div key={b.id} className="card border-l-4 border-l-gray-400 bg-gray-50 opacity-80">
+              <div key={b.id} className="card border-l-4 border-l-gray-400 bg-gray-50">
                 <div className="card-body py-3 flex items-center justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-sm font-semibold text-gray-600">
-                      🚫 {b.label || "Time Block"}
+                      🚫 {b.label || b.reason || "Time Block"}
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
-                      {fmt(b.break_start)} – {fmt(b.break_end)}
+                      {b.fullDay ? "All Day" : `${fmt(b.break_start)} – ${fmt(b.break_end)}`}
                     </div>
                   </div>
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-gray-200 text-gray-600 font-medium">
-                    Blocked
-                  </span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {b._source === "vacation_days" && (
+                      <>
+                        <button
+                          onClick={() => setEditingBlock(b)}
+                          className="text-xs px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 transition"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm("Delete this time block?")) return;
+                            await supabase.from("vacation_days").delete().eq("id", b.id);
+                            const remaining = dayBreaks.filter(x => x.id !== b.id);
+                            setDayBreaks(remaining);
+                            // Recalculate break slots
+                            const breakSet = new Set();
+                            remaining.forEach(br => {
+                              if (br._source === "working_breaks") {
+                                const bi = TIME_SLOTS.indexOf((br.break_start || "").slice(0, 5));
+                                const ei = TIME_SLOTS.indexOf((br.break_end || "").slice(0, 5));
+                                if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
+                              } else if (br.fullDay) {
+                                workingRange.forEach(s => breakSet.add(s));
+                              } else {
+                                const bi = TIME_SLOTS.indexOf((br.break_start || "").slice(0, 5));
+                                const ei = TIME_SLOTS.indexOf((br.break_end || "").slice(0, 5));
+                                if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
+                              }
+                            });
+                            setBreakSlots([...breakSet]);
+                          }}
+                          className="text-xs px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition"
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                    {b._source === "working_breaks" && (
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-gray-200 text-gray-500 font-medium">
+                        Recurring
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
@@ -3266,6 +3411,49 @@ export default function Schedule() {
             } else {
               setDayActionDate(null);
             }
+          }}
+        />
+      )}
+
+      {/* Edit Time Block Modal */}
+      {editingBlock && (
+        <EditTimeBlockModal
+          block={editingBlock}
+          onClose={() => setEditingBlock(null)}
+          onSave={async (id, start, end, note) => {
+            const { error } = await supabase
+              .from("vacation_days")
+              .update({ start_time: start, end_time: end, reason: note || null })
+              .eq("id", id);
+            if (error) {
+              alert("Could not update time block: " + error.message);
+              return;
+            }
+            const fullDay = !start || !end;
+            const updated = dayBreaks.map(b =>
+              b.id === id
+                ? { ...b, start_time: start, end_time: end, break_start: start, break_end: end, reason: note, label: note, fullDay }
+                : b
+            );
+            setDayBreaks(updated);
+
+            // Recalculate break slots
+            const breakSet = new Set();
+            updated.forEach(br => {
+              if (br._source === "working_breaks") {
+                const bi = TIME_SLOTS.indexOf((br.break_start || "").slice(0, 5));
+                const ei = TIME_SLOTS.indexOf((br.break_end || "").slice(0, 5));
+                if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
+              } else if (br.fullDay) {
+                workingRange.forEach(s => breakSet.add(s));
+              } else {
+                const bi = TIME_SLOTS.indexOf((br.break_start || "").slice(0, 5));
+                const ei = TIME_SLOTS.indexOf((br.break_end || "").slice(0, 5));
+                if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
+              }
+            });
+            setBreakSlots([...breakSet]);
+            setEditingBlock(null);
           }}
         />
       )}
