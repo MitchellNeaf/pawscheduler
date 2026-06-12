@@ -1766,8 +1766,26 @@ export default function Schedule() {
       if (!hours) {
         const apptsWithShots = await attachShotRecords(appts || []);
         setWorkingRange([]);
-        setBreakSlots([]);
-        setDayBreaks([]);
+
+        // Still process date-specific time blocks even with no working hours set
+        const breakSet = new Set();
+        const vacationBreaks = (vacDays || []).map(v => ({
+          ...v,
+          break_start: v.start_time,
+          break_end: v.end_time,
+          label: v.reason,
+          fullDay: !v.start_time || !v.end_time,
+          _source: "vacation_days",
+        }));
+        vacationBreaks.forEach(v => {
+          if (v.fullDay) return; // no working range to mark
+          const bi = TIME_SLOTS.indexOf((v.break_start || "").slice(0, 5));
+          const ei = TIME_SLOTS.indexOf((v.break_end || "").slice(0, 5));
+          if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
+        });
+        setBreakSlots([...breakSet]);
+        setDayBreaks(vacationBreaks);
+
         setAppointments(apptsWithShots);
         setLoading(false);
         return;
