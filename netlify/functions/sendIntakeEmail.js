@@ -64,7 +64,7 @@ exports.handler = async (event) => {
   const groomerName = groomer.business_name || groomer.full_name || "Your groomer";
   const firstName   = client.full_name.split(" ")[0];
   const siteUrl     = process.env.URL || "https://app.pawscheduler.app";
-  const intakeUrl   = `${siteUrl}/intake/${groomer.slug}`;
+  const intakeUrl   = `${siteUrl}/intake/${groomer.slug}?cid=${client.id}`;
 
   const res = await fetch(`${siteUrl}/.netlify/functions/sendEmail`, {
     method: "POST",
