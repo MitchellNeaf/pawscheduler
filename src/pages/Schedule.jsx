@@ -644,6 +644,47 @@ function MultiPetAppointmentModal({
             </p>
           )}
 
+          {/* Recurring appointment options */}
+          {newPets.length === 1 && (
+            <div className="rounded-xl border border-[var(--border-med)] bg-[var(--surface)] p-3 space-y-2">
+              <label className="flex items-center gap-2 text-sm font-semibold text-[var(--text-1)] cursor-pointer">
+                <input type="checkbox" checked={!!form.recurring}
+                  onChange={(e) => setForm((p) => ({ ...p, recurring: e.target.checked, recurringFreq: p.recurringFreq || "weekly", recurringEnd: p.recurringEnd || "" }))} />
+                🔁 Make this recurring
+              </label>
+
+              {form.recurring && (
+                <div className="space-y-2 pl-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-[var(--text-2)]">Repeats</span>
+                    <select
+                      value={form.recurringFreq || "weekly"}
+                      onChange={(e) => setForm((p) => ({ ...p, recurringFreq: e.target.value }))}
+                      className="border rounded px-2 py-1 text-sm bg-[var(--bg)] text-[var(--text-1)]"
+                    >
+                      <option value="weekly">Weekly</option>
+                      <option value="biweekly">Every 2 weeks</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm">
+                    <span className="text-[var(--text-2)]">Until</span>
+                    <input
+                      type="date"
+                      value={form.recurringEnd || ""}
+                      onChange={(e) => setForm((p) => ({ ...p, recurringEnd: e.target.value }))}
+                      min={form.date}
+                      className="border rounded px-2 py-1 text-sm bg-[var(--bg)] text-[var(--text-1)]"
+                    />
+                  </label>
+                  <p className="text-[11px] text-[var(--text-3)]">
+                    Creates appointments on this schedule up to 6 months out. If a time slot is already full, that date is skipped — you'll see a summary after saving.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Total summary */}
           {newPets.some(e => e.form.amount) && (
             <div className="flex items-center justify-between px-3 py-2 bg-emerald-50 rounded-xl text-sm">
@@ -1214,7 +1255,6 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
   const [tbStart, setTbStart] = useState("08:00");
   const [tbEnd, setTbEnd] = useState("09:00");
   const [tbNote, setTbNote] = useState("");
-  const [tbFullDay, setTbFullDay] = useState(false);
   const [saving, setSaving] = useState(false);
 
   if (!date) return null;
@@ -1265,27 +1305,18 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
         {mode === "timeblock" && (
           <div className="p-4 space-y-3">
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Block time off on <strong className="text-gray-800 dark:text-gray-200">{label}</strong></p>
-
-            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-              <input type="checkbox" checked={tbFullDay} onChange={(e) => setTbFullDay(e.target.checked)}
-                className="w-4 h-4 accent-blue-600" />
-              All day (no specific time range)
-            </label>
-
-            {!tbFullDay && (
-              <div className="grid grid-cols-2 gap-3">
-                <label className="flex flex-col gap-1 text-sm">
-                  <span className="font-medium text-gray-700 dark:text-gray-300">Start time</span>
-                  <input type="time" value={tbStart} onChange={(e) => setTbStart(e.target.value)}
-                    className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-                </label>
-                <label className="flex flex-col gap-1 text-sm">
-                  <span className="font-medium text-gray-700 dark:text-gray-300">End time</span>
-                  <input type="time" value={tbEnd} onChange={(e) => setTbEnd(e.target.value)}
-                    className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-                </label>
-              </div>
-            )}
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-gray-700 dark:text-gray-300">Start time</span>
+                <input type="time" value={tbStart} onChange={(e) => setTbStart(e.target.value)}
+                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
+              </label>
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="font-medium text-gray-700 dark:text-gray-300">End time</span>
+                <input type="time" value={tbEnd} onChange={(e) => setTbEnd(e.target.value)}
+                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
+              </label>
+            </div>
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-gray-700 dark:text-gray-300">Note (optional)</span>
               <input type="text" value={tbNote} onChange={(e) => setTbNote(e.target.value)}
@@ -1297,13 +1328,13 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                 ← Back
               </button>
-              <button onClick={() => onAddTimeBlock(date, tbFullDay ? null : tbStart, tbFullDay ? null : tbEnd, tbNote, setSaving)}
-                disabled={saving || (!tbFullDay && (!tbStart || !tbEnd || tbEnd <= tbStart))}
+              <button onClick={() => onAddTimeBlock(date, tbStart, tbEnd, tbNote, setSaving)}
+                disabled={saving || !tbStart || !tbEnd || tbEnd <= tbStart}
                 className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50">
                 {saving ? "Saving…" : "Save Block"}
               </button>
             </div>
-            {!tbFullDay && tbEnd <= tbStart && <p className="text-xs text-red-500">End time must be after start time.</p>}
+            {tbEnd <= tbStart && <p className="text-xs text-red-500">End time must be after start time.</p>}
           </div>
         )}
       </div>
@@ -1311,80 +1342,8 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
   );
 }
 
-/* ---------------- Edit Time Block Modal ---------------- */
-function EditTimeBlockModal({ block, onClose, onSave }) {
-  const [fullDay, setFullDay] = useState(!!block.fullDay);
-  const [start, setStart] = useState((block.break_start || "").slice(0, 5));
-  const [end, setEnd] = useState((block.break_end || "").slice(0, 5));
-  const [note, setNote] = useState(block.label || block.reason || "");
-  const [saving, setSaving] = useState(false);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="font-bold text-gray-900 dark:text-gray-100">Edit Time Block</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
-        </div>
-        <div className="p-4 space-y-3">
-          <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
-            <input type="checkbox" checked={fullDay} onChange={(e) => setFullDay(e.target.checked)}
-              className="w-4 h-4 accent-blue-600" />
-            All day (no specific time range)
-          </label>
-
-          {!fullDay && (
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Start time</span>
-                <input type="time" value={start} onChange={(e) => setStart(e.target.value)}
-                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-gray-700 dark:text-gray-300">End time</span>
-                <input type="time" value={end} onChange={(e) => setEnd(e.target.value)}
-                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-              </label>
-            </div>
-          )}
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700 dark:text-gray-300">Reason / Note (optional)</span>
-            <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Lunch break, Vet appointment, Off"
-              className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-          </label>
-          {!fullDay && end && start && end <= start && (
-            <p className="text-xs text-red-500">End time must be after start time.</p>
-          )}
-          <div className="flex gap-2 pt-1">
-            <button onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition">
-              Cancel
-            </button>
-            <button
-              disabled={saving || (!fullDay && (!start || !end || end <= start))}
-              onClick={async () => {
-                setSaving(true);
-                if (fullDay) {
-                  await onSave(block.id, null, null, note);
-                } else {
-                  await onSave(block.id, start, end, note);
-                }
-                setSaving(false);
-              }}
-              className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50">
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------- Month View Component ---------------- */
-function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffset, refreshKey }) {
+function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffset }) {
   const [monthAppts, setMonthAppts] = useState([]);
   const [loadingMonth, setLoadingMonth] = useState(false);
   const [vacationDays, setVacationDays] = useState([]);
@@ -1414,7 +1373,7 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
       setVacationDays(vacs || []);
       setLoadingMonth(false);
     });
-  }, [userId, monthStart, monthEnd, refreshKey]);
+  }, [userId, monthStart, monthEnd]);
 
   const firstWeekday = new Date(year, month, 1).getDay();
   const totalCells = firstWeekday + lastDay;
@@ -1519,20 +1478,10 @@ export default function Schedule() {
   const [search, setSearch] = useState("");
   const [user, setUser] = useState(null);
 
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const saved = sessionStorage.getItem("ps_selected_date");
-    return saved || toYMD(new Date());
-  });
-
-  // Keep sessionStorage in sync with selectedDate
-  useEffect(() => {
-    sessionStorage.setItem("ps_selected_date", selectedDate);
-  }, [selectedDate]);
+  const [selectedDate, setSelectedDate] = useState(() => toYMD(new Date()));
   const [workingRange, setWorkingRange] = useState([]);
   const [breakSlots, setBreakSlots] = useState([]);
   const [dayBreaks, setDayBreaks] = useState([]);
-  const [editingBlock, setEditingBlock] = useState(null);
-  const [monthRefreshKey, setMonthRefreshKey] = useState(0);
   const [capacity, setCapacity] = useState(1);
   const [viewMode, setViewMode] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "list" : "grid"
@@ -1681,7 +1630,6 @@ export default function Schedule() {
         { data: hours },
         { data: breaks },
         { data: appts },
-        { data: vacDays },
       ] = await Promise.all([
         supabase
           .from("groomers")
@@ -1725,11 +1673,6 @@ export default function Schedule() {
           .eq("groomer_id", user.id)
           .eq("date", selectedDate)
           .order("time", { ascending: true }),
-        supabase
-          .from("vacation_days")
-          .select("id, date, start_time, end_time, reason")
-          .eq("groomer_id", user.id)
-          .eq("date", selectedDate),
       ]);
 
       setCapacity(groomer?.max_parallel || 1);
@@ -1766,26 +1709,8 @@ export default function Schedule() {
       if (!hours) {
         const apptsWithShots = await attachShotRecords(appts || []);
         setWorkingRange([]);
-
-        // Still process date-specific time blocks even with no working hours set
-        const breakSet = new Set();
-        const vacationBreaks = (vacDays || []).map(v => ({
-          ...v,
-          break_start: v.start_time,
-          break_end: v.end_time,
-          label: v.reason,
-          fullDay: !v.start_time || !v.end_time,
-          _source: "vacation_days",
-        }));
-        vacationBreaks.forEach(v => {
-          if (v.fullDay) return; // no working range to mark
-          const bi = TIME_SLOTS.indexOf((v.break_start || "").slice(0, 5));
-          const ei = TIME_SLOTS.indexOf((v.break_end || "").slice(0, 5));
-          if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
-        });
-        setBreakSlots([...breakSet]);
-        setDayBreaks(vacationBreaks);
-
+        setBreakSlots([]);
+        setDayBreaks([]);
         setAppointments(apptsWithShots);
         setLoading(false);
         return;
@@ -1806,35 +1731,8 @@ export default function Schedule() {
         if (bi === -1 || ei === -1) return;
         TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakSet.add(s));
       });
-
-      // Merge vacation_days (date-specific blocks) into the break set too
-      (vacDays || []).forEach((v) => {
-        if (!v.start_time || !v.end_time) {
-          // Full-day block — mark entire working range as blocked
-          range.forEach((s) => breakSet.add(s));
-          return;
-        }
-        const bi = TIME_SLOTS.indexOf(v.start_time.slice(0, 5));
-        const ei = TIME_SLOTS.indexOf(v.end_time.slice(0, 5));
-        if (bi === -1 || ei === -1) return;
-        TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakSet.add(s));
-      });
-
       setBreakSlots([...breakSet]);
-
-      // Normalize both sources into dayBreaks for display/edit
-      const workingBreaks = (breaks || []).map(b => ({ ...b, _source: "working_breaks" }));
-      const vacationBreaks = (vacDays || []).map(v => ({
-        ...v,
-        break_start: v.start_time,
-        break_end: v.end_time,
-        label: v.reason,
-        fullDay: !v.start_time || !v.end_time,
-        _source: "vacation_days",
-      }));
-      setDayBreaks([...workingBreaks, ...vacationBreaks]);
-
-      const apptsWithShots = await attachShotRecords(appts || []);
+      setDayBreaks(breaks || []);
       setAppointments(apptsWithShots);
       setLoading(false);
     };
@@ -1862,9 +1760,6 @@ export default function Schedule() {
           console.error("Delete error:", error.message);
           return;
         }
-
-        // Remove from local state immediately — no reload needed
-        setAppointments((prev) => prev.filter((a) => a.id !== id));
       },
     });
   };
@@ -1964,6 +1859,176 @@ export default function Schedule() {
     setNewModalOpen(true);
   };
 
+  /* Generate and save a recurring appointment series */
+  const handleSaveRecurring = async () => {
+    if (!user || !newPets.length) return;
+    const { pet, form } = newPets[0];
+    if (!newForm.date || !newForm.time || !newForm.recurringEnd) return;
+
+    setSavingNew(true);
+
+    // ── Free tier check — recurring not allowed ──
+    if (planTier === "free") {
+      setSavingNew(false);
+      setConfirmConfig({
+        title: "Recurring appointments require Basic or higher",
+        message: "Upgrade to Basic or higher to set up recurring appointments.",
+        confirmLabel: "Upgrade",
+        cancelLabel: "Not now",
+        onConfirm: () => { window.location.href = "/upgrade"; },
+      });
+      return;
+    }
+
+    // Build candidate dates
+    const freq = newForm.recurringFreq || "weekly";
+    const [sy, sm, sd] = newForm.date.split("-").map(Number);
+    const startDate = new Date(sy, sm - 1, sd);
+    const [ey, em, ed] = newForm.recurringEnd.split("-").map(Number);
+    const endDate = new Date(ey, em - 1, ed);
+
+    // Cap at 6 months out regardless of chosen end date
+    const maxDate = new Date(startDate);
+    maxDate.setMonth(maxDate.getMonth() + 6);
+    const effectiveEnd = endDate > maxDate ? maxDate : endDate;
+
+    const dates = [];
+    let cursor = new Date(startDate);
+    let safety = 0;
+    while (cursor <= effectiveEnd && safety < 200) {
+      dates.push(toYMD(cursor));
+      if (freq === "weekly") cursor.setDate(cursor.getDate() + 7);
+      else if (freq === "biweekly") cursor.setDate(cursor.getDate() + 14);
+      else if (freq === "monthly") cursor.setMonth(cursor.getMonth() + 1);
+      safety++;
+    }
+
+    if (dates.length === 0) {
+      setSavingNew(false);
+      return;
+    }
+
+    const groupId = crypto.randomUUID();
+    const slotWeight = pet.slot_weight || 1;
+    const [th, tm] = newForm.time.split(":").map(Number);
+    const startMinutes = th * 60 + tm;
+    const durationMin = form.duration_min || 30;
+    const endMinutes = startMinutes + durationMin;
+
+    // Check existing appointments for all candidate dates in one query
+    const { data: existingAppts } = await supabase
+      .from("appointments")
+      .select("date, time, duration_min, slot_weight")
+      .eq("groomer_id", user.id)
+      .in("date", dates)
+      .or("no_show.is.null,no_show.eq.false");
+
+    const created = [];
+    const skipped = [];
+
+    for (const date of dates) {
+      // Check capacity for this date/time
+      const sameDay = (existingAppts || []).filter(a => a.date === date);
+      let overlapWeight = 0;
+      for (const a of sameDay) {
+        const [ah, am] = (a.time || "00:00").slice(0, 5).split(":").map(Number);
+        const aStart = ah * 60 + am;
+        const aEnd = aStart + (a.duration_min || 30);
+        // Check overlap
+        if (aStart < endMinutes && aEnd > startMinutes) {
+          overlapWeight += (a.slot_weight || 1);
+        }
+      }
+
+      if (overlapWeight + slotWeight > capacity) {
+        skipped.push(date);
+        continue;
+      }
+
+      created.push({
+        groomer_id: user.id,
+        pet_id: pet.id,
+        date,
+        time: newForm.time,
+        duration_min: durationMin,
+        services: form.services,
+        notes: newForm.notes,
+        slot_weight: slotWeight,
+        reminder_enabled: planTier !== "free" && newForm.reminder_enabled,
+        reminder_sent: false,
+        amount: form.amount ?? null,
+        recurring_group_id: groupId,
+      });
+    }
+
+    if (created.length === 0) {
+      setSavingNew(false);
+      setConfirmConfig({
+        title: "No appointments created",
+        message: "Every date in this series already has a full slot at that time. Try a different time or adjust the schedule manually.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+      return;
+    }
+
+    const { data: savedAppts, error } = await supabase
+      .from("appointments")
+      .insert(created)
+      .select(`
+        id, pet_id, groomer_id, date, time, duration_min, slot_weight,
+        services, notes, confirmed, no_show, paid, amount, reminder_enabled,
+        recurring_group_id,
+        pets (
+          id, name, tags, client_id, photo_url,
+          clients ( id, full_name, phone, email )
+        )
+      `);
+
+    setSavingNew(false);
+
+    if (error) {
+      setConfirmConfig({
+        title: "Could not save recurring appointments",
+        message: error.message || "Something went wrong. Please try again.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+      return;
+    }
+
+    // Add today's appointment to local state if it's part of this series
+    const todaysAppt = (savedAppts || []).find(a => a.date === selectedDate);
+    if (todaysAppt) {
+      const withShots = await attachShotRecords([todaysAppt]);
+      setAppointments((prev) =>
+        [...prev, ...withShots].sort((a, b) => (a.time || "").localeCompare(b.time || ""))
+      );
+    }
+
+    setNewModalOpen(false);
+    setNewPets([]);
+    setModalSlot(null);
+
+    // Summary
+    const fmtDateShort = (d) => {
+      const [y, m, dd] = d.split("-").map(Number);
+      return new Date(y, m - 1, dd).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    };
+
+    let message = `Created ${created.length} appointment${created.length === 1 ? "" : "s"}.`;
+    if (skipped.length > 0) {
+      message += ` Skipped ${skipped.length} date${skipped.length === 1 ? "" : "s"} (slot already full): ${skipped.map(fmtDateShort).join(", ")}.`;
+    }
+
+    setConfirmConfig({
+      title: "Recurring appointments created",
+      message,
+      confirmLabel: "OK",
+      onConfirm: () => {},
+    });
+  };
+
   /* Save new appointment(s) — supports multiple pets with shared group_id */
   const handleSaveNew = async () => {
     if (!user || !newPets.length) return;
@@ -2011,6 +2076,13 @@ export default function Schedule() {
     }
 
     // Generate a shared group_id for multi-pet appointments
+    // ── Recurring appointment generation ────────────────────
+    if (newForm.recurring && newForm.recurringEnd && newPets.length === 1) {
+      setSavingNew(false);
+      await handleSaveRecurring();
+      return;
+    }
+
     const groupId = newPets.length > 1
       ? crypto.randomUUID()
       : null;
@@ -2849,7 +2921,6 @@ export default function Schedule() {
               monthOffset={monthOffset}
               setMonthOffset={setMonthOffset}
               onDayClick={(dateStr) => setDayActionDate(dateStr)}
-              refreshKey={monthRefreshKey}
             />
           </div>
         </div>
@@ -2867,61 +2938,19 @@ export default function Schedule() {
               return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
             };
             return (
-              <div key={b.id} className="card border-l-4 border-l-gray-400 bg-gray-50">
+              <div key={b.id} className="card border-l-4 border-l-gray-400 bg-gray-50 opacity-80">
                 <div className="card-body py-3 flex items-center justify-between gap-3">
-                  <div className="min-w-0">
+                  <div>
                     <div className="text-sm font-semibold text-gray-600">
-                      🚫 {b.label || b.reason || "Time Block"}
+                      🚫 {b.label || "Time Block"}
                     </div>
                     <div className="text-xs text-gray-500 mt-0.5">
-                      {b.fullDay ? "All Day" : `${fmt(b.break_start)} – ${fmt(b.break_end)}`}
+                      {fmt(b.break_start)} – {fmt(b.break_end)}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    {b._source === "vacation_days" && (
-                      <>
-                        <button
-                          onClick={() => setEditingBlock(b)}
-                          className="text-xs px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 transition"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={async () => {
-                            if (!window.confirm("Delete this time block?")) return;
-                            await supabase.from("vacation_days").delete().eq("id", b.id);
-                            const remaining = dayBreaks.filter(x => x.id !== b.id);
-                            setDayBreaks(remaining);
-                            // Recalculate break slots
-                            const breakSet = new Set();
-                            remaining.forEach(br => {
-                              if (br._source === "working_breaks") {
-                                const bi = TIME_SLOTS.indexOf((br.break_start || "").slice(0, 5));
-                                const ei = TIME_SLOTS.indexOf((br.break_end || "").slice(0, 5));
-                                if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
-                              } else if (br.fullDay) {
-                                workingRange.forEach(s => breakSet.add(s));
-                              } else {
-                                const bi = TIME_SLOTS.indexOf((br.break_start || "").slice(0, 5));
-                                const ei = TIME_SLOTS.indexOf((br.break_end || "").slice(0, 5));
-                                if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
-                              }
-                            });
-                            setBreakSlots([...breakSet]);
-                            setMonthRefreshKey(k => k + 1);
-                          }}
-                          className="text-xs px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition"
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
-                    {b._source === "working_breaks" && (
-                      <span className="text-xs px-2.5 py-1 rounded-full bg-gray-200 text-gray-500 font-medium">
-                        Recurring
-                      </span>
-                    )}
-                  </div>
+                  <span className="text-xs px-2.5 py-1 rounded-full bg-gray-200 text-gray-600 font-medium">
+                    Blocked
+                  </span>
                 </div>
               </div>
             );
@@ -3430,86 +3459,18 @@ export default function Schedule() {
           onAddTimeBlock={async (date, start, end, note, setSaving) => {
             if (!user) return;
             setSaving(true);
-            const { data, error } = await supabase.from("vacation_days").insert([{
+            const { error } = await supabase.from("vacation_days").insert([{
               groomer_id: user.id,
               date,
               start_time: start || null,
               end_time: end || null,
-              reason: note || null,
-            }]).select().single();
+            }]);
             setSaving(false);
             if (error) {
               alert("Could not save time block: " + error.message);
             } else {
               setDayActionDate(null);
-              setMonthRefreshKey(k => k + 1);
-              // If the block was added for the currently selected day, refresh dayBreaks
-              if (date === selectedDate && data) {
-                const fullDay = !data.start_time || !data.end_time;
-                const newBlock = {
-                  ...data,
-                  break_start: data.start_time,
-                  break_end: data.end_time,
-                  label: data.reason,
-                  fullDay,
-                  _source: "vacation_days",
-                };
-                setDayBreaks(prev => [...prev, newBlock]);
-                if (fullDay) {
-                  setBreakSlots(prev => [...new Set([...prev, ...workingRange])]);
-                } else {
-                  const bi = TIME_SLOTS.indexOf((data.start_time || "").slice(0, 5));
-                  const ei = TIME_SLOTS.indexOf((data.end_time || "").slice(0, 5));
-                  if (bi !== -1 && ei !== -1) {
-                    setBreakSlots(prev => [...new Set([...prev, ...TIME_SLOTS.slice(bi, ei + 1)])]);
-                  }
-                }
-              }
             }
-          }}
-        />
-      )}
-
-      {/* Edit Time Block Modal */}
-      {editingBlock && (
-        <EditTimeBlockModal
-          block={editingBlock}
-          onClose={() => setEditingBlock(null)}
-          onSave={async (id, start, end, note) => {
-            const { error } = await supabase
-              .from("vacation_days")
-              .update({ start_time: start, end_time: end, reason: note || null })
-              .eq("id", id);
-            if (error) {
-              alert("Could not update time block: " + error.message);
-              return;
-            }
-            const fullDay = !start || !end;
-            const updated = dayBreaks.map(b =>
-              b.id === id
-                ? { ...b, start_time: start, end_time: end, break_start: start, break_end: end, reason: note, label: note, fullDay }
-                : b
-            );
-            setDayBreaks(updated);
-
-            // Recalculate break slots
-            const breakSet = new Set();
-            updated.forEach(br => {
-              if (br._source === "working_breaks") {
-                const bi = TIME_SLOTS.indexOf((br.break_start || "").slice(0, 5));
-                const ei = TIME_SLOTS.indexOf((br.break_end || "").slice(0, 5));
-                if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
-              } else if (br.fullDay) {
-                workingRange.forEach(s => breakSet.add(s));
-              } else {
-                const bi = TIME_SLOTS.indexOf((br.break_start || "").slice(0, 5));
-                const ei = TIME_SLOTS.indexOf((br.break_end || "").slice(0, 5));
-                if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
-              }
-            });
-            setBreakSlots([...breakSet]);
-            setEditingBlock(null);
-            setMonthRefreshKey(k => k + 1);
           }}
         />
       )}
