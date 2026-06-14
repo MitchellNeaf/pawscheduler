@@ -425,12 +425,21 @@ function MultiPetAppointmentModal({
       const serviceAmt = calcAmount(newServices, slotWeight, pricing, addonOptions);
       const addonAmt   = calcFlatItems(newServices, addonOptions);
       const feeAmt     = calcFlatItems(newServices, feeOptions);
+
+      // Auto-calculate duration from service durations
+      const totalDuration = newServices.reduce((sum, name) => {
+        const svcDef = [...(serviceOptions || [])].find(s => (typeof s === "string" ? s : s.name) === name);
+        return sum + (svcDef?.duration_min || 0);
+      }, 0);
+
       return {
         ...entry,
         form: {
           ...entry.form,
           services: newServices,
           amount: serviceAmt + addonAmt + feeAmt,
+          // Only auto-set duration if we have service durations configured
+          ...(totalDuration > 0 ? { duration_min: Math.min(totalDuration, 480) } : {}),
         },
       };
     }));
@@ -529,12 +538,23 @@ function MultiPetAppointmentModal({
                   {/* Duration + Amount */}
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <label className="flex flex-col gap-1">
-                      <span className="font-medium text-gray-700">Duration</span>
+                      <span className="font-medium text-gray-700">
+                        Duration
+                        {(() => {
+                          const total = petForm.services?.reduce((sum, name) => {
+                            const svcDef = [...(serviceOptions || [])].find(s => (typeof s === "string" ? s : s.name) === name);
+                            return sum + (svcDef?.duration_min || 0);
+                          }, 0);
+                          return total > 0 ? <span className="ml-1 text-xs text-emerald-600 font-normal">⚡ auto</span> : null;
+                        })()}
+                      </span>
                       <select value={petForm.duration_min}
                         onChange={(e) => updatePetForm(pet.id, "duration_min", Number(e.target.value))}
                         className="border rounded px-2 py-1">
-                        {[15, 30, 45, 60, 90, 120].map((m) => (
-                          <option key={m} value={m}>{m} min</option>
+                        {[15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 420, 480].map((m) => (
+                          <option key={m} value={m}>
+                            {m < 60 ? `${m} min` : `${Math.floor(m/60)}h${m%60 ? ` ${m%60}m` : ""}`}
+                          </option>
                         ))}
                       </select>
                     </label>
@@ -874,8 +894,8 @@ function AppointmentModal({
             <span className="font-medium text-gray-700">Duration</span>
             <select value={form.duration_min} onChange={handleChange("duration_min")}
               className="border rounded px-2 py-1">
-              {[15, 30, 45, 60, 90, 120].map((m) => (
-                <option key={m} value={m}>{m} min</option>
+              {[15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 420, 480].map((m) => (
+                <option key={m} value={m}>{m < 60 ? `${m} min` : `${Math.floor(m/60)}h${m%60 ? ` ${m%60}m` : ""}`}</option>
               ))}
             </select>
           </label>
