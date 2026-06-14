@@ -569,14 +569,17 @@ function MultiPetAppointmentModal({
                     <div className="text-sm">
                       <div className="font-medium text-gray-700 mb-1">Services</div>
                       <div className="grid grid-cols-2 gap-1">
-                        {serviceOptions.map((svc) => (
-                          <label key={svc} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                            <input type="checkbox"
-                              checked={petForm.services.includes(svc)}
-                              onChange={() => togglePetService(pet.id, svc)} />
-                            {svc}
-                          </label>
-                        ))}
+                        {serviceOptions.map((svc) => {
+                          const svcName = typeof svc === "string" ? svc : svc.name;
+                          return (
+                            <label key={svcName} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                              <input type="checkbox"
+                                checked={petForm.services.includes(svcName)}
+                                onChange={() => togglePetService(pet.id, svcName)} />
+                              {svcName}
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -876,13 +879,16 @@ function AppointmentModal({
             <div className="text-sm">
               <div className="font-medium text-gray-700 mb-1">Services</div>
               <div className="grid grid-cols-2 gap-1">
-                {serviceOptions.map((svc) => (
-                  <label key={svc} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
-                    <input type="checkbox" checked={form.services.includes(svc)}
-                      onChange={() => toggleService(svc)} />
-                    {svc}
-                  </label>
-                ))}
+                {serviceOptions.map((svc) => {
+                  const svcName = typeof svc === "string" ? svc : svc.name;
+                  return (
+                    <label key={svcName} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+                      <input type="checkbox" checked={form.services.includes(svcName)}
+                        onChange={() => toggleService(svcName)} />
+                      {svcName}
+                    </label>
+                  );
+                })}
               </div>
             </div>
 
