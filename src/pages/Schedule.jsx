@@ -537,26 +537,24 @@ function MultiPetAppointmentModal({
                   {/* Duration + Amount */}
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <label className="flex flex-col gap-1">
-                      <span className="font-medium text-gray-700">Duration</span>
-                      <label className="flex flex-col gap-1">
-                        <span className="font-medium text-gray-700">
-                          Duration
-                          {(() => {
-                            const total = petForm.services?.reduce((sum, name) => {
-                              const svcDef = (serviceOptions || []).find(s => (typeof s === "string" ? s : s.name) === name);
-                              return sum + (svcDef?.duration_min || 0);
-                            }, 0);
-                            return total > 0 ? <span className="ml-1 text-xs text-emerald-600 font-normal">⚡ auto</span> : null;
-                          })()}
-                        </span>
-                        <select value={petForm.duration_min}
-                          onChange={(e) => updatePetForm(pet.id, "duration_min", Number(e.target.value))}
-                          className="border rounded px-2 py-1">
-                          {[15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 420, 480].map((m) => (
-                            <option key={m} value={m}>{m < 60 ? `${m} min` : `${Math.floor(m/60)}h${m%60 ? ` ${m%60}m` : ""}`}</option>
-                          ))}
-                        </select>
-                      </label>
+                      <span className="font-medium text-gray-700">
+                        Duration
+                        {(() => {
+                          const total = petForm.services?.reduce((sum, name) => {
+                            const svcDef = (serviceOptions || []).find(s => (typeof s === "string" ? s : s.name) === name);
+                            return sum + (svcDef?.duration_min || 0);
+                          }, 0);
+                          return total > 0 ? <span className="ml-1 text-xs text-emerald-600 font-normal">⚡ auto</span> : null;
+                        })()}
+                      </span>
+                      <select value={petForm.duration_min}
+                        onChange={(e) => updatePetForm(pet.id, "duration_min", Number(e.target.value))}
+                        className="border rounded px-2 py-1">
+                        {[15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 420, 480].map((m) => (
+                          <option key={m} value={m}>{m < 60 ? `${m} min` : `${Math.floor(m/60)}h${m%60 ? ` ${m%60}m` : ""}`}</option>
+                        ))}
+                      </select>
+                    </label>
                     <label className="flex flex-col gap-1">
                       <span className="font-medium text-gray-700">Amount ($)</span>
                       <input type="number" min="0" step="1"
