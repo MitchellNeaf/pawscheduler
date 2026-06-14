@@ -117,6 +117,7 @@ export default function Profile() {
 
         // Load waiver text
         setWaiverText(data.waiver_text || "");
+        setBrandColor(data.brand_color || "forest");
 
         // Load service pricing — merge with defaults so new services always have a price
         // (custom_services handles the editor, this is legacy support)
@@ -371,6 +372,7 @@ export default function Profile() {
   const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
   const [customIntakeQuestions, setCustomIntakeQuestions] = useState(null);
   const [waiverText, setWaiverText] = useState("");
+  const [brandColor, setBrandColor] = useState("forest");
   const [savingIntake, setSavingIntake] = useState(false);
 
   // ---------------- BILLING PORTAL ----------------
