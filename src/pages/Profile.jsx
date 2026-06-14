@@ -117,6 +117,7 @@ export default function Profile() {
 
         // Load waiver text
         setWaiverText(data.waiver_text || "");
+        setBrandColor(data.brand_color || "forest");
 
         // Load service pricing — merge with defaults so new services always have a price
         // (custom_services handles the editor, this is legacy support)
@@ -289,6 +290,8 @@ export default function Profile() {
         sms_confirmation_template: confirmationTemplate.trim() || null,
         reminder_rules: reminderRules.length ? reminderRules : [48],
         custom_services: customServices,
+        brand_color: brandColor || "forest",
+        waiver_text: waiverText.trim() || null,
       })
       .eq("id", user.id);
 
@@ -369,6 +372,7 @@ export default function Profile() {
   const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
   const [customIntakeQuestions, setCustomIntakeQuestions] = useState(null);
   const [waiverText, setWaiverText] = useState("");
+  const [brandColor, setBrandColor] = useState("forest");
   const [savingIntake, setSavingIntake] = useState(false);
 
   // ---------------- BILLING PORTAL ----------------
@@ -428,11 +432,14 @@ export default function Profile() {
   };
 
   const TABS = [
-    { id: "profile",  emoji: "👤", label: "Profile"  },
-    { id: "schedule", emoji: "🗓", label: "Schedule" },
-    { id: "pricing",  emoji: "💲", label: "Pricing"  },
-    { id: "intake",   emoji: "📋", label: (planTier === "growth" || planTier === "pro") ? "Intake" : "Intake 🔒" },
-    { id: "smsbot",   emoji: "💬", label: planTier === "pro" ? "SMS Bot" : "SMS Bot 🔒" },
+    { id: "profile",   emoji: "👤", label: "Profile"  },
+    { id: "booking",   emoji: "🎨", label: "Booking Page" },
+    { id: "schedule",  emoji: "🗓", label: "Schedule" },
+    { id: "pricing",   emoji: "💲", label: "Pricing"  },
+    { id: "reminders", emoji: "🔔", label: (planTier === "basic" || planTier === "growth" || planTier === "pro") ? "Reminders" : "Reminders 🔒" },
+    { id: "payments",  emoji: "💳", label: planTier === "pro" ? "Payments" : "Payments 🔒" },
+    { id: "intake",    emoji: "📋", label: (planTier === "growth" || planTier === "pro") ? "Intake" : "Intake 🔒" },
+    { id: "smsbot",    emoji: "💬", label: planTier === "pro" ? "SMS Bot" : "SMS Bot 🔒" },
   ];
 
   const handleConnectStripe = async () => {
@@ -466,14 +473,14 @@ export default function Profile() {
       <SubscriptionStatus userId={user?.id} onManageBilling={handleManageBilling} />
 
       {/* TAB BAR */}
-      <div className="flex mt-4 mb-6 border-b border-[var(--border-med)]">
+      <div className="flex mt-4 mb-6 border-b border-[var(--border-med)] overflow-x-auto no-scrollbar">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => setActiveTab(tab.id)}
-            style={{ flex: 1 }}
-            className={`py-2.5 text-xs font-semibold transition-colors text-center border-b-2
+            style={{ minWidth: 76, flexShrink: 0 }}
+            className={`py-2.5 px-1 text-xs font-semibold transition-colors text-center border-b-2 whitespace-nowrap
               ${activeTab === tab.id
                 ? "border-emerald-500 text-emerald-700"
                 : "border-transparent text-[var(--text-3)] hover:text-[var(--text-2)]"
@@ -541,6 +548,142 @@ export default function Profile() {
             </div>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium mb-1">Public Booking Slug</label>
+            <div className="flex gap-2">
+              <input
+                value={slug}
+                onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, ""))}
+                className="border rounded p-2 flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const link = `https://app.pawscheduler.app/book/${slug}`;
+                  navigator.clipboard.writeText(link).then(() => {
+                    setCopyMsg("Copied!");
+                    setTimeout(() => setCopyMsg(""), 2000);
+                  });
+                }}
+                className="px-3 py-2 rounded border border-emerald-300 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 transition whitespace-nowrap"
+              >
+                {copyMsg || "Copy Link"}
+              </button>
+            </div>
+            {slug && (
+              <p className="text-xs text-[var(--text-3)] mt-1 break-all">
+                app.pawscheduler.app/book/{slug}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Time Zone</label>
+            <select value={timeZone} onChange={(e) => setTimeZone(e.target.value)} className="border rounded w-full p-2">
+              {TIMEZONE_OPTIONS.map((tz) => (
+                <option key={tz.value} value={tz.value}>{tz.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-[var(--text-3)] mt-1">Controls booking times and "tomorrow" SMS reminders.</p>
+          </div>
+
+          <button onClick={saveProfile} disabled={saving} className="btn-primary w-full mt-2">
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      )}
+
+      {/* ── BOOKING PAGE TAB ── */}
+      {activeTab === "booking" && (
+        <div className="space-y-4">
+
+          <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4">
+            <h3 className="font-bold text-[var(--text-1)] text-sm mb-1">Your Booking Page</h3>
+            <p className="text-xs text-[var(--text-3)] mb-2">
+              Share this link with clients so they can book appointments online.
+            </p>
+            <div className="flex gap-2">
+              <input
+                readOnly
+                value={slug ? `app.pawscheduler.app/book/${slug}` : "Set your slug in the Profile tab first"}
+                className="border rounded p-2 flex-1 text-sm bg-[var(--surface-2)] text-[var(--text-2)]"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const link = `https://app.pawscheduler.app/book/${slug}`;
+                  navigator.clipboard.writeText(link).then(() => {
+                    setCopyMsg("Copied!");
+                    setTimeout(() => setCopyMsg(""), 2000);
+                  });
+                }}
+                disabled={!slug}
+                className="px-3 py-2 rounded border border-emerald-300 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 transition whitespace-nowrap disabled:opacity-40"
+              >
+                {copyMsg || "Copy Link"}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Booking Page Theme</label>
+            <p className="text-xs text-gray-400 mb-3">Choose the look of your public booking page.</p>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { key: "forest",   label: "Forest",   grad: "linear-gradient(135deg, #059669 0%, #10b981 100%)" },
+                { key: "ocean",    label: "Ocean",    grad: "linear-gradient(135deg, #0369a1 0%, #0ea5e9 100%)" },
+                { key: "lavender", label: "Lavender", grad: "linear-gradient(135deg, #6d28d9 0%, #a78bfa 100%)" },
+                { key: "rose",     label: "Rose",     grad: "linear-gradient(135deg, #be185d 0%, #f472b6 100%)" },
+                { key: "sunrise",  label: "Sunrise",  grad: "linear-gradient(135deg, #ea580c 0%, #fbbf24 100%)" },
+                { key: "slate",    label: "Slate",    grad: "linear-gradient(135deg, #1e293b 0%, #475569 100%)" },
+                { key: "blush",    label: "Blush",    grad: "linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)" },
+                { key: "mint",     label: "Mint",     grad: "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)" },
+              ].map(theme => (
+                <button
+                  key={theme.key}
+                  type="button"
+                  onClick={() => setBrandColor(theme.key)}
+                  className={`relative rounded-xl overflow-hidden border-2 transition ${
+                    brandColor === theme.key
+                      ? "border-emerald-500 ring-2 ring-emerald-300"
+                      : "border-transparent hover:border-gray-300"
+                  }`}
+                >
+                  <div style={{ background: theme.grad, height: 52 }} />
+                  <div className="py-1.5 px-2 bg-white text-center">
+                    <span className="text-xs font-semibold text-gray-700">{theme.label}</span>
+                  </div>
+                  {brandColor === theme.key && (
+                    <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-xs font-bold">✓</span>
+                    </div>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Waiver Intro Text</label>
+            <textarea
+              value={waiverText}
+              onChange={(e) => setWaiverText(e.target.value)}
+              rows={4}
+              placeholder="Optional — add a personal note before your standard grooming waiver (e.g. cancellation policy, late fees, etc.)"
+              className="border rounded w-full p-2 text-sm resize-none"
+            />
+            <p className="text-xs text-gray-400 mt-1">Shown at the top of your waiver, before the standard sections.</p>
+          </div>
+
+          <button onClick={saveProfile} disabled={saving} className="btn-primary w-full mt-2">
+            {saving ? "Saving…" : "Save Changes"}
+          </button>
+        </div>
+      )}
+
+      {/* ── REMINDERS TAB ── */}
+      {activeTab === "reminders" && (
+        <div className="space-y-4">
           {/* ── SMS REMINDERS & CONFIRMATIONS — Basic+ ── */}
           {(planTier === "basic" || planTier === "growth" || planTier === "pro") ? (
           <>
@@ -714,45 +857,6 @@ export default function Profile() {
               </a>
             </div>
           )}
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Public Booking Slug</label>
-            <div className="flex gap-2">
-              <input
-                value={slug}
-                onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, ""))}
-                className="border rounded p-2 flex-1"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  const link = `https://app.pawscheduler.app/book/${slug}`;
-                  navigator.clipboard.writeText(link).then(() => {
-                    setCopyMsg("Copied!");
-                    setTimeout(() => setCopyMsg(""), 2000);
-                  });
-                }}
-                className="px-3 py-2 rounded border border-emerald-300 bg-emerald-50 text-emerald-700 text-sm font-semibold hover:bg-emerald-100 transition whitespace-nowrap"
-              >
-                {copyMsg || "Copy Link"}
-              </button>
-            </div>
-            {slug && (
-              <p className="text-xs text-[var(--text-3)] mt-1 break-all">
-                app.pawscheduler.app/book/{slug}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Time Zone</label>
-            <select value={timeZone} onChange={(e) => setTimeZone(e.target.value)} className="border rounded w-full p-2">
-              {TIMEZONE_OPTIONS.map((tz) => (
-                <option key={tz.value} value={tz.value}>{tz.label}</option>
-              ))}
-            </select>
-            <p className="text-xs text-[var(--text-3)] mt-1">Controls booking times and "tomorrow" SMS reminders.</p>
-          </div>
 
           <button onClick={saveProfile} disabled={saving} className="btn-primary w-full mt-2">
             {saving ? "Saving…" : "Save Changes"}
@@ -1088,26 +1192,6 @@ export default function Profile() {
                   placeholder="Description (optional) — shown to clients on the booking page"
                   className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2 text-xs bg-[var(--bg)] text-[var(--text-2)]"
                 />
-
-                {/* Duration */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide whitespace-nowrap">⏱ Duration</span>
-                  <select
-                    value={svc.duration_min || ""}
-                    onChange={e => {
-                      const updated = [...customServices];
-                      updated[i] = { ...updated[i], duration_min: e.target.value ? Number(e.target.value) : null };
-                      setCustomServices(updated);
-                    }}
-                    className="border border-[var(--border-med)] rounded-xl px-2 py-1.5 text-xs bg-[var(--bg)] text-[var(--text-1)]"
-                  >
-                    <option value="">Not set</option>
-                    {[15, 30, 45, 60, 90, 120, 150, 180, 240, 300, 360, 420, 480].map(m => (
-                      <option key={m} value={m}>{m < 60 ? `${m} min` : `${Math.floor(m/60)}h${m%60 ? ` ${m%60}m` : ""}`}</option>
-                    ))}
-                  </select>
-                  <span className="text-xs text-[var(--text-3)]">— auto-fills appointment duration when selected</span>
-                </div>
               </div>
             ))}
           </div>
