@@ -214,19 +214,20 @@ exports.handler = async (event) => {
       const invoice = data.object;
       const customerId = invoice.customer;
 
+      // Set past_due on first failure — Stripe will retry automatically.
+      // Only downgrade on customer.subscription.deleted (after all retries exhausted).
       if (invoice.billing_reason === "subscription_cycle") {
         const { error } = await supabase
           .from("groomers")
           .update({
-            subscription_status: "free",
-            plan_tier: "free",
-            sms_bot_enabled: false,
+            subscription_status: "past_due",
+            // Keep plan_tier intact — don't lock them out yet
           })
           .eq("stripe_customer_id", customerId);
 
         if (error) throw error;
 
-        console.log("Payment failed — downgraded", { customerId });
+        console.log("Payment failed — marked past_due (will retry)", { customerId });
       }
     }
 
@@ -234,18 +235,15 @@ exports.handler = async (event) => {
       const invoice = data.object;
       const customerId = invoice.customer;
 
+      // Mark past_due — user needs to update payment method but keep access for now
       const { error } = await supabase
         .from("groomers")
-        .update({
-          subscription_status: "free",
-          plan_tier: "free",
-          sms_bot_enabled: false,
-        })
+        .update({ subscription_status: "past_due" })
         .eq("stripe_customer_id", customerId);
 
       if (error) throw error;
 
-      console.log("Payment action required — downgraded", { customerId });
+      console.log("Payment action required — marked past_due", { customerId });
     }
 
     return { statusCode: 200, body: JSON.stringify({ received: true }) };

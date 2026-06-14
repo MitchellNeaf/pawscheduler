@@ -63,9 +63,30 @@ exports.handler = async (event) => {
   // ── Load groomer ────────────────────────────────────────
   const { data: groomer } = await supabase
     .from("groomers")
-    .select("email, stripe_customer_id")
+    .select("email, stripe_customer_id, stripe_subscription_id, subscription_status")
     .eq("id", user.id)
     .single();
+
+  // ── Guard: already has active subscription → send to billing portal ──
+  if (
+    groomer?.stripe_customer_id &&
+    groomer?.stripe_subscription_id &&
+    groomer?.subscription_status === "active"
+  ) {
+    try {
+      const portalSession = await stripe.billingPortal.sessions.create({
+        customer:   groomer.stripe_customer_id,
+        return_url: `${process.env.URL || "https://app.pawscheduler.app"}/profile`,
+      });
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ url: portalSession.url, alreadySubscribed: true }),
+      };
+    } catch (err) {
+      console.error("Could not create billing portal session:", err.message);
+      // Fall through to normal checkout if portal fails
+    }
+  }
 
   const siteUrl = process.env.URL || "https://app.pawscheduler.app";
 
