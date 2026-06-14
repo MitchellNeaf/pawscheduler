@@ -428,7 +428,7 @@ function MultiPetAppointmentModal({
 
       // Auto-calculate duration from service durations
       const totalDuration = newServices.reduce((sum, name) => {
-        const svcDef = [...(serviceOptions || [])].find(s => (typeof s === "string" ? s : s.name) === name);
+        const svcDef = (serviceOptions || []).find(s => (typeof s === "string" ? s : s.name) === name);
         return sum + (svcDef?.duration_min || 0);
       }, 0);
 
@@ -438,7 +438,6 @@ function MultiPetAppointmentModal({
           ...entry.form,
           services: newServices,
           amount: serviceAmt + addonAmt + feeAmt,
-          // Only auto-set duration if we have service durations configured
           ...(totalDuration > 0 ? { duration_min: Math.min(totalDuration, 480) } : {}),
         },
       };
@@ -538,26 +537,26 @@ function MultiPetAppointmentModal({
                   {/* Duration + Amount */}
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <label className="flex flex-col gap-1">
-                      <span className="font-medium text-gray-700">
-                        Duration
-                        {(() => {
-                          const total = petForm.services?.reduce((sum, name) => {
-                            const svcDef = [...(serviceOptions || [])].find(s => (typeof s === "string" ? s : s.name) === name);
-                            return sum + (svcDef?.duration_min || 0);
-                          }, 0);
-                          return total > 0 ? <span className="ml-1 text-xs text-emerald-600 font-normal">⚡ auto</span> : null;
-                        })()}
-                      </span>
-                      <select value={petForm.duration_min}
-                        onChange={(e) => updatePetForm(pet.id, "duration_min", Number(e.target.value))}
-                        className="border rounded px-2 py-1">
-                        {[15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 420, 480].map((m) => (
-                          <option key={m} value={m}>
-                            {m < 60 ? `${m} min` : `${Math.floor(m/60)}h${m%60 ? ` ${m%60}m` : ""}`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                      <span className="font-medium text-gray-700">Duration</span>
+                      <label className="flex flex-col gap-1">
+                        <span className="font-medium text-gray-700">
+                          Duration
+                          {(() => {
+                            const total = petForm.services?.reduce((sum, name) => {
+                              const svcDef = (serviceOptions || []).find(s => (typeof s === "string" ? s : s.name) === name);
+                              return sum + (svcDef?.duration_min || 0);
+                            }, 0);
+                            return total > 0 ? <span className="ml-1 text-xs text-emerald-600 font-normal">⚡ auto</span> : null;
+                          })()}
+                        </span>
+                        <select value={petForm.duration_min}
+                          onChange={(e) => updatePetForm(pet.id, "duration_min", Number(e.target.value))}
+                          className="border rounded px-2 py-1">
+                          {[15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360, 420, 480].map((m) => (
+                            <option key={m} value={m}>{m < 60 ? `${m} min` : `${Math.floor(m/60)}h${m%60 ? ` ${m%60}m` : ""}`}</option>
+                          ))}
+                        </select>
+                      </label>
                     <label className="flex flex-col gap-1">
                       <span className="font-medium text-gray-700">Amount ($)</span>
                       <input type="number" min="0" step="1"
@@ -662,47 +661,6 @@ function MultiPetAppointmentModal({
             <p className="text-xs text-[var(--text-3)]">
               🔒 Automatic reminders require Basic or higher. <a href="/upgrade" className="text-emerald-600 font-semibold">Upgrade →</a>
             </p>
-          )}
-
-          {/* Recurring appointment options */}
-          {newPets.length === 1 && (
-            <div className="rounded-xl border border-[var(--border-med)] bg-[var(--surface)] p-3 space-y-2">
-              <label className="flex items-center gap-2 text-sm font-semibold text-[var(--text-1)] cursor-pointer">
-                <input type="checkbox" checked={!!form.recurring}
-                  onChange={(e) => setForm((p) => ({ ...p, recurring: e.target.checked, recurringFreq: p.recurringFreq || "weekly", recurringEnd: p.recurringEnd || "" }))} />
-                🔁 Make this recurring
-              </label>
-
-              {form.recurring && (
-                <div className="space-y-2 pl-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-[var(--text-2)]">Repeats</span>
-                    <select
-                      value={form.recurringFreq || "weekly"}
-                      onChange={(e) => setForm((p) => ({ ...p, recurringFreq: e.target.value }))}
-                      className="border rounded px-2 py-1 text-sm bg-[var(--bg)] text-[var(--text-1)]"
-                    >
-                      <option value="weekly">Weekly</option>
-                      <option value="biweekly">Every 2 weeks</option>
-                      <option value="monthly">Monthly</option>
-                    </select>
-                  </div>
-                  <label className="flex items-center gap-2 text-sm">
-                    <span className="text-[var(--text-2)]">Until</span>
-                    <input
-                      type="date"
-                      value={form.recurringEnd || ""}
-                      onChange={(e) => setForm((p) => ({ ...p, recurringEnd: e.target.value }))}
-                      min={form.date}
-                      className="border rounded px-2 py-1 text-sm bg-[var(--bg)] text-[var(--text-1)]"
-                    />
-                  </label>
-                  <p className="text-[11px] text-[var(--text-3)]">
-                    Creates appointments on this schedule up to 6 months out. If a time slot is already full, that date is skipped — you'll see a summary after saving.
-                  </p>
-                </div>
-              )}
-            </div>
           )}
 
           {/* Total summary */}
@@ -1697,8 +1655,8 @@ export default function Schedule() {
 
       setCapacity(groomer?.max_parallel || 1);
       if (groomer?.custom_services && groomer.custom_services.length > 0) {
-        // Use groomer's custom services
-        setServiceOptions(groomer.custom_services.map(s => s.name));
+        // Keep full service objects so duration_min is available for auto-calc
+        setServiceOptions(groomer.custom_services);
         const pricingObj = Object.fromEntries(
           groomer.custom_services.map(s => [s.name, s.pricing])
         );
@@ -1753,8 +1711,6 @@ export default function Schedule() {
       });
       setBreakSlots([...breakSet]);
       setDayBreaks(breaks || []);
-
-      const apptsWithShots = await attachShotRecords(appts || []);
       setAppointments(apptsWithShots);
       setLoading(false);
     };
@@ -1881,176 +1837,6 @@ export default function Schedule() {
     setNewModalOpen(true);
   };
 
-  /* Generate and save a recurring appointment series */
-  const handleSaveRecurring = async () => {
-    if (!user || !newPets.length) return;
-    const { pet, form } = newPets[0];
-    if (!newForm.date || !newForm.time || !newForm.recurringEnd) return;
-
-    setSavingNew(true);
-
-    // ── Free tier check — recurring not allowed ──
-    if (planTier === "free") {
-      setSavingNew(false);
-      setConfirmConfig({
-        title: "Recurring appointments require Basic or higher",
-        message: "Upgrade to Basic or higher to set up recurring appointments.",
-        confirmLabel: "Upgrade",
-        cancelLabel: "Not now",
-        onConfirm: () => { window.location.href = "/upgrade"; },
-      });
-      return;
-    }
-
-    // Build candidate dates
-    const freq = newForm.recurringFreq || "weekly";
-    const [sy, sm, sd] = newForm.date.split("-").map(Number);
-    const startDate = new Date(sy, sm - 1, sd);
-    const [ey, em, ed] = newForm.recurringEnd.split("-").map(Number);
-    const endDate = new Date(ey, em - 1, ed);
-
-    // Cap at 6 months out regardless of chosen end date
-    const maxDate = new Date(startDate);
-    maxDate.setMonth(maxDate.getMonth() + 6);
-    const effectiveEnd = endDate > maxDate ? maxDate : endDate;
-
-    const dates = [];
-    let cursor = new Date(startDate);
-    let safety = 0;
-    while (cursor <= effectiveEnd && safety < 200) {
-      dates.push(toYMD(cursor));
-      if (freq === "weekly") cursor.setDate(cursor.getDate() + 7);
-      else if (freq === "biweekly") cursor.setDate(cursor.getDate() + 14);
-      else if (freq === "monthly") cursor.setMonth(cursor.getMonth() + 1);
-      safety++;
-    }
-
-    if (dates.length === 0) {
-      setSavingNew(false);
-      return;
-    }
-
-    const groupId = crypto.randomUUID();
-    const slotWeight = pet.slot_weight || 1;
-    const [th, tm] = newForm.time.split(":").map(Number);
-    const startMinutes = th * 60 + tm;
-    const durationMin = form.duration_min || 30;
-    const endMinutes = startMinutes + durationMin;
-
-    // Check existing appointments for all candidate dates in one query
-    const { data: existingAppts } = await supabase
-      .from("appointments")
-      .select("date, time, duration_min, slot_weight")
-      .eq("groomer_id", user.id)
-      .in("date", dates)
-      .or("no_show.is.null,no_show.eq.false");
-
-    const created = [];
-    const skipped = [];
-
-    for (const date of dates) {
-      // Check capacity for this date/time
-      const sameDay = (existingAppts || []).filter(a => a.date === date);
-      let overlapWeight = 0;
-      for (const a of sameDay) {
-        const [ah, am] = (a.time || "00:00").slice(0, 5).split(":").map(Number);
-        const aStart = ah * 60 + am;
-        const aEnd = aStart + (a.duration_min || 30);
-        // Check overlap
-        if (aStart < endMinutes && aEnd > startMinutes) {
-          overlapWeight += (a.slot_weight || 1);
-        }
-      }
-
-      if (overlapWeight + slotWeight > capacity) {
-        skipped.push(date);
-        continue;
-      }
-
-      created.push({
-        groomer_id: user.id,
-        pet_id: pet.id,
-        date,
-        time: newForm.time,
-        duration_min: durationMin,
-        services: form.services,
-        notes: newForm.notes,
-        slot_weight: slotWeight,
-        reminder_enabled: planTier !== "free" && newForm.reminder_enabled,
-        reminder_sent: false,
-        amount: form.amount ?? null,
-        recurring_group_id: groupId,
-      });
-    }
-
-    if (created.length === 0) {
-      setSavingNew(false);
-      setConfirmConfig({
-        title: "No appointments created",
-        message: "Every date in this series already has a full slot at that time. Try a different time or adjust the schedule manually.",
-        confirmLabel: "OK",
-        onConfirm: () => {},
-      });
-      return;
-    }
-
-    const { data: savedAppts, error } = await supabase
-      .from("appointments")
-      .insert(created)
-      .select(`
-        id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-        services, notes, confirmed, no_show, paid, amount, reminder_enabled,
-        recurring_group_id,
-        pets (
-          id, name, tags, client_id, photo_url,
-          clients ( id, full_name, phone, email )
-        )
-      `);
-
-    setSavingNew(false);
-
-    if (error) {
-      setConfirmConfig({
-        title: "Could not save recurring appointments",
-        message: error.message || "Something went wrong. Please try again.",
-        confirmLabel: "OK",
-        onConfirm: () => {},
-      });
-      return;
-    }
-
-    // Add today's appointment to local state if it's part of this series
-    const todaysAppt = (savedAppts || []).find(a => a.date === selectedDate);
-    if (todaysAppt) {
-      const withShots = await attachShotRecords([todaysAppt]);
-      setAppointments((prev) =>
-        [...prev, ...withShots].sort((a, b) => (a.time || "").localeCompare(b.time || ""))
-      );
-    }
-
-    setNewModalOpen(false);
-    setNewPets([]);
-    setModalSlot(null);
-
-    // Summary
-    const fmtDateShort = (d) => {
-      const [y, m, dd] = d.split("-").map(Number);
-      return new Date(y, m - 1, dd).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    };
-
-    let message = `Created ${created.length} appointment${created.length === 1 ? "" : "s"}.`;
-    if (skipped.length > 0) {
-      message += ` Skipped ${skipped.length} date${skipped.length === 1 ? "" : "s"} (slot already full): ${skipped.map(fmtDateShort).join(", ")}.`;
-    }
-
-    setConfirmConfig({
-      title: "Recurring appointments created",
-      message,
-      confirmLabel: "OK",
-      onConfirm: () => {},
-    });
-  };
-
   /* Save new appointment(s) — supports multiple pets with shared group_id */
   const handleSaveNew = async () => {
     if (!user || !newPets.length) return;
@@ -2098,13 +1884,6 @@ export default function Schedule() {
     }
 
     // Generate a shared group_id for multi-pet appointments
-    // ── Recurring appointment generation ────────────────────
-    if (newForm.recurring && newForm.recurringEnd && newPets.length === 1) {
-      setSavingNew(false);
-      await handleSaveRecurring();
-      return;
-    }
-
     const groupId = newPets.length > 1
       ? crypto.randomUUID()
       : null;
