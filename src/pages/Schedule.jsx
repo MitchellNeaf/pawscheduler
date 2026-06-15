@@ -84,55 +84,9 @@ const calcFlatItems = (services, items) =>
     .filter(item => services.includes(item.name))
     .reduce((sum, item) => sum + (item.price || 0), 0);
 
-/* ---------------- Trial Banner ---------------- */
-function ScheduleTrialBanner({ userId }) {
-  const [status, setStatus] = useState(null);
-  const [daysLeft, setDaysLeft] = useState(null);
+/* ---------------- Trial Banner — replaced by inline progress bar ---------------- */
+// (removed — single count shown in progress bar below)
 
-  useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase
-        .from("groomers")
-        .select("subscription_status, trial_end_date")
-        .eq("id", userId)
-        .single();
-
-      if (!data) return;
-
-      setStatus(data.subscription_status);
-      const now = new Date();
-      const end = new Date(data.trial_end_date);
-      setDaysLeft(Math.ceil((end - now) / 86400000));
-    };
-    load();
-  }, [userId]);
-
-  if (!status) return null;
-
-  if (status === "trial") {
-    if (daysLeft < 0) {
-      return (
-        <div className="bg-red-100 text-red-700 p-3 rounded-md font-semibold mb-4">
-          🚫 Your free trial has ended —{" "}
-          <Link to="/upgrade" className="underline font-bold">
-            upgrade to continue
-          </Link>
-          .
-        </div>
-      );
-    }
-    return (
-      <div className="bg-yellow-100 text-yellow-800 p-3 rounded-md font-semibold mb-4">
-        ⏳ Trial ends in <strong>{daysLeft}</strong> days —
-        <Link to="/upgrade" className="underline font-bold ml-1">
-          Upgrade
-        </Link>
-      </div>
-    );
-  }
-
-  return null;
-}
 
 /* ---------------- Helpers ---------------- */
 function isExpired(dateStr) {
@@ -1267,6 +1221,7 @@ function RebookWeekModal({ open, appt, onClose, onPickDate }) {
 /* ---------------- Day Action Modal (Month View) ---------------- */
 function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock }) {
   const [mode, setMode] = useState(null);
+  const [tbFullDay, setTbFullDay] = useState(false);
   const [tbStart, setTbStart] = useState("08:00");
   const [tbEnd, setTbEnd] = useState("09:00");
   const [tbNote, setTbNote] = useState("");
@@ -1320,18 +1275,24 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
         {mode === "timeblock" && (
           <div className="p-4 space-y-3">
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Block time off on <strong className="text-gray-800 dark:text-gray-200">{label}</strong></p>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-gray-700 dark:text-gray-300">Start time</span>
-                <input type="time" value={tbStart} onChange={(e) => setTbStart(e.target.value)}
-                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-gray-700 dark:text-gray-300">End time</span>
-                <input type="time" value={tbEnd} onChange={(e) => setTbEnd(e.target.value)}
-                  className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
-              </label>
-            </div>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+              <input type="checkbox" checked={tbFullDay} onChange={e => setTbFullDay(e.target.checked)} className="w-4 h-4 accent-blue-600" />
+              All day (no specific time range)
+            </label>
+            {!tbFullDay && (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">Start time</span>
+                  <input type="time" value={tbStart} onChange={(e) => setTbStart(e.target.value)}
+                    className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-gray-700 dark:text-gray-300">End time</span>
+                  <input type="time" value={tbEnd} onChange={(e) => setTbEnd(e.target.value)}
+                    className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
+                </label>
+              </div>
+            )}
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-gray-700 dark:text-gray-300">Note (optional)</span>
               <input type="text" value={tbNote} onChange={(e) => setTbNote(e.target.value)}
@@ -1343,13 +1304,13 @@ function DayActionModal({ date, onClose, onGoToDay, onAddBooking, onAddTimeBlock
                 className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                 ← Back
               </button>
-              <button onClick={() => onAddTimeBlock(date, tbStart, tbEnd, tbNote, setSaving)}
-                disabled={saving || !tbStart || !tbEnd || tbEnd <= tbStart}
+              <button onClick={() => onAddTimeBlock(date, tbFullDay ? null : tbStart, tbFullDay ? null : tbEnd, tbNote, setSaving)}
+                disabled={saving || (!tbFullDay && (!tbStart || !tbEnd || tbEnd <= tbStart))}
                 className="flex-1 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition disabled:opacity-50">
                 {saving ? "Saving…" : "Save Block"}
               </button>
             </div>
-            {tbEnd <= tbStart && <p className="text-xs text-red-500">End time must be after start time.</p>}
+            {!tbFullDay && tbEnd <= tbStart && <p className="text-xs text-red-500">End time must be after start time.</p>}
           </div>
         )}
       </div>
@@ -1396,9 +1357,7 @@ function EditTimeBlockModal({ block, onClose, onSave }) {
               placeholder="e.g. Vacation, lunch, vet appointment"
               className="border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm" />
           </label>
-          {!fullDay && end && start && end <= start && (
-            <p className="text-xs text-red-500">End time must be after start time.</p>
-          )}
+          {!fullDay && end && start && end <= start && <p className="text-xs text-red-500">End time must be after start time.</p>}
           <div className="flex gap-2 pt-1">
             <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 transition">Cancel</button>
             <button disabled={saving || (!fullDay && (!start || !end || end <= start))}
@@ -1707,7 +1666,7 @@ export default function Schedule() {
       ] = await Promise.all([
         supabase
           .from("groomers")
-          .select("max_parallel, service_pricing, plan_tier, booking_requires_approval, custom_services")
+          .select("max_parallel, service_pricing, plan_tier, booking_requires_approval, custom_services, subscription_status")
           .eq("id", user.id)
           .maybeSingle(),
         supabase
@@ -1819,7 +1778,7 @@ export default function Schedule() {
         TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakSet.add(s));
       });
 
-      // Also block slots for date-specific vacation_days entries
+      // Block slots for date-specific vacation_days entries
       (vacDays || []).forEach(v => {
         if (!v.start_time || !v.end_time) {
           range.forEach(s => breakSet.add(s));
@@ -1887,12 +1846,20 @@ export default function Schedule() {
     setRebookAppt(null);
   };
 
-  // Monthly appointment count for free tier banner
+  // Monthly appointment count for free tier banner — excludes sample appointments
   useEffect(() => {
     if (!user) return;
+    const now = new Date();
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
     supabase
-      .rpc("get_monthly_appointment_count", { p_groomer_id: user.id })
-      .then(({ data }) => { if (data !== null) setMonthlyCount(data); });
+      .from("appointments")
+      .select("id", { count: "exact", head: true })
+      .eq("groomer_id", user.id)
+      .gte("date", monthStart)
+      .neq("source", "sample")
+      .then(({ count }) => {
+        if (count !== null) setMonthlyCount(count);
+      });
   }, [user, appointments]);
 
   /* Open empty slot → pick pet */
@@ -1975,31 +1942,20 @@ export default function Schedule() {
     if (!user || !newPets.length) return;
     const { pet, form } = newPets[0];
     if (!newForm.date || !newForm.time || !newForm.recurringEnd) return;
-
     setSavingNew(true);
-
     if (planTier === "free") {
       setSavingNew(false);
-      setConfirmConfig({
-        title: "Recurring appointments require Basic or higher",
-        message: "Upgrade to Basic or higher to set up recurring appointments.",
-        confirmLabel: "Upgrade",
-        cancelLabel: "Not now",
-        onConfirm: () => { window.location.href = "/upgrade"; },
-      });
+      setConfirmConfig({ title: "Recurring appointments require Basic or higher", message: "Upgrade to Basic or higher to set up recurring appointments.", confirmLabel: "Upgrade", cancelLabel: "Not now", onConfirm: () => { window.location.href = "/upgrade"; } });
       return;
     }
-
     const freq = newForm.recurringFreq || "weekly";
     const [sy, sm, sd] = newForm.date.split("-").map(Number);
     const startDate = new Date(sy, sm - 1, sd);
     const [ey, em, ed] = newForm.recurringEnd.split("-").map(Number);
     const endDate = new Date(ey, em - 1, ed);
-
     const maxDate = new Date(startDate);
     maxDate.setMonth(maxDate.getMonth() + 6);
     const effectiveEnd = endDate > maxDate ? maxDate : endDate;
-
     const dates = [];
     let cursor = new Date(startDate);
     let safety = 0;
@@ -2010,26 +1966,18 @@ export default function Schedule() {
       else cursor.setMonth(cursor.getMonth() + 1);
       safety++;
     }
-
     if (!dates.length) { setSavingNew(false); return; }
-
     const groupId = crypto.randomUUID();
     const slotWeight = pet.slot_weight || 1;
     const [th, tm] = newForm.time.split(":").map(Number);
     const startMin = th * 60 + tm;
     const durMin = form.duration_min || 30;
     const endMin = startMin + durMin;
-
     const { data: existingAppts } = await supabase
-      .from("appointments")
-      .select("date, time, duration_min, slot_weight")
-      .eq("groomer_id", user.id)
-      .in("date", dates)
-      .or("no_show.is.null,no_show.eq.false");
-
+      .from("appointments").select("date, time, duration_min, slot_weight")
+      .eq("groomer_id", user.id).in("date", dates).or("no_show.is.null,no_show.eq.false");
     const created = [];
     const skipped = [];
-
     for (const date of dates) {
       const sameDay = (existingAppts || []).filter(a => a.date === date);
       let overlapWeight = 0;
@@ -2040,60 +1988,24 @@ export default function Schedule() {
         if (aStart < endMin && aEnd > startMin) overlapWeight += (a.slot_weight || 1);
       }
       if (overlapWeight + slotWeight > capacity) { skipped.push(date); continue; }
-
-      created.push({
-        groomer_id: user.id,
-        pet_id: pet.id,
-        date,
-        time: newForm.time,
-        duration_min: durMin,
-        services: form.services,
-        notes: newForm.notes,
-        slot_weight: slotWeight,
-        reminder_enabled: planTier !== "free" && newForm.reminder_enabled,
-        reminder_sent: false,
-        amount: form.amount ?? null,
-        recurring_group_id: groupId,
-      });
+      created.push({ groomer_id: user.id, pet_id: pet.id, date, time: newForm.time, duration_min: durMin, services: form.services, notes: newForm.notes, slot_weight: slotWeight, reminder_enabled: planTier !== "free" && newForm.reminder_enabled, reminder_sent: false, amount: form.amount ?? null, recurring_group_id: groupId });
     }
-
     if (!created.length) {
       setSavingNew(false);
-      setConfirmConfig({
-        title: "No appointments created",
-        message: "Every date in this series already has a full slot at that time.",
-        confirmLabel: "OK",
-        onConfirm: () => {},
-      });
+      setConfirmConfig({ title: "No appointments created", message: "Every date in this series already has a full slot at that time.", confirmLabel: "OK", onConfirm: () => {} });
       return;
     }
-
-    const { data: savedAppts, error } = await supabase
-      .from("appointments")
-      .insert(created)
-      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-        services, notes, confirmed, no_show, paid, amount, reminder_enabled,
-        recurring_group_id,
-        pets ( id, name, tags, client_id, photo_url, clients ( id, full_name, phone, email ) )`);
-
+    const { data: savedAppts, error } = await supabase.from("appointments").insert(created)
+      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight, services, notes, confirmed, no_show, paid, amount, reminder_enabled, recurring_group_id, pets ( id, name, tags, client_id, photo_url, clients ( id, full_name, phone, email ) )`);
     setSavingNew(false);
-
-    if (error) {
-      setConfirmConfig({ title: "Could not save", message: error.message, confirmLabel: "OK", onConfirm: () => {} });
-      return;
-    }
-
+    if (error) { setConfirmConfig({ title: "Could not save", message: error.message, confirmLabel: "OK", onConfirm: () => {} }); return; }
     const todaysAppt = (savedAppts || []).find(a => a.date === selectedDate);
     if (todaysAppt) {
       const withShots = await attachShotRecords([todaysAppt]);
       setAppointments(prev => [...prev, ...withShots].sort((a, b) => (a.time || "").localeCompare(b.time || "")));
     }
-
-    setNewModalOpen(false);
-    setNewPets([]);
-    setModalSlot(null);
+    setNewModalOpen(false); setNewPets([]); setModalSlot(null);
     setMonthRefreshKey(k => k + 1);
-
     const fmt = d => { const [y,m,dd] = d.split("-").map(Number); return new Date(y,m-1,dd).toLocaleDateString("en-US",{month:"short",day:"numeric"}); };
     const msg = `Created ${created.length} appointment${created.length===1?"":"s"}.${skipped.length>0?` Skipped ${skipped.length} (slot full): ${skipped.map(fmt).join(", ")}.`:""}`;
     setConfirmConfig({ title: "Recurring appointments created", message: msg, confirmLabel: "OK", onConfirm: () => {} });
@@ -2129,10 +2041,16 @@ export default function Schedule() {
 
     // ── Free tier appointment limit check ──────────────────
     if (planTier === "free") {
-      const { data: countData } = await supabase
-        .rpc("get_monthly_appointment_count", { p_groomer_id: user.id });
+      const now = new Date();
+      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      const { count } = await supabase
+        .from("appointments")
+        .select("id", { count: "exact", head: true })
+        .eq("groomer_id", user.id)
+        .gte("date", monthStart)
+        .neq("source", "sample");
 
-      if (countData >= FREE_LIMIT) {
+      if ((count ?? 0) >= FREE_LIMIT) {
         setSavingNew(false);
         setConfirmConfig({
           title: "Monthly limit reached",
@@ -2523,34 +2441,50 @@ export default function Schedule() {
         <DarkModeToggle />
       </div>
 
-      {user && <ScheduleTrialBanner userId={user.id} />}
+      {/* Past due warning */}
+      {planTier !== "free" && groomer?.subscription_status === "past_due" && (
+        <div className="bg-red-100 text-red-700 p-3 rounded-md font-semibold mb-2">
+          ⚠️ Your payment failed —{" "}
+          <Link to="/upgrade" className="underline font-bold">update your billing info</Link>{" "}
+          to keep your account active.
+        </div>
+      )}
 
-      {/* Free tier appointment counter banner */}
+      {/* Free tier appointment counter — single source of truth */}
       {planTier === "free" && monthlyCount !== null && (
-        <div className={`mx-4 mt-3 rounded-xl px-4 py-3 flex items-center justify-between text-sm gap-3
+        <div className={`mx-4 mt-3 rounded-xl px-4 py-3 text-sm gap-2
           ${monthlyCount >= 50
             ? "bg-red-50 border border-red-200 text-red-800"
             : monthlyCount >= 40
             ? "bg-amber-50 border border-amber-200 text-amber-800"
             : "bg-blue-50 border border-blue-200 text-blue-800"
           }`}>
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <span className="font-semibold whitespace-nowrap">
-              {monthlyCount >= 50 ? "⛔ Limit reached" : `📅 ${50 - monthlyCount} of 50 left`}
-            </span>
-            {/* Progress bar */}
-            <div className="flex-1 h-2 rounded-full bg-current opacity-20 overflow-hidden min-w-0">
-              <div
-                className="h-full rounded-full bg-current opacity-100"
-                style={{width: `${Math.min((monthlyCount / 50) * 100, 100)}%`}}
-              />
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <span className="font-semibold whitespace-nowrap">
+                {monthlyCount >= 50
+                  ? "⛔ Monthly limit reached"
+                  : `📅 ${50 - monthlyCount} appointments left this month`}
+              </span>
+              {/* Progress bar */}
+              <div className="flex-1 h-2 rounded-full bg-current opacity-20 overflow-hidden min-w-0">
+                <div
+                  className="h-full rounded-full bg-current opacity-100"
+                  style={{width: `${Math.min((monthlyCount / 50) * 100, 100)}%`}}
+                />
+              </div>
+              <span className="text-xs opacity-70 whitespace-nowrap">{monthlyCount}/50</span>
             </div>
-            <span className="text-xs opacity-70 whitespace-nowrap">{monthlyCount}/50</span>
+            <a href="/upgrade"
+              className="ml-1 text-xs font-bold px-3 py-1.5 rounded-full bg-white border border-current hover:opacity-80 transition whitespace-nowrap flex-shrink-0">
+              Upgrade →
+            </a>
           </div>
-          <a href="/upgrade"
-            className="ml-1 text-xs font-bold px-3 py-1.5 rounded-full bg-white border border-current hover:opacity-80 transition whitespace-nowrap flex-shrink-0">
-            Upgrade →
-          </a>
+          <p className="text-xs opacity-70 mt-1.5">
+            {monthlyCount >= 50
+              ? "You've used all 50 free appointments for this month. Resets on the 1st. Upgrade to Basic for unlimited appointments."
+              : "Free plan includes 50 appointments per month. Resets on the 1st of each month. Upgrade to Basic for unlimited."}
+          </p>
         </div>
       )}
 
@@ -3561,29 +3495,17 @@ export default function Schedule() {
           onAddTimeBlock={async (date, start, end, note, setSaving) => {
             if (!user) return;
             setSaving(true);
-            const { data, error } = await supabase.from("vacation_days").insert([{
+            const { error } = await supabase.from("vacation_days").insert([{
               groomer_id: user.id,
               date,
               start_time: start || null,
               end_time: end || null,
-              reason: note || null,
-            }]).select().single();
+            }]);
             setSaving(false);
             if (error) {
               alert("Could not save time block: " + error.message);
             } else {
               setDayActionDate(null);
-              setMonthRefreshKey(k => k + 1);
-              if (date === selectedDate && data) {
-                const fullDay = !data.start_time || !data.end_time;
-                const newBlock = { ...data, break_start: data.start_time, break_end: data.end_time, label: data.reason, fullDay, _source: "vacation_days" };
-                setDayBreaks(prev => [...prev, newBlock]);
-                if (!fullDay && data.start_time && data.end_time) {
-                  const bi = TIME_SLOTS.indexOf(data.start_time.slice(0,5));
-                  const ei = TIME_SLOTS.indexOf(data.end_time.slice(0,5));
-                  if (bi!==-1&&ei!==-1) setBreakSlots(prev => [...new Set([...prev, ...TIME_SLOTS.slice(bi,ei+1)])]);
-                }
-              }
             }
           }}
         />
