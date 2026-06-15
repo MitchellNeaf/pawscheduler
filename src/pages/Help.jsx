@@ -4,20 +4,24 @@ import { useEffect, useMemo, useState } from "react";
 const SECTIONS = [
   { id: "quickstart",    label: "Quick Start",              icon: "🚀", badge: "Start here" },
   { id: "profile",       label: "Profile Setup",            icon: "👤" },
+  { id: "booking-page",  label: "Booking Page & Themes",    icon: "🎨" },
   { id: "schedule",      label: "Working Hours",            icon: "🕒" },
-  { id: "vacation",      label: "Vacation & Closed Days",   icon: "🏖️" },
+  { id: "vacation",      label: "Time Blocks & Closed Days",icon: "🏖️" },
   { id: "slug",          label: "Booking Link",             icon: "🔗" },
   { id: "dog-sizing",    label: "Dog Sizes & Capacity",     icon: "🐶" },
   { id: "pricing",       label: "Services, Add-ons & Fees", icon: "💲" },
+  { id: "duration",      label: "Service Durations",        icon: "⏱️" },
   { id: "clients",       label: "Clients & Pets",           icon: "🐾" },
   { id: "pet-photos",    label: "Pet Photos",               icon: "📷" },
   { id: "intake",        label: "Intake Form",              icon: "📋" },
   { id: "waiver",        label: "Grooming Waiver",          icon: "✍️" },
   { id: "scheduling",    label: "Scheduling Appointments",  icon: "📆" },
+  { id: "recurring",     label: "Recurring Appointments",   icon: "🔁" },
   { id: "calendar-views",label: "Calendar Views",           icon: "📅" },
   { id: "multipet",      label: "Multi-Pet Bookings",       icon: "🐕‍🦺" },
   { id: "reminders",     label: "SMS Reminders",            icon: "💬" },
   { id: "confirmations", label: "SMS Confirmations",        icon: "✅" },
+  { id: "push-notif",    label: "Push Notifications",       icon: "🔔" },
   { id: "vaccines",      label: "Vaccine Tracking",         icon: "💉" },
   { id: "noshow",        label: "No-Shows & Paid",          icon: "💳" },
   { id: "revenue",       label: "Revenue & Unpaid",         icon: "💰" },
@@ -184,14 +188,56 @@ export default function Help() {
 
           {/* ── PROFILE ── */}
           <Section id="profile" title="Profile Setup" subtitle="Controls how clients see your business and what appears in emails and confirmations.">
-            <BulletList items={[
-              { title: "Business name", text: "What shows on your booking page, emails, and waiver. Use your real business name." },
-              { title: "Logo", text: "Upload a logo and it shows on your booking page, intake form, waiver, and reminder emails. Adds professionalism immediately. Square images work best." },
-              { title: "Time zone", text: "Set this first — incorrect timezone means appointment times will be off in reminders and the nightly reminder function.", tone: "warn" },
-              { title: "Booking slug", text: 'Your public booking URL. Example: slug "sally" → app.pawscheduler.app/book/sally. Keep it short and easy to remember.' },
-              { title: "Service pricing", text: "Set once, auto-fills every appointment. Organized by service and dog size (S/M, Large, XL)." },
-              { title: "Max dogs at once", text: "Found in the SMS Bot tab. Controls how many dogs can be booked at the same time slot." },
-            ]} />
+            <div className="space-y-4 text-sm text-gray-700">
+              <BulletList items={[
+                { title: "Business name & bio", text: "What shows on your booking page, emails, and waiver. The bio appears below your name on the public booking page." },
+                { title: "Logo", text: "Upload a logo and it shows on your booking page, intake form, waiver, and reminder emails. Square images work best." },
+                { title: "Time zone", text: "Set this first — incorrect timezone means appointment times will be off in reminders and the nightly reminder function.", tone: "warn" },
+                { title: "Booking slug", text: 'Your public booking URL. Example: slug "sally" → app.pawscheduler.app/book/sally. Keep it short and easy to remember.' },
+                { title: "Booking approval toggle", text: "Turn this on to require you to manually approve every booking before it's confirmed. Off by default." },
+                { title: "Max dogs at once", text: "Found in the SMS Bot tab. Controls how many dogs can be booked at the same time slot." },
+              ]} />
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">Profile tabs</p>
+                <div className="grid md:grid-cols-2 gap-2 text-sm">
+                  {[
+                    ["👤 Profile", "Name, bio, logo, slug, timezone, booking approval"],
+                    ["🎨 Booking Page", "Theme picker, waiver intro text, booking link copy"],
+                    ["🗓 Schedule", "Working hours and break times"],
+                    ["💲 Pricing", "Services, add-ons, fees, and per-service durations"],
+                    ["🔔 Reminders", "SMS reminder templates and timing rules (Basic+)"],
+                    ["💳 Payments", "Stripe Connect for client payments (Pro)"],
+                    ["📋 Intake", "Custom intake questions and waiver text (Growth+)"],
+                    ["💬 SMS Bot", "AI scheduling bot toggle and limits (Pro)"],
+                  ].map(([tab, desc]) => (
+                    <div key={tab} className="flex gap-2">
+                      <span className="font-semibold text-gray-900 whitespace-nowrap">{tab}:</span>
+                      <span className="text-gray-600">{desc}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Section>
+
+          {/* ── BOOKING PAGE & THEMES ── */}
+          <Section id="booking-page" title="🎨 Booking Page & Themes" subtitle="Customize the look of your public booking page that clients see.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">Choosing a theme</p>
+                <p>Go to <strong>Profile → Booking Page tab</strong>. You'll see 8 color themes — tap one to preview it, then tap Save Changes.</p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {["Forest", "Ocean", "Lavender", "Rose", "Sunrise", "Slate", "Blush", "Mint"].map(t => (
+                    <span key={t} className="px-3 py-1 rounded-full bg-white border text-xs font-medium text-gray-700">{t}</span>
+                  ))}
+                </div>
+              </div>
+              <BulletList items={[
+                { title: "What changes", text: "The gradient header, accent color, and button color on your public booking page all change to match the theme." },
+                { title: "Waiver intro text", text: "Also on this tab — add a personal note that appears at the top of your waiver before the standard legal sections. Good for your cancellation policy, late fees, or a welcome message.", tone: "tip" },
+                { title: "Booking link", text: "Your full booking URL is shown here with a one-tap Copy button. This is what you share with clients." },
+              ]} />
+            </div>
           </Section>
 
           {/* ── WORKING HOURS ── */}
@@ -212,14 +258,31 @@ export default function Help() {
             </div>
           </Section>
 
-          {/* ── VACATION ── */}
-          <Section id="vacation" title="Vacation & Closed Days" subtitle="Blocks specific dates from appearing on your booking calendar.">
-            <BulletList items={[
-              { title: "Block full days", text: "The entire day disappears from your booking calendar. Clients can't book on those dates." },
-              { title: "Block partial days", text: "Block just a window of time (e.g. 8am–12pm) if you're only partially unavailable." },
-              { title: "Edit anytime", text: "Delete or modify vacation days whenever your plans change." },
-              { title: "Pro tip", text: 'Block a "recovery day" after holidays if you tend to get slammed. Future you will thank present you.', tone: "tip" },
-            ]} />
+          {/* ── VACATION / TIME BLOCKS ── */}
+          <Section id="vacation" title="Time Blocks & Closed Days" subtitle="Block specific dates or times from your schedule — viewable and editable from both calendar and list view.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">Two ways to add a time block</p>
+                <div className="grid md:grid-cols-2 gap-3">
+                  <div className="rounded-xl border bg-white p-3">
+                    <p className="font-semibold text-gray-900 mb-1">From Month view</p>
+                    <p className="text-gray-600">Tap any day → tap <strong>Add Time Block</strong> → choose All Day or set a time range → add a note (e.g. "Vet appointment") → Save.</p>
+                  </div>
+                  <div className="rounded-xl border bg-white p-3">
+                    <p className="font-semibold text-gray-900 mb-1">From Profile → Schedule</p>
+                    <p className="text-gray-600">The VacationSection lets you add closed days or partial blocks from your profile settings. Good for planning ahead.</p>
+                  </div>
+                </div>
+              </div>
+              <BulletList items={[
+                { title: "All Day blocks", text: "The entire day is blocked — clients can't book, and the day shows as unavailable on your booking page." },
+                { title: "Partial time blocks", text: "Set a specific start and end time (e.g. 8am–12pm) to block just part of a day." },
+                { title: "Edit a block", text: "In List view on the day of the block, tap Edit on the block card. Change the time range, toggle All Day on/off, or update the note." },
+                { title: "Delete a block", text: "Tap Delete on the block card in List view. Removes it immediately — the slot reopens for booking.", tone: "tip" },
+                { title: "Recurring weekly breaks", text: "Set in Profile → Schedule tab (like a lunch break every day). These show a 'Recurring' badge in List view — edit them from Profile, not from the Schedule page." },
+                { title: "Month view auto-updates", text: "Adding, editing, or deleting a block instantly refreshes the month grid — no page reload needed.", tone: "tip" },
+              ]} />
+            </div>
           </Section>
 
           {/* ── SLUG ── */}
@@ -333,6 +396,36 @@ export default function Help() {
             </div>
           </Section>
 
+          {/* ── SERVICE DURATIONS ── */}
+          <Section id="duration" title="⏱️ Service Durations" subtitle="Set how long each service takes — appointment duration auto-fills when you select services.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">How to set durations</p>
+                <ol className="list-decimal ml-5 space-y-1.5">
+                  <li>Go to <strong>Profile → Pricing tab</strong></li>
+                  <li>Each service card now has a <strong>⏱ Duration</strong> dropdown at the bottom</li>
+                  <li>Set the duration for each service (15 min up to 8 hours)</li>
+                  <li>Tap <strong>Save Services & Pricing</strong></li>
+                </ol>
+              </div>
+              <div className="rounded-xl border bg-emerald-50 p-4">
+                <p className="font-semibold text-emerald-900 mb-2">Auto-calculation example</p>
+                <ul className="space-y-1 text-emerald-900/90">
+                  <li>Full Groom = 2h duration</li>
+                  <li>Nails = 30 min duration</li>
+                  <li className="font-bold border-t border-emerald-200 pt-1 mt-1">Select both → Duration auto-fills to 2h 30m ⚡</li>
+                </ul>
+              </div>
+              <BulletList items={[
+                { title: "Auto badge", text: "When duration is auto-calculated, a green ⚡ auto badge appears next to the Duration field so you know it was set automatically." },
+                { title: "Always editable", text: "The auto-fill is just a starting point — change it manually any time if this particular dog takes longer or shorter." },
+                { title: "Stacks correctly", text: "If you select 3 services, the durations for all 3 are summed. Only services with a duration set contribute to the total.", tone: "tip" },
+                { title: "Creative grooms", text: "Duration options go up to 8 hours — plenty of room for creative grooms and full-day spa treatments.", tone: "tip" },
+                { title: "Per-dog defaults", text: "You can also set default services on a pet's profile — when you book that pet, services pre-fill and the duration auto-calculates from them automatically." },
+              ]} />
+            </div>
+          </Section>
+
           {/* ── CLIENTS & PETS ── */}
           <Section id="clients" title="Clients & Pets" subtitle="Your client list is the foundation of everything else in PawScheduler.">
             <div className="space-y-4 text-sm text-gray-700">
@@ -388,7 +481,7 @@ export default function Help() {
               <div className="rounded-xl border bg-gray-50 p-4">
                 <p className="font-semibold text-gray-900 mb-2">What it captures</p>
                 <div className="grid md:grid-cols-2 gap-2">
-                  {["Full name, phone, email", "Home address", "Emergency contact name & phone", "Dog name and breed", "Dog size", "Behavioral tags (Bites, Anxious, etc.)", "Additional notes about the dog"].map((item) => (
+                  {["Full name, phone, email", "Home address", "Emergency contact name & phone", "Dog name and breed", "Dog size", "Behavioral tags (Bites, Anxious, etc.)", "Additional notes about the dog", "Custom questions you've added"].map((item) => (
                     <div key={item} className="flex items-center gap-2 text-sm">
                       <span className="text-emerald-500">✓</span> {item}
                     </div>
@@ -400,16 +493,20 @@ export default function Help() {
                 <ol className="list-decimal ml-5 space-y-1.5">
                   <li>Go to the <strong>Clients page</strong></li>
                   <li>Find the client and tap <strong>📋 Send Intake</strong></li>
-                  <li>If they have an email on file → sends them an email with a button link</li>
+                  <li>If they have an email on file → sends them a branded email with a button link</li>
                   <li>If no email → copies the link to your clipboard so you can text it manually</li>
+                  <li>The link includes their client ID so the form <strong>pre-fills</strong> with their name, phone, address, and all their pets</li>
                 </ol>
               </div>
-              <Callout type="info" title="Intake forms auto-create or update records.">
-                When a client submits the intake form, PawScheduler matches them by phone number. If found, their record is updated. If not, a new client and pet are created automatically — no manual data entry needed. Multiple dogs can be added on one intake form.
+              <Callout type="info" title="Waiver appears automatically after intake.">
+                When a client submits the intake form, the grooming waiver appears inline on the same page — no separate link needed. They can sign it right away or skip and sign it later.
               </Callout>
-              <Callout type="tip" title="Send the intake before their first appointment.">
-                This eliminates the back-and-forth of collecting basic info. Your intake form link is: <strong>app.pawscheduler.app/intake/your-slug</strong>
-              </Callout>
+              <BulletList items={[
+                { title: "Pre-filled forms", text: "When sent from the Clients page, the form pre-fills all known info — name, phone, address, and pet profiles. Clients just review and confirm.", tone: "tip" },
+                { title: "Auto-creates or updates records", text: "PawScheduler matches clients by phone number. If found, their record is updated. If not, a new client and pet are created automatically." },
+                { title: "Multiple dogs", text: "Clients can add multiple dogs on one intake form. Each gets its own section." },
+                { title: "Custom questions", text: "Go to Profile → Intake tab to add, remove, or reorder questions. Three types: short answer, long answer, and yes/no." },
+              ]} />
             </div>
           </Section>
 
@@ -513,6 +610,34 @@ export default function Help() {
             </div>
           </Section>
 
+          {/* ── RECURRING APPOINTMENTS ── */}
+          <Section id="recurring" title="🔁 Recurring Appointments" subtitle="Book a series of appointments on a repeating schedule in one action.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">How to set up a recurring appointment</p>
+                <ol className="list-decimal ml-5 space-y-1.5">
+                  <li>Go to Schedule → tap a time slot → pick a pet (single pet only).</li>
+                  <li>In the appointment modal, scroll down and check <strong>🔁 Make this recurring</strong>.</li>
+                  <li>Choose frequency: <strong>Weekly</strong>, <strong>Every 2 weeks</strong>, or <strong>Monthly</strong>.</li>
+                  <li>Pick an end date (capped at 6 months out).</li>
+                  <li>Set your services, duration, and amount as usual.</li>
+                  <li>Tap Save — all appointments in the series are created at once.</li>
+                </ol>
+              </div>
+              <div className="rounded-xl border bg-emerald-50 p-4">
+                <p className="font-semibold text-emerald-900 mb-1">What happens after saving</p>
+                <p className="text-emerald-900/90">A summary appears telling you how many appointments were created and which dates were skipped (if any slot was already full). For example: <em>"Created 8 appointments. Skipped 1 (slot full): Jul 4."</em></p>
+              </div>
+              <BulletList items={[
+                { title: "Conflict handling", text: "If a generated date already has a full slot at that time, that date is skipped automatically — nothing is double-booked. You'll see which dates were skipped in the summary." },
+                { title: "6-month cap", text: "Recurring series are capped at 6 months out, regardless of your chosen end date. This keeps your schedule manageable." },
+                { title: "Single pet only", text: "Recurring is only available for single-pet appointments. Multi-pet bookings must be scheduled individually.", tone: "warn" },
+                { title: "Each appointment is independent", text: "After creation, each appointment in the series is its own record. Deleting one doesn't affect the others.", tone: "tip" },
+                { title: "Requires Basic or higher", text: "Recurring appointments are not available on the Free plan.", tone: "warn" },
+              ]} />
+            </div>
+          </Section>
+
           {/* ── CALENDAR VIEWS ── */}
           <Section id="calendar-views" title="📅 Calendar Views" subtitle="Three ways to look at your schedule — each useful for different situations.">
             <div className="space-y-4 text-sm text-gray-700">
@@ -534,9 +659,10 @@ export default function Help() {
                 </div>
               </div>
               <BulletList items={[
-                { title: "Month view — tap a day", text: "Opens a quick action sheet: Go to Day View, Add Booking for that day, or Add Time Block (vacation, errand, etc.)." },
+                { title: "Month view — tap a day", text: "Opens a quick action sheet: Go to Day View, Add Booking for that day, or Add Time Block (check All Day or set a time range + optional note)." },
+                { title: "Time blocks in list view", text: "Date-specific blocks show as 🚫 cards at the top of the list view with Edit and Delete buttons. Recurring weekly breaks show a 'Recurring' badge instead — edit those in Profile." },
                 { title: "Grid view — pet photos", text: "If you've uploaded a pet photo, it appears in the first time slot of their appointment in grid view." },
-                { title: "Auto-refresh", text: "If you leave the schedule open and switch tabs, it automatically refreshes when you come back — so new bookings made from the booking page appear without a manual reload.", tone: "tip" },
+                { title: "Auto-refresh", text: "Adding, editing, or deleting time blocks instantly refreshes the month grid — no manual reload needed.", tone: "tip" },
               ]} />
             </div>
           </Section>
@@ -593,7 +719,7 @@ export default function Help() {
               <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
                 <p className="font-semibold text-gray-900">How reminders work</p>
                 <BulletList items={[
-                  { title: "Timing rules", text: "Set how many hours before each appointment to fire a reminder. Go to Profile → SMS section → Reminders card. Add multiple rules — e.g. 48 hours before AND 2 hours before." },
+                  { title: "Timing rules", text: "Set how many hours before each appointment to fire a reminder. Go to Profile → Reminders tab. Add multiple rules — e.g. 48 hours before AND 2 hours before." },
                   { title: "Runs automatically", text: "PawScheduler checks every 30 minutes and sends reminders for appointments falling within the window of each rule." },
                   { title: "Opt-in required", text: "The client must have a phone number saved and SMS opted in. Set this from the Clients page.", tone: "warn" },
                   { title: "Manual reminder", text: "On the Schedule list view, tap the 💬 Remind button on any appointment card to send an immediate reminder anytime." },
@@ -601,7 +727,7 @@ export default function Help() {
               </div>
               <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
                 <p className="font-semibold text-gray-900">Customizing the reminder message</p>
-                <p>Go to <strong>Profile → SMS section</strong> and edit the Reminder Message template. Use tokens that get replaced with real data when the message sends:</p>
+                <p>Go to <strong>Profile → Reminders tab</strong> and edit the Reminder Message template. Use tokens that get replaced with real data when the message sends:</p>
                 <div className="flex flex-wrap gap-2 mt-2">
                   {["%first_name%", "%pet%", "%date%", "%time%", "%services%", "%confirm_link%", "%business_name%"].map((t) => (
                     <span key={t} className="text-xs font-mono bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-1 rounded-full">{t}</span>
@@ -638,7 +764,7 @@ export default function Help() {
               </div>
               <BulletList items={[
                 { title: "48-hour timing is fixed", text: "The confirmation request always fires 48 hours before — this timing can't be changed. The message wording can be customized." },
-                { title: "Customize the message", text: "Go to Profile → SMS section → 48hr Confirmation Request card. Edit the wording and use tokens like %first_name%, %pet%, %date%, %time%, %confirm_link%.", tone: "tip" },
+                { title: "Customize the message", text: "Go to Profile → Reminders tab → 48hr Confirmation Request card. Edit the wording and use tokens like %first_name%, %pet%, %date%, %time%, %confirm_link%.", tone: "tip" },
                 { title: "Confirmed badge", text: "Once confirmed, the appointment card shows a green Confirmed badge in list and grid view." },
                 { title: "No login required", text: "Clients confirm directly from the link — they don't need a PawScheduler account or any login." },
                 { title: "Manual confirm", text: "You can also tap the Confirmed checkbox on any appointment card yourself if the client calls to confirm verbally." },
@@ -646,6 +772,27 @@ export default function Help() {
               <Callout type="info" title="Want more than one confirmation touchpoint?">
                 Add %confirm_link% to any of your timed reminder messages. Clients can confirm from whichever reminder they see first.
               </Callout>
+            </div>
+          </Section>
+
+          {/* ── PUSH NOTIFICATIONS ── */}
+          <Section id="push-notif" title="🔔 Push Notifications" subtitle="Get notified on your phone when a client books or texts — even when the app isn't open.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">Enabling push notifications</p>
+                <ol className="list-decimal ml-5 space-y-1.5">
+                  <li>Open PawScheduler on your phone (must be using it as a PWA or in your browser).</li>
+                  <li>A purple banner appears at the top of the Schedule page: <em>"Enable push notifications to get alerts when clients book or text you."</em></li>
+                  <li>Tap <strong>Enable</strong> — your browser will ask for permission.</li>
+                  <li>Tap Allow. Done.</li>
+                </ol>
+              </div>
+              <BulletList items={[
+                { title: "New booking alert", text: "When a client books via your booking page, you get a push notification immediately — even if you're not looking at the app." },
+                { title: "Inbound SMS alert", text: "When a client texts your scheduling number, you get a push notification with their first name." },
+                { title: "One-time setup", text: "You only need to enable this once per device. Your subscription ID is saved to your account.", tone: "tip" },
+                { title: "iOS note", text: "On iPhone, you must add PawScheduler to your Home Screen first (Share → Add to Home Screen), then open it from there to get push notification support.", tone: "warn" },
+              ]} />
             </div>
           </Section>
 
