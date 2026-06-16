@@ -40,9 +40,9 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  let slug, clientData, emergencyData, petsData, customAnswers;
+  let slug, clientData, emergencyData, petsData;
   try {
-    ({ slug, client: clientData, emergency: emergencyData, pets: petsData, custom_answers: customAnswers } = JSON.parse(event.body || "{}"));
+    ({ slug, client: clientData, emergency: emergencyData, pets: petsData } = JSON.parse(event.body || "{}"));
   } catch {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON" }) };
   }
@@ -108,7 +108,6 @@ exports.handler = async (event) => {
     zip:                     clientData.zip?.trim() || null,
     emergency_contact_name:  emergencyData?.name?.trim() || null,
     emergency_contact_phone: emergencyData?.phone?.trim() || null,
-    custom_answers:          customAnswers && Object.keys(customAnswers).length > 0 ? customAnswers : null,
   };
 
   if (existingClients?.length > 0) {
@@ -214,6 +213,20 @@ exports.handler = async (event) => {
       }),
     }).catch(() => {});
   }
+
+  // ── Push notification (fire-and-forget) ──────────────────
+  fetch(`${siteUrl}/.netlify/functions/sendPushNotification`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      groomerId: groomer.id,
+      title: "📋 New intake form submitted",
+      message: pet
+        ? `${client.full_name} submitted intake for ${pets.map(p => p.name).join(" & ")}`
+        : `${client.full_name} submitted an intake form`,
+      url: "https://app.pawscheduler.app/clients",
+    }),
+  }).catch(() => {});
 
   return {
     statusCode: 200,
