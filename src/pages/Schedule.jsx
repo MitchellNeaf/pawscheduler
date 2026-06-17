@@ -76,21 +76,6 @@ const DEFAULT_PRICING = {
 
 // Size category (pricing tier) — 1=Small, 2=Medium, 3=Large, 4=XL.
 // Distinct from slot_weight, which is booking capacity (Small/Medium both = 1 slot).
-function slotWeightForSizeCategory(sizeCategory) {
-  if (sizeCategory === 4) return 3;
-  if (sizeCategory === 3) return 2;
-  return 1; // Small (1) and Medium (2) both occupy 1 slot
-}
-
-function sizeCategoryLabel(sizeCategory) {
-  switch (sizeCategory) {
-    case 1: return "Small";
-    case 2: return "Medium";
-    case 3: return "Large";
-    case 4: return "XL";
-    default: return "Small";
-  }
-}
 
 // Sum prices for selected services based on pet size category (pricing tier)
 const calcAmount = (services, sizeCategory, pricing, addonOptions = []) => {
@@ -745,9 +730,6 @@ function AppointmentModal({
   const subject     = isEdit ? appt : pet;
   const petName     = isEdit ? appt.pets?.name        : pet.name;
   const clientName  = isEdit ? appt.pets?.clients?.full_name : pet.clients?.full_name;
-  const slotWeight  = isEdit
-    ? (appt?.slot_weight || appt?.pets?.slot_weight || 1)
-    : (pet?.slot_weight || 1);
   const sizeCategory = isEdit
     ? (appt?.size_category || appt?.pets?.size_category || 1)
     : (pet?.size_category || 1);
