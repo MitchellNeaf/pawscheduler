@@ -3027,7 +3027,13 @@ export default function Schedule() {
             const isMulti = group.length > 1;
             const start = (appt.time || "00:00").slice(0, 5);
             const end = getEndTime(start, Math.max(...group.map(a => a.duration_min || 15)));
-            const size = sizeBadge(appt.size_category || appt.pets?.size_category || 1);
+            const groupSizes = group.map(a =>
+              Number(a.size_category ?? a.pets?.size_category ?? 1)
+            );
+
+            const maxSizeCategory = Math.max(...groupSizes);
+
+            const size = sizeBadge(maxSizeCategory);
             const displayName = groupPetNames(group);
             const totalAmount = groupTotal(group);
 
