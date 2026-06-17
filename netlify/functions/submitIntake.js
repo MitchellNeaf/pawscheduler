@@ -211,22 +211,29 @@ exports.handler = async (event) => {
           is_new_client:   existingClients?.length > 0 ? "Existing client (updated)" : "New client",
         },
       }),
-    }).catch(() => {});
+    }).catch((err) => console.error("Intake email failed:", err.message));
   }
 
-  // ── Push notification (fire-and-forget) ──────────────────
-  fetch(`${siteUrl}/.netlify/functions/sendPushNotification`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      groomerId: groomer.id,
-      title: "📋 New intake form submitted",
-      message: pet
-        ? `${client.full_name} submitted intake for ${pets.map(p => p.name).join(" & ")}`
-        : `${client.full_name} submitted an intake form`,
-      url: "https://app.pawscheduler.app/clients",
-    }),
-  }).catch(() => {});
+  // ── Push notification (awaited so it completes before function exits) ────
+  console.log("Attempting intake push notification for groomer:", groomer.id);
+  try {
+    const pushRes = await fetch(`${siteUrl}/.netlify/functions/sendPushNotification`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        groomerId: groomer.id,
+        title: "📋 New intake form submitted",
+        message: pet
+          ? `${client.full_name} submitted intake for ${pets.map(p => p.name).join(" & ")}`
+          : `${client.full_name} submitted an intake form`,
+        url: "https://app.pawscheduler.app/clients",
+      }),
+    });
+    const pushJson = await pushRes.json().catch(() => ({}));
+    console.log("Intake push notification response:", pushRes.status, JSON.stringify(pushJson));
+  } catch (err) {
+    console.error("Intake push notification failed:", err.message);
+  }
 
   return {
     statusCode: 200,
