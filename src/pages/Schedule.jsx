@@ -1648,7 +1648,7 @@ export default function Schedule() {
           services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id,
           checked_in_at, checked_out_at, payment_method,
           pets (
-            id, name, tags, client_id, photo_url,
+            id, name, tags, client_id, photo_url, size_category,
             clients ( id, full_name, phone, email, sms_opt_in, street, city, state, zip )
           )
         `)
@@ -1706,7 +1706,7 @@ export default function Schedule() {
             services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id,
             checked_in_at, checked_out_at, payment_method,
             pets (
-              id, name, tags, notes, client_id, photo_url,
+              id, name, tags, notes, client_id, photo_url, size_category,
               clients (
                 id,
                 full_name,
@@ -2016,7 +2016,7 @@ export default function Schedule() {
       return;
     }
     const { data: savedAppts, error } = await supabase.from("appointments").insert(created)
-      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category, services, notes, confirmed, no_show, paid, amount, reminder_enabled, recurring_group_id, pets ( id, name, tags, client_id, photo_url, clients ( id, full_name, phone, email ) )`);
+      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category, services, notes, confirmed, no_show, paid, amount, reminder_enabled, recurring_group_id, pets ( id, name, tags, client_id, photo_url, size_category, clients ( id, full_name, phone, email ) )`);
     setSavingNew(false);
     if (error) { setConfirmConfig({ title: "Could not save", message: error.message, confirmLabel: "OK", onConfirm: () => {} }); return; }
     const todaysAppt = (savedAppts || []).find(a => a.date === selectedDate);
@@ -2118,7 +2118,7 @@ export default function Schedule() {
         services, notes, confirmed, no_show, paid, amount, reminder_enabled,
         appointment_group_id,
         pets (
-          id, name, tags, client_id, photo_url,
+          id, name, tags, client_id, photo_url, size_category,
           clients ( id, full_name, phone, email )
         )
       `);
@@ -2229,7 +2229,7 @@ export default function Schedule() {
         id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled, appointment_group_id,
         payment_method, checked_in_at, checked_out_at, source,
-        pets ( id, name, tags, client_id, photo_url, clients ( id, full_name, phone, email ) )
+        pets ( id, name, tags, client_id, photo_url, size_category, clients ( id, full_name, phone, email ) )
       `)
       .single();
 
