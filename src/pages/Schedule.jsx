@@ -301,7 +301,8 @@ function PetSelectModal({ open, onClose, slot, date, pets, loading, onPickPet })
           ) : (
             <ul className="space-y-2">
               {filtered.map((pet) => {
-                const sz = sizeBadge(pet.size_category || 1);
+                const sizeCategory = Number(pet.size_category ?? pet.size ?? 1);
+                const sz = sizeBadge(sizeCategory);
 
                 return (
                   <li key={pet.id}>
@@ -2102,8 +2103,8 @@ export default function Schedule() {
       duration_min:         form.duration_min || 30,
       services:             form.services,
       notes:                newForm.notes,
-      slot_weight:          pet.slot_weight || 1,
-      size_category:        pet.size_category || 1,
+      slot_weight:          Number(pet.slot_weight ?? 1),
+      size_category:        Number(pet.size_category ?? 1),
       reminder_enabled:     planTier !== "free" && newForm.reminder_enabled,
       reminder_sent:        false,
       amount:               form.amount ?? null,
