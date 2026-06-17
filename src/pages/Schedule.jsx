@@ -21,6 +21,15 @@ const parseYMD = (s) => {
   return new Date(y, m - 1, d);
 };
 
+// Format a 24-hour "HH:MM" string as 12-hour with AM/PM
+function fmt12Hour(slot) {
+  if (!slot) return slot;
+  const [h, m] = slot.slice(0, 5).split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
 // Time slots (15-minute increments, 6:00–21:00)
 const START_HOUR = 6;
 const END_HOUR = 21;
@@ -1479,7 +1488,7 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
                 {dayAppts.slice(0, MAX_VISIBLE).map((a) => (
                   <div key={a.id} className={`text-[9px] font-medium rounded px-1 py-0.5 mb-0.5 truncate leading-tight
                     ${a.no_show ? "bg-gray-100 text-gray-500" : a.confirmed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-                    {a.time?.slice(0,5)} {a.pets?.name || "—"}
+                    {fmt12Hour(a.time)} {a.pets?.name || "—"}
                   </div>
                 ))}
                 {dayAppts.length > MAX_VISIBLE && (
@@ -2509,7 +2518,7 @@ export default function Schedule() {
                   <div key={req.id} className={`flex items-center justify-between rounded-lg px-3 py-2 ${req.waitlist ? "bg-blue-50 border border-blue-200" : "bg-amber-100"}`}>
                     <span className="text-xs font-medium flex items-center gap-1.5">
                       {req.waitlist && <span className="text-blue-600">⏸</span>}
-                      {req.pets?.name} ({req.pets?.clients?.full_name}) — {dateStr} at {req.time?.slice(0,5)}
+                      {req.pets?.name} ({req.pets?.clients?.full_name}) — {dateStr} at {fmt12Hour(req.time)}
                       {req.waitlist && <span className="text-blue-600 font-semibold">· Waitlist</span>}
                     </span>
                     <button
@@ -2669,7 +2678,7 @@ export default function Schedule() {
                 <>
                   Working hours:{" "}
                   <strong>
-                    {workingRange[0]} – {workingRange[workingRange.length - 1]}
+                    {fmt12Hour(workingRange[0])} – {fmt12Hour(workingRange[workingRange.length - 1])}
                   </strong>
                   <span className="ml-2 text-xs text-gray-500">
                     Capacity: {capacity} dog{capacity > 1 ? "s" : ""}
@@ -2738,8 +2747,8 @@ export default function Schedule() {
                   return (
                     <React.Fragment key={slot}>
                       {/* TIME COLUMN */}
-                      <div className="border-t px-1 py-1 text-gray-700 font-medium text-[10px] leading-tight">
-                        {slot.replace(/:00$/, "").replace(/^0/, "")}
+                      <div className="border-t px-1 py-1 text-gray-700 font-medium text-[10px] leading-tight whitespace-nowrap">
+                        {fmt12Hour(slot)}
                       </div>
 
                       {/* CAPACITY COLUMNS */}
