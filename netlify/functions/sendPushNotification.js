@@ -1,6 +1,11 @@
 /**
  * sendPushNotification.js — Netlify function
- * Sends a OneSignal push to a specific groomer using their saved player ID.
+ * Sends a OneSignal push to a specific groomer.
+ *
+ * Primary targeting: external_id (set via OneSignal.login(groomerId) client-side).
+ * This is more reliable than player_id, which can go stale if a device
+ * re-subscribes, clears cache, or reinstalls the PWA — external_id always
+ * tracks the current session for that login.
  */
 
 const { createClient } = require("@supabase/supabase-js");
@@ -33,49 +38,70 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "No API key" }) };
   }
 
-  // Load groomer's saved OneSignal player ID
-  const { data: groomer } = await supabase
-    .from("groomers")
-    .select("onesignal_player_id")
-    .eq("id", groomerId)
-    .single();
+  // Primary: target by external_id (groomer's Supabase user ID)
+  const primaryPayload = {
+    app_id: appId,
+    include_aliases: { external_id: [groomerId] },
+    target_channel: "push",
+    headings: { en: title },
+    contents: { en: message },
+    url: url || "https://app.pawscheduler.app/schedule",
+  };
 
-  const playerId = groomer?.onesignal_player_id;
-
-  // Build payload — target by player ID if available, else send to all
-  const payload = playerId
-    ? {
-        app_id: appId,
-        include_player_ids: [playerId],
-        headings: { en: title },
-        contents: { en: message },
-        url: url || "https://app.pawscheduler.app/schedule",
-      }
-    : {
-        app_id: appId,
-        included_segments: ["All"],
-        headings: { en: title },
-        contents: { en: message },
-        url: url || "https://app.pawscheduler.app/schedule",
-      };
-
-  console.log("Sending push to groomer:", groomerId, "| player:", playerId || "ALL");
+  console.log("Sending push to groomer (external_id):", groomerId);
 
   try {
-    const res = await fetch("https://api.onesignal.com/notifications", {
+    let res = await fetch("https://api.onesignal.com/notifications", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `key ${apiKey}`,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(primaryPayload),
     });
 
-    const json = await res.json();
-    console.log("Push status:", res.status, JSON.stringify(json));
+    let json = await res.json();
+    console.log("Push status (external_id):", res.status, JSON.stringify(json));
+
+    // If external_id targeting found no matching subscribers, fall back
+    // to the legacy stored player_id in case it's still valid.
+    const noSubscribers = json?.errors?.invalid_external_user_ids || json?.recipients === 0;
+
+    if (!res.ok || noSubscribers) {
+      const { data: groomer } = await supabase
+        .from("groomers")
+        .select("onesignal_player_id")
+        .eq("id", groomerId)
+        .single();
+
+      const playerId = groomer?.onesignal_player_id;
+
+      if (playerId) {
+        console.log("Falling back to player_id:", playerId);
+        const fallbackPayload = {
+          app_id: appId,
+          include_player_ids: [playerId],
+          headings: { en: title },
+          contents: { en: message },
+          url: url || "https://app.pawscheduler.app/schedule",
+        };
+
+        res = await fetch("https://api.onesignal.com/notifications", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `key ${apiKey}`,
+          },
+          body: JSON.stringify(fallbackPayload),
+        });
+
+        json = await res.json();
+        console.log("Push status (player_id fallback):", res.status, JSON.stringify(json));
+      }
+    }
 
     if (!res.ok) {
-      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "OneSignal error" }) };
+      return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "OneSignal error", details: json }) };
     }
 
     return { statusCode: 200, body: JSON.stringify({ sent: true, id: json.id }) };
