@@ -154,13 +154,14 @@ exports.handler = async (event) => {
       .ilike("name", petData.name.trim());
 
     const petPayload = {
-      name:        petData.name.trim(),
-      breed:       petData.breed?.trim() || null,
-      slot_weight: petData.slot_weight || 1,
-      notes:       petData.notes?.trim() || null,
-      tags:        petData.tags?.length ? petData.tags : null,
-      client_id:   client.id,
-      groomer_id:  groomer.id,
+      name:          petData.name.trim(),
+      breed:         petData.breed?.trim() || null,
+      slot_weight:   petData.slot_weight || 1,
+      size_category: petData.size_category || 1,
+      notes:         petData.notes?.trim() || null,
+      tags:          petData.tags?.length ? petData.tags : null,
+      client_id:     client.id,
+      groomer_id:    groomer.id,
     };
 
     if (existingPets?.length > 0) {
@@ -205,7 +206,7 @@ exports.handler = async (event) => {
           emergency_contact: emergencyNote || "—",
           pet_name:        pets.length ? pets.map(p => p.name).join(", ") : "—",
           pet_breed:       pet?.breed || "—",
-          pet_size:        pet?.slot_weight === 3 ? "XL" : pet?.slot_weight === 2 ? "Large" : "Small/Medium",
+          pet_size:        { 1: "Small", 2: "Medium", 3: "Large", 4: "XL" }[pet?.size_category] || "Small",
           pet_tags:        pet?.tags?.join(", ") || "None",
           pet_notes:       pet?.notes || "—",
           is_new_client:   existingClients?.length > 0 ? "Existing client (updated)" : "New client",

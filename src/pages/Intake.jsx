@@ -3,11 +3,18 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabase";
 
+// Size category (pricing tier) — Small and Medium both use 1 booking slot.
 const SIZE_OPTIONS = [
-  { value: 1, label: "Small / Medium (under 40 lbs)" },
-  { value: 2, label: "Large (40–80 lbs)" },
-  { value: 3, label: "XL (80+ lbs)" },
+  { value: 1, label: "Small (under 25 lbs)", slotWeight: 1 },
+  { value: 2, label: "Medium (25–40 lbs)", slotWeight: 1 },
+  { value: 3, label: "Large (40–80 lbs)", slotWeight: 2 },
+  { value: 4, label: "XL (80+ lbs)", slotWeight: 3 },
 ];
+
+function slotWeightForSize(sizeCategory) {
+  const found = SIZE_OPTIONS.find(s => s.value === sizeCategory);
+  return found ? found.slotWeight : 1;
+}
 
 const TAG_OPTIONS = [
   "Bites", "Anxious", "Aggressive", "Senior",
@@ -90,7 +97,7 @@ export default function IntakePage() {
 
   // Pets — supports multiple
   const [pets, setPets] = useState([
-    { name: "", breed: "", slot_weight: 1, tags: [], notes: "" }
+    { name: "", breed: "", size_category: 1, tags: [], notes: "" }
   ]);
 
   // Custom intake question answers — keyed by question id
@@ -98,7 +105,7 @@ export default function IntakePage() {
 
   const addPet = () => setPets(prev => [
     ...prev,
-    { name: "", breed: "", slot_weight: 1, tags: [], notes: "" }
+    { name: "", breed: "", size_category: 1, tags: [], notes: "" }
   ]);
 
   const removePet = (idx) => setPets(prev => prev.filter((_, i) => i !== idx));
@@ -155,7 +162,7 @@ export default function IntakePage() {
           // Pre-fill pets
           const { data: existingPets } = await supabase
             .from("pets")
-            .select("name, breed, slot_weight, tags, notes")
+            .select("name, breed, size_category, tags, notes")
             .eq("client_id", cid)
             .eq("groomer_id", data.id);
 
@@ -163,7 +170,7 @@ export default function IntakePage() {
             setPets(existingPets.map(p => ({
               name: p.name || "",
               breed: p.breed || "",
-              slot_weight: p.slot_weight || 1,
+              size_category: p.size_category || 1,
               tags: p.tags || [],
               notes: p.notes || "",
             })));
@@ -201,7 +208,10 @@ export default function IntakePage() {
           slug,
           client: { full_name: fullName, phone, email, street, city, state, zip },
           emergency: { name: emergName, phone: emergPhone },
-          pets: pets.filter(p => p.name.trim()),
+          pets: pets.filter(p => p.name.trim()).map(p => ({
+            ...p,
+            slot_weight: slotWeightForSize(p.size_category || 1),
+          })),
           custom_answers: customAnswers,
         }),
       });
@@ -546,12 +556,12 @@ export default function IntakePage() {
               {/* Size */}
               <div>
                 <label className={labelCls}>Size</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {SIZE_OPTIONS.map(({ value, label }) => (
                     <button key={value} type="button"
-                      onClick={() => updatePet(idx, "slot_weight", value)}
+                      onClick={() => updatePet(idx, "size_category", value)}
                       className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-colors text-center
-                        ${pet.slot_weight === value
+                        ${pet.size_category === value
                           ? "bg-emerald-600 border-emerald-600 text-white"
                           : "bg-[var(--surface)] border-[var(--border-med)] text-[var(--text-2)] hover:border-emerald-400"
                         }`}

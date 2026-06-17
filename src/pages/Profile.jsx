@@ -94,7 +94,7 @@ export default function Profile() {
           const merged = { ...DEFAULT_PRICING, ...(data.service_pricing || {}) };
           setCustomServices(SERVICE_OPTIONS.map(name => ({
             name,
-            pricing: merged[name] || { 1: 0, 2: 0, 3: 0 },
+            pricing: merged[name] || { 1: 0, 2: 0, 3: 0, 4: 0 },
           })));
         }
         setBookingRequiresApproval(data.booking_requires_approval || false);
@@ -1230,11 +1230,12 @@ export default function Profile() {
                 </div>
 
                 {/* Price inputs */}
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
-                    { size: 1, label: "S / M" },
-                    { size: 2, label: "Large" },
-                    { size: 3, label: "XL" },
+                    { size: 1, label: "Small" },
+                    { size: 2, label: "Medium" },
+                    { size: 3, label: "Large" },
+                    { size: 4, label: "XL" },
                   ].map(({ size, label }) => (
                     <div key={size}>
                       <label className="block text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide mb-1">{label}</label>
@@ -1312,7 +1313,7 @@ export default function Profile() {
                 const merged = { ...DEFAULT_PRICING };
                 setCustomServices(SERVICE_OPTIONS.map(name => ({
                   name,
-                  pricing: merged[name] || { 1: 0, 2: 0, 3: 0 },
+                  pricing: merged[name] || { 1: 0, 2: 0, 3: 0, 4: 0 },
                 })));
               }}
               className="text-xs text-[var(--text-3)] hover:text-[var(--text-2)] underline"
@@ -1321,7 +1322,7 @@ export default function Profile() {
             </button>
             <button
               type="button"
-              onClick={() => setCustomServices(prev => [...(prev || []), { name: "", pricing: { 1: 0, 2: 0, 3: 0 } }])}
+              onClick={() => setCustomServices(prev => [...(prev || []), { name: "", pricing: { 1: 0, 2: 0, 3: 0, 4: 0 } }])}
               className="text-sm px-4 py-2 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
             >
               + Add Service

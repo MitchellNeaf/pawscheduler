@@ -51,19 +51,21 @@ const SERVICE_OPTIONS = [
 ];
 
 const DEFAULT_PRICING = {
-  "Bath":        { 1: 25, 2: 40, 3: 60 },
-  "Full Groom":  { 1: 45, 2: 65, 3: 90 },
-  "Nails":       { 1: 15, 2: 15, 3: 20 },
-  "Teeth":       { 1: 15, 2: 15, 3: 20 },
-  "Deshed":      { 1: 35, 2: 55, 3: 75 },
-  "Anal Glands": { 1: 15, 2: 15, 3: 20 },
-  "Puppy Trim":  { 1: 40, 2: 55, 3: 75 },
-  "Other":       { 1: 0,  2: 0,  3: 0  },
+  "Bath":        { 1: 25, 2: 30, 3: 40, 4: 60 },
+  "Full Groom":  { 1: 45, 2: 55, 3: 65, 4: 90 },
+  "Nails":       { 1: 15, 2: 15, 3: 15, 4: 20 },
+  "Teeth":       { 1: 15, 2: 15, 3: 15, 4: 20 },
+  "Deshed":      { 1: 35, 2: 45, 3: 55, 4: 75 },
+  "Anal Glands": { 1: 15, 2: 15, 3: 15, 4: 20 },
+  "Puppy Trim":  { 1: 40, 2: 45, 3: 55, 4: 75 },
+  "Other":       { 1: 0,  2: 0,  3: 0,  4: 0  },
 };
 
-const calcAmount = (services, slotWeight, pricing, addonOptions = []) => {
+// Pricing uses size_category (1=Small, 2=Medium, 3=Large, 4=XL).
+// This is separate from slot_weight (booking capacity) — Small/Medium both = 1 slot.
+const calcAmount = (services, sizeCategory, pricing, addonOptions = []) => {
   const p = { ...DEFAULT_PRICING, ...(pricing || {}) };
-  const sz = slotWeight || 1;
+  const sz = sizeCategory || 1;
   const addonNames = new Set((addonOptions || []).map(a => a.name));
   return services
     .filter((s) => s !== "Other" && !addonNames.has(s))
@@ -125,7 +127,8 @@ export default function BookPage() {
   const [pets, setPets] = useState([]);
   const [selectedPetId, setSelectedPetId] = useState("");
 
-  const [selectedPetWeight, setSelectedPetWeight] = useState(1);
+  const [selectedPetWeight, setSelectedPetWeight] = useState(1); // capacity (slot_weight)
+  const [selectedPetSizeCategory, setSelectedPetSizeCategory] = useState(1); // pricing tier
 
   const [form, setForm] = useState({
     services: [],
@@ -427,7 +430,7 @@ export default function BookPage() {
 
     const { data: petList } = await anonSupabase
       .from("pets")
-      .select("id, name, slot_weight")
+      .select("id, name, slot_weight, size_category")
       .eq("client_id", matchedClient.id)
       .eq("groomer_id", groomerId);
 
@@ -436,6 +439,7 @@ export default function BookPage() {
     if (petList?.length === 1) {
       setSelectedPetId(petList[0].id);
       setSelectedPetWeight(petList[0].slot_weight ?? 1);
+      setSelectedPetSizeCategory(petList[0].size_category ?? 1);
     }
 
     // Load upcoming appointments for this client
@@ -476,7 +480,7 @@ export default function BookPage() {
       const newServices = checked
         ? [...form.services, value]
         : form.services.filter((s) => s !== value);
-      const autoAmount = calcAmount(newServices, selectedPetWeight, pricing, addonOptions);
+      const autoAmount = calcAmount(newServices, selectedPetSizeCategory, pricing, addonOptions);
       return setForm((p) => ({
         ...p,
         services: newServices,
@@ -506,7 +510,8 @@ export default function BookPage() {
     }
 
     const slotWeight = selectedPetWeight ?? 1;
-    const autoAmount = calcAmount(form.services, slotWeight, pricing, addonOptions) + calcAddons(form.services, addonOptions);
+    const sizeCategory = selectedPetSizeCategory ?? 1;
+    const autoAmount = calcAmount(form.services, sizeCategory, pricing, addonOptions) + calcAddons(form.services, addonOptions);
 
     const { data: inserted, error } = await anonSupabase.from("appointments").insert([
       {
@@ -522,6 +527,7 @@ export default function BookPage() {
         paid: false,
         notes: form.notes || "",
         slot_weight: slotWeight,
+        size_category: sizeCategory,
         source: "booking_page",
       },
     ]).select("id");
@@ -755,9 +761,10 @@ export default function BookPage() {
                     {desc && <div style={{ fontSize: "0.76rem", color: "#6b7280", marginTop: 2 }}>{desc}</div>}
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
-                    {p[1] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>S/M <strong style={{ color: theme.accent }}>${p[1]}</strong></div>}
-                    {p[2] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>L <strong style={{ color: theme.accent }}>${p[2]}</strong></div>}
-                    {p[3] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>XL <strong style={{ color: theme.accent }}>${p[3]}</strong></div>}
+                    {p[1] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>S <strong style={{ color: theme.accent }}>${p[1]}</strong></div>}
+                    {p[2] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>M <strong style={{ color: theme.accent }}>${p[2]}</strong></div>}
+                    {p[3] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>L <strong style={{ color: theme.accent }}>${p[3]}</strong></div>}
+                    {p[4] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>XL <strong style={{ color: theme.accent }}>${p[4]}</strong></div>}
                   </div>
                 </div>
               );
@@ -902,6 +909,7 @@ export default function BookPage() {
                     const p = pets.find((pet) => pet.id === id);
                     const weight = p?.slot_weight ?? 1;
                     setSelectedPetWeight(weight);
+                    setSelectedPetSizeCategory(p?.size_category ?? 1);
                     setForm((prev) => ({ ...prev, time: "" }));
                   }}
                   className="border rounded px-2 py-1 w-full">
@@ -995,7 +1003,7 @@ export default function BookPage() {
                   ⏱ {form.duration_min} min &nbsp;·&nbsp; Estimated total
                 </span>
                 <span style={{ fontWeight: 800, color: "#065f46", fontSize: "1rem" }}>
-                  ${(calcAmount(form.services, selectedPetWeight, pricing, addonOptions) + calcAddons(form.services, addonOptions)).toFixed(2)}
+                  ${(calcAmount(form.services, selectedPetSizeCategory, pricing, addonOptions) + calcAddons(form.services, addonOptions)).toFixed(2)}
                 </span>
               </div>
             )}

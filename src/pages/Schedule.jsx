@@ -64,20 +64,38 @@ const SERVICE_OPTIONS = [
 ];
 
 const DEFAULT_PRICING = {
-  "Bath":        { 1: 25, 2: 40, 3: 60 },
-  "Full Groom":  { 1: 45, 2: 65, 3: 90 },
-  "Nails":       { 1: 15, 2: 15, 3: 20 },
-  "Teeth":       { 1: 15, 2: 15, 3: 20 },
-  "Deshed":      { 1: 35, 2: 55, 3: 75 },
-  "Anal Glands": { 1: 15, 2: 15, 3: 20 },
-  "Puppy Trim":  { 1: 40, 2: 55, 3: 75 },
-  "Other":       { 1: 0,  2: 0,  3: 0  },
+  "Bath":        { 1: 25, 2: 30, 3: 40, 4: 60 },
+  "Full Groom":  { 1: 45, 2: 55, 3: 65, 4: 90 },
+  "Nails":       { 1: 15, 2: 15, 3: 15, 4: 20 },
+  "Teeth":       { 1: 15, 2: 15, 3: 15, 4: 20 },
+  "Deshed":      { 1: 35, 2: 45, 3: 55, 4: 75 },
+  "Anal Glands": { 1: 15, 2: 15, 3: 15, 4: 20 },
+  "Puppy Trim":  { 1: 40, 2: 45, 3: 55, 4: 75 },
+  "Other":       { 1: 0,  2: 0,  3: 0,  4: 0  },
 };
 
-// Sum prices for selected services based on pet size (slot_weight)
-const calcAmount = (services, slotWeight, pricing, addonOptions = []) => {
+// Size category (pricing tier) — 1=Small, 2=Medium, 3=Large, 4=XL.
+// Distinct from slot_weight, which is booking capacity (Small/Medium both = 1 slot).
+function slotWeightForSizeCategory(sizeCategory) {
+  if (sizeCategory === 4) return 3;
+  if (sizeCategory === 3) return 2;
+  return 1; // Small (1) and Medium (2) both occupy 1 slot
+}
+
+function sizeCategoryLabel(sizeCategory) {
+  switch (sizeCategory) {
+    case 1: return "Small";
+    case 2: return "Medium";
+    case 3: return "Large";
+    case 4: return "XL";
+    default: return "Small";
+  }
+}
+
+// Sum prices for selected services based on pet size category (pricing tier)
+const calcAmount = (services, sizeCategory, pricing, addonOptions = []) => {
   const p = { ...DEFAULT_PRICING, ...(pricing || {}) };
-  const sz = slotWeight || 1;
+  const sz = sizeCategory || 1;
   const addonNames = new Set((addonOptions || []).map(a => a.name));
   return services
     .filter(s => !addonNames.has(s))
@@ -120,32 +138,39 @@ function getRabiesRecord(shot_records) {
   );
 }
 
-function sizeBadge(weight) {
-  switch (weight) {
+function sizeBadge(sizeCategory) {
+  switch (sizeCategory) {
     case 1:
       return {
-        label: "S/M (1)",
+        label: "Small",
         bg: "bg-green-200 text-green-800",
         bar: "bg-green-400",
         icon: "🟩",
       };
     case 2:
       return {
-        label: "Large (2)",
+        label: "Medium",
+        bg: "bg-lime-200 text-lime-800",
+        bar: "bg-lime-400",
+        icon: "🟨",
+      };
+    case 3:
+      return {
+        label: "Large",
         bg: "bg-orange-200 text-orange-800",
         bar: "bg-orange-400",
         icon: "🟧",
       };
-    case 3:
+    case 4:
       return {
-        label: "XL (3)",
+        label: "XL",
         bg: "bg-red-200 text-red-800",
         bar: "bg-red-400",
         icon: "🟥",
       };
     default:
       return {
-        label: `Size ${weight}`,
+        label: "Small",
         bg: "bg-gray-200 text-gray-800",
         bar: "bg-gray-400",
         icon: "⬜",
@@ -291,7 +316,7 @@ function PetSelectModal({ open, onClose, slot, date, pets, loading, onPickPet })
           ) : (
             <ul className="space-y-2">
               {filtered.map((pet) => {
-                const sz = sizeBadge(pet.slot_weight || 1);
+                const sz = sizeBadge(pet.size_category || 1);
 
                 return (
                   <li key={pet.id}>
@@ -384,8 +409,8 @@ function MultiPetAppointmentModal({
       const newServices = exists
         ? entry.form.services.filter((s) => s !== svc)
         : [...entry.form.services, svc];
-      const slotWeight = entry.pet.slot_weight || 1;
-      const serviceAmt = calcAmount(newServices, slotWeight, pricing, addonOptions);
+      const sizeCategory = entry.pet.size_category || 1;
+      const serviceAmt = calcAmount(newServices, sizeCategory, pricing, addonOptions);
       const addonAmt   = calcFlatItems(newServices, addonOptions);
       const feeAmt     = calcFlatItems(newServices, feeOptions);
 
@@ -723,6 +748,9 @@ function AppointmentModal({
   const slotWeight  = isEdit
     ? (appt?.slot_weight || appt?.pets?.slot_weight || 1)
     : (pet?.slot_weight || 1);
+  const sizeCategory = isEdit
+    ? (appt?.size_category || appt?.pets?.size_category || 1)
+    : (pet?.size_category || 1);
 
   const handleChange = (field) => (e) => {
     const raw = e.target.value;
@@ -739,7 +767,7 @@ function AppointmentModal({
       const newServices = exists
         ? prev.services.filter((s) => s !== svc)
         : [...prev.services, svc];
-      const serviceAmt = calcAmount(newServices, slotWeight, pricing, addonOptions);
+      const serviceAmt = calcAmount(newServices, sizeCategory, pricing, addonOptions);
       const addonAmt   = calcFlatItems(newServices, addonOptions);
       const feeAmt     = calcFlatItems(newServices, feeOptions);
       return {
@@ -1055,7 +1083,7 @@ function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
             .eq("groomer_id", user.id)
             .select(
               `
-              id, pet_id, groomer_id, date, time, duration_min, slot_weight,
+              id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
               services, notes, confirmed, no_show, paid, amount, reminder_enabled,
               pets (
                 *,
@@ -1634,7 +1662,7 @@ export default function Schedule() {
       const { data: appts } = await supabase
         .from("appointments")
         .select(`
-          id, pet_id, groomer_id, date, time, duration_min, slot_weight,
+          id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
           services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id,
           checked_in_at, checked_out_at, payment_method,
           pets (
@@ -1692,7 +1720,7 @@ export default function Schedule() {
         supabase
           .from("appointments")
           .select(`
-            id, pet_id, groomer_id, date, time, duration_min, slot_weight,
+            id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
             services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id,
             checked_in_at, checked_out_at, payment_method,
             pets (
@@ -1929,7 +1957,7 @@ export default function Schedule() {
             duration_min: pet.default_duration_min || 30,
             services: pet.default_services || [],
             amount: pet.default_services?.length
-              ? calcAmount(pet.default_services, pet.slot_weight || 1, pricing, addonOptions)
+              ? calcAmount(pet.default_services, pet.size_category || 1, pricing, addonOptions)
               : null,
           },
         },
@@ -1978,6 +2006,7 @@ export default function Schedule() {
     if (!dates.length) { setSavingNew(false); return; }
     const groupId = crypto.randomUUID();
     const slotWeight = pet.slot_weight || 1;
+    const sizeCategory = pet.size_category || 1;
     const [th, tm] = newForm.time.split(":").map(Number);
     const startMin = th * 60 + tm;
     const durMin = form.duration_min || 30;
@@ -1997,7 +2026,7 @@ export default function Schedule() {
         if (aStart < endMin && aEnd > startMin) overlapWeight += (a.slot_weight || 1);
       }
       if (overlapWeight + slotWeight > capacity) { skipped.push(date); continue; }
-      created.push({ groomer_id: user.id, pet_id: pet.id, date, time: newForm.time, duration_min: durMin, services: form.services, notes: newForm.notes, slot_weight: slotWeight, reminder_enabled: planTier !== "free" && newForm.reminder_enabled, reminder_sent: false, amount: form.amount ?? null, recurring_group_id: groupId });
+      created.push({ groomer_id: user.id, pet_id: pet.id, date, time: newForm.time, duration_min: durMin, services: form.services, notes: newForm.notes, slot_weight: slotWeight, size_category: sizeCategory, reminder_enabled: planTier !== "free" && newForm.reminder_enabled, reminder_sent: false, amount: form.amount ?? null, recurring_group_id: groupId });
     }
     if (!created.length) {
       setSavingNew(false);
@@ -2005,7 +2034,7 @@ export default function Schedule() {
       return;
     }
     const { data: savedAppts, error } = await supabase.from("appointments").insert(created)
-      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight, services, notes, confirmed, no_show, paid, amount, reminder_enabled, recurring_group_id, pets ( id, name, tags, client_id, photo_url, clients ( id, full_name, phone, email ) )`);
+      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category, services, notes, confirmed, no_show, paid, amount, reminder_enabled, recurring_group_id, pets ( id, name, tags, client_id, photo_url, clients ( id, full_name, phone, email ) )`);
     setSavingNew(false);
     if (error) { setConfirmConfig({ title: "Could not save", message: error.message, confirmLabel: "OK", onConfirm: () => {} }); return; }
     const todaysAppt = (savedAppts || []).find(a => a.date === selectedDate);
@@ -2092,6 +2121,7 @@ export default function Schedule() {
       services:             form.services,
       notes:                newForm.notes,
       slot_weight:          pet.slot_weight || 1,
+      size_category:        pet.size_category || 1,
       reminder_enabled:     planTier !== "free" && newForm.reminder_enabled,
       reminder_sent:        false,
       amount:               form.amount ?? null,
@@ -2102,7 +2132,7 @@ export default function Schedule() {
       .from("appointments")
       .insert(insertRows)
       .select(`
-        id, pet_id, groomer_id, date, time, duration_min, slot_weight,
+        id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled,
         appointment_group_id,
         pets (
@@ -2209,11 +2239,12 @@ export default function Schedule() {
         paid: editForm.paid ?? false,
         reminder_sent: false,
         slot_weight: editAppt.slot_weight || 1,
+        size_category: editAppt.size_category || editAppt.pets?.size_category || 1,
       })
       .eq("id", editAppt.id)
       .eq("groomer_id", user.id)
       .select(`
-        id, pet_id, groomer_id, date, time, duration_min, slot_weight,
+        id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled, appointment_group_id,
         payment_method, checked_in_at, checked_out_at, source,
         pets ( id, name, tags, client_id, photo_url, clients ( id, full_name, phone, email ) )
@@ -2891,7 +2922,7 @@ export default function Schedule() {
                                       .update({ paid: !appt.paid })
                                       .eq("id", appt.id)
                                       .eq("groomer_id", user.id)
-                                      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight,
+                                      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
                                         services, notes, confirmed, no_show, paid, amount, reminder_enabled, source, appointment_group_id,
                                         pets ( *, clients ( id, full_name, phone, email, street, city, state, zip ) )`)
                                       .single();
@@ -3013,7 +3044,7 @@ export default function Schedule() {
             const isMulti = group.length > 1;
             const start = (appt.time || "00:00").slice(0, 5);
             const end = getEndTime(start, Math.max(...group.map(a => a.duration_min || 15)));
-            const size = sizeBadge(appt.slot_weight || 1);
+            const size = sizeBadge(appt.size_category || appt.pets?.size_category || 1);
             const displayName = groupPetNames(group);
             const totalAmount = groupTotal(group);
 

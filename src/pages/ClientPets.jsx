@@ -5,6 +5,25 @@ import Loader from "../components/Loader";
 import ConfirmModal from "../components/ConfirmModal";
 import { SERVICE_OPTIONS } from "../utils/grooming";
 
+// Size category (pricing tier) — distinct from slot_weight (booking capacity).
+// Small and Medium both occupy 1 capacity slot; Large occupies 2; XL occupies 3.
+const SIZE_CATEGORIES = [
+  { value: 1, label: "Small",  slotWeight: 1 },
+  { value: 2, label: "Medium", slotWeight: 1 },
+  { value: 3, label: "Large",  slotWeight: 2 },
+  { value: 4, label: "XL",     slotWeight: 3 },
+];
+
+function slotWeightForSize(sizeCategory) {
+  const found = SIZE_CATEGORIES.find(s => s.value === sizeCategory);
+  return found ? found.slotWeight : 1;
+}
+
+function sizeCategoryLabel(sizeCategory) {
+  const found = SIZE_CATEGORIES.find(s => s.value === sizeCategory);
+  return found ? found.label : "Small";
+}
+
 /* ---------------- Image compression ---------------- */
 // Resize + compress before upload — targets ~800px max, JPEG 0.82
 function compressImage(file) {
@@ -246,23 +265,29 @@ function PetEditModal({
           />
 
           {/* SIZE */}
-          <label className="font-medium block mt-4">Size / Difficulty</label>
+          <label className="font-medium block mt-4">Size (pricing)</label>
           <select
-            name="slot_weight"
-            value={form.slot_weight}
-            onChange={(e) =>
+            name="size_category"
+            value={form.size_category ?? 1}
+            onChange={(e) => {
+              const sizeCategory = Number(e.target.value);
               setForm((prev) => ({
                 ...prev,
-                slot_weight: Number(e.target.value),
-              }))
-            }
+                size_category: sizeCategory,
+                slot_weight: slotWeightForSize(sizeCategory),
+              }));
+            }}
             className="border rounded w-full p-2"
           >
-            <option value={1}>Small / Easy (1)</option>
-            <option value={1}>Medium (1)</option>
-            <option value={2}>Large (2)</option>
-            <option value={3}>XL / Special Care (3)</option>
+            {SIZE_CATEGORIES.map(({ value, label, slotWeight }) => (
+              <option key={value} value={value}>
+                {label} ({slotWeight} slot{slotWeight > 1 ? "s" : ""})
+              </option>
+            ))}
           </select>
+          <p className="text-xs text-gray-500 mt-1">
+            Small and Medium both use 1 booking slot — this only affects pricing.
+          </p>
 
           {/* DEFAULT SERVICES */}
           <div className="mt-4">
@@ -487,6 +512,7 @@ export default function ClientPets() {
     notes: "",
     tags: [],
     slot_weight: 1,
+    size_category: 1,
     default_services: [],
     default_duration_min: null,
   });
@@ -597,6 +623,7 @@ export default function ClientPets() {
       notes: "",
       tags: [],
       slot_weight: 1,
+      size_category: 1,
       default_services: [],
       default_duration_min: null,
     });
@@ -632,6 +659,7 @@ export default function ClientPets() {
       notes: "",
       tags: [],
       slot_weight: 1,
+      size_category: 1,
       default_services: [],
       default_duration_min: null,
     });
@@ -694,6 +722,7 @@ export default function ClientPets() {
           notes: form.notes,
           tags: finalTags,
           slot_weight: form.slot_weight,
+          size_category: form.size_category ?? 1,
           default_services: form.default_services.length ? form.default_services : null,
           default_duration_min: form.default_duration_min || null,
           photo_url: photoUrl,
@@ -719,6 +748,7 @@ export default function ClientPets() {
           notes: form.notes,
           tags: finalTags,
           slot_weight: form.slot_weight,
+          size_category: form.size_category ?? 1,
           default_services: form.default_services.length ? form.default_services : null,
           default_duration_min: form.default_duration_min || null,
           photo_url: photoUrl,
@@ -744,6 +774,7 @@ export default function ClientPets() {
         ? [...pet.tags, "Other"]
         : pet.tags || [],
       slot_weight: pet.slot_weight ?? 1,
+      size_category: pet.size_category ?? 1,
       default_services: pet.default_services || [],
       default_duration_min: pet.default_duration_min || null,
     });
@@ -1144,14 +1175,13 @@ export default function ClientPets() {
                 )}
 
                 <div className="text-sm text-gray-600 mt-2">
-                  Difficulty / Size:{" "}
+                  Size:{" "}
                   <strong>
-                    {pet.slot_weight === 1
-                      ? "Small / Medium (1)"
-                      : pet.slot_weight === 2
-                      ? "Large (2)"
-                      : "XL / Special Care (3)"}
+                    {sizeCategoryLabel(pet.size_category ?? 1)}
                   </strong>
+                  <span className="text-gray-400 text-xs ml-1">
+                    ({pet.slot_weight ?? 1} slot{(pet.slot_weight ?? 1) > 1 ? "s" : ""})
+                  </span>
                 </div>
 
                 {/* Default services + duration */}
