@@ -301,8 +301,7 @@ function PetSelectModal({ open, onClose, slot, date, pets, loading, onPickPet })
           ) : (
             <ul className="space-y-2">
               {filtered.map((pet) => {
-                const sizeCategory = Number(pet.size_category ?? pet.size ?? 1);
-                const sz = sizeBadge(sizeCategory);
+                const sz = sizeBadge(pet.size_category || 1);
 
                 return (
                   <li key={pet.id}>
@@ -1902,7 +1901,7 @@ export default function Schedule() {
       const { data } = await supabase
         .from("pets")
         .select(`
-          id, name, tags, notes, client_id, slot_weight,
+          id, name, tags, notes, client_id, slot_weight, size_category,
           default_services, default_duration_min,
           clients ( id, full_name, notes )
         `)
@@ -2103,8 +2102,8 @@ export default function Schedule() {
       duration_min:         form.duration_min || 30,
       services:             form.services,
       notes:                newForm.notes,
-      slot_weight:          Number(pet.slot_weight ?? 1),
-      size_category:        Number(pet.size_category ?? 1),
+      slot_weight:          pet.slot_weight || 1,
+      size_category:        pet.size_category || 1,
       reminder_enabled:     planTier !== "free" && newForm.reminder_enabled,
       reminder_sent:        false,
       amount:               form.amount ?? null,
@@ -3027,13 +3026,7 @@ export default function Schedule() {
             const isMulti = group.length > 1;
             const start = (appt.time || "00:00").slice(0, 5);
             const end = getEndTime(start, Math.max(...group.map(a => a.duration_min || 15)));
-            const groupSizes = group.map(a =>
-              Number(a.size_category ?? a.pets?.size_category ?? 1)
-            );
-
-            const maxSizeCategory = Math.max(...groupSizes);
-
-            const size = sizeBadge(maxSizeCategory);
+            const size = sizeBadge(appt.size_category || appt.pets?.size_category || 1);
             const displayName = groupPetNames(group);
             const totalAmount = groupTotal(group);
 
