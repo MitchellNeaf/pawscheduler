@@ -2124,6 +2124,7 @@ export default function Schedule() {
       `);
 
     if (error) {
+      setSavingNew(false);
       setConfirmConfig({
         title: "Could not save",
         message: error.message || "Something went wrong. Please try again.",
@@ -2147,6 +2148,7 @@ export default function Schedule() {
       )
     );
 
+    setSavingNew(false);
     setNewModalOpen(false);
     setNewPets([]);
     setModalSlot(null);
@@ -3580,7 +3582,7 @@ export default function Schedule() {
 
       <MultiPetAppointmentModal
         open={newModalOpen}
-        onClose={() => { setNewModalOpen(false); setNewPets([]); setModalSlot(null); }}
+        onClose={() => { setNewModalOpen(false); setNewPets([]); setModalSlot(null); setSavingNew(false); }}
         newPets={newPets}
         setNewPets={setNewPets}
         form={newForm}
