@@ -13,6 +13,14 @@ function fillTemplate(template, data) {
   return output;
 }
 
+// Format a 24-hour "HH:MM" string as 12-hour with AM/PM
+function fmtTime(t) {
+  if (!t) return "";
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
 async function alertAdmin(jobName, error) {
   try {
     await fetch("https://api.mailersend.com/v1/email", {
@@ -70,6 +78,7 @@ exports.handler = async (event) => {
         notes,
         reminder_enabled,
         reminder_sent,
+        confirm_token,
         pet_id,
         groomer_id,
         pets (
@@ -118,7 +127,7 @@ exports.handler = async (event) => {
         groomer_email: groomer?.email || "",
         pet_name: a.pets?.name || "",
         date: a.date,
-        time: a.time?.slice(0, 5),
+        time: fmtTime(a.time),
         duration_min: a.duration_min || "",
         services: Array.isArray(a.services)
           ? a.services.join(", ")

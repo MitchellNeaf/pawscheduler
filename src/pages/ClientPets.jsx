@@ -492,6 +492,7 @@ export default function ClientPets() {
   const [pets, setPets] = useState([]);
   const [user, setUser] = useState(null);
   const [planTier, setPlanTier] = useState("free");
+  const [intakeQuestions, setIntakeQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingClient, setSavingClient] = useState(false);
 
@@ -540,8 +541,11 @@ export default function ClientPets() {
       const u = data.user || null;
       setUser(u);
       if (u) {
-        supabase.from("groomers").select("plan_tier").eq("id", u.id).maybeSingle()
-          .then(({ data: g }) => { if (g?.plan_tier) setPlanTier(g.plan_tier); });
+        supabase.from("groomers").select("plan_tier, custom_intake_questions").eq("id", u.id).maybeSingle()
+          .then(({ data: g }) => {
+            if (g?.plan_tier) setPlanTier(g.plan_tier);
+            if (g?.custom_intake_questions) setIntakeQuestions(g.custom_intake_questions);
+          });
       }
     });
   }, []);
@@ -1005,20 +1009,25 @@ export default function ClientPets() {
           </div>
 
           {/* Custom intake answers */}
-          {client.custom_answers && Object.keys(client.custom_answers).length > 0 && (
+          {client.custom_intake_answers && Object.keys(client.custom_intake_answers).length > 0 && (
             <div className="pt-2 border-t border-[var(--border-med)]">
               <div className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide mb-2">
                 Intake Answers
               </div>
               <div className="space-y-2">
-                {Object.entries(client.custom_answers).map(([qId, answer]) => (
-                  <div key={qId} className="text-sm">
-                    <span className="text-gray-500 text-xs font-medium">{qId.replace(/_/g, " ")}</span>
-                    <div className="text-gray-800 mt-0.5">
-                      {Array.isArray(answer) ? answer.join(", ") : String(answer || "—")}
+                {Object.entries(client.custom_intake_answers).map(([qId, answer]) => {
+                  const question = intakeQuestions.find((q) => q.id === qId);
+                  return (
+                    <div key={qId} className="text-sm">
+                      <span className="text-gray-500 text-xs font-medium">
+                        {question?.label || qId.replace(/_/g, " ")}
+                      </span>
+                      <div className="text-gray-800 mt-0.5">
+                        {Array.isArray(answer) ? answer.join(", ") : String(answer || "—")}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

@@ -40,9 +40,9 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  let slug, clientData, emergencyData, petsData;
+  let slug, clientData, emergencyData, petsData, customAnswers;
   try {
-    ({ slug, client: clientData, emergency: emergencyData, pets: petsData } = JSON.parse(event.body || "{}"));
+    ({ slug, client: clientData, emergency: emergencyData, pets: petsData, custom_answers: customAnswers } = JSON.parse(event.body || "{}"));
   } catch {
     return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON" }) };
   }
@@ -72,7 +72,7 @@ exports.handler = async (event) => {
   // ── Load groomer ────────────────────────────────────────
   const { data: groomer, error: groomerErr } = await supabase
     .from("groomers")
-    .select("id, full_name, business_name, email, slug")
+    .select("id, full_name, business_name, email, slug, custom_intake_questions")
     .eq("slug", slug)
     .single();
 
@@ -108,6 +108,7 @@ exports.handler = async (event) => {
     zip:                     clientData.zip?.trim() || null,
     emergency_contact_name:  emergencyData?.name?.trim() || null,
     emergency_contact_phone: emergencyData?.phone?.trim() || null,
+    custom_intake_answers:   customAnswers && Object.keys(customAnswers).length ? customAnswers : null,
   };
 
   if (existingClients?.length > 0) {
@@ -188,6 +189,15 @@ exports.handler = async (event) => {
   const groomerName = groomer.business_name || groomer.full_name || "Groomer";
   const siteUrl = process.env.URL || "https://app.pawscheduler.app";
 
+  // Map custom answer IDs to their question labels for the email
+  let customAnswersSummary = "—";
+  if (customAnswers && Object.keys(customAnswers).length && groomer.custom_intake_questions?.length) {
+    const lines = groomer.custom_intake_questions
+      .filter(q => customAnswers[q.id] !== undefined && customAnswers[q.id] !== "")
+      .map(q => `${q.label}: ${customAnswers[q.id]}`);
+    if (lines.length) customAnswersSummary = lines.join("\n");
+  }
+
   if (groomer.email) {
     fetch(`${siteUrl}/.netlify/functions/sendEmail`, {
       method: "POST",
@@ -209,6 +219,7 @@ exports.handler = async (event) => {
           pet_size:        { 1: "Small", 2: "Medium", 3: "Large", 4: "XL" }[pet?.size_category] || "Small",
           pet_tags:        pet?.tags?.join(", ") || "None",
           pet_notes:       pet?.notes || "—",
+          custom_answers:  customAnswersSummary,
           is_new_client:   existingClients?.length > 0 ? "Existing client (updated)" : "New client",
         },
       }),

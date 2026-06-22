@@ -4,13 +4,21 @@
 
 const { createClient } = require("@supabase/supabase-js");
 
+// Format a 24-hour "HH:MM" string as 12-hour with AM/PM
+function fmtTime(t) {
+  if (!t) return "";
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
 exports.handler = async (event) => {
   const token = event.queryStringParameters?.token;
 
   if (!token) {
     return {
       statusCode: 400,
-      headers: { "Content-Type": "text/html" },
+      headers: { "Content-Type": "text/html; charset=utf-8" },
       body: `<html><body style="font-family:sans-serif;text-align:center;padding:40px">
         <h2>❌ Invalid confirmation link</h2>
         <p>This link is missing a token. Please contact your groomer.</p>
@@ -37,7 +45,7 @@ exports.handler = async (event) => {
     console.error("Token lookup failed:", error, "token:", token);
     return {
       statusCode: 404,
-      headers: { "Content-Type": "text/html" },
+      headers: { "Content-Type": "text/html; charset=utf-8" },
       body: `<html><body style="font-family:sans-serif;text-align:center;padding:40px">
         <h2>❌ Appointment not found</h2>
         <p>This confirmation link may have expired or already been used.</p>
@@ -63,11 +71,11 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
-      headers: { "Content-Type": "text/html" },
+      headers: { "Content-Type": "text/html; charset=utf-8" },
       body: `<html><body style="font-family:sans-serif;text-align:center;padding:40px;max-width:480px;margin:0 auto">
         <div style="font-size:48px;margin-bottom:16px">✅</div>
         <h2 style="color:#16a34a">Already confirmed!</h2>
-        <p style="color:#374151">${petName}'s appointment on ${dateStr} at ${appt.time?.slice(0,5)} with ${groomerName} is confirmed.</p>
+        <p style="color:#374151">${petName}'s appointment on ${dateStr} at ${fmtTime(appt.time)} with ${groomerName} is confirmed.</p>
         <p style="color:#6b7280;font-size:14px;margin-top:24px">Powered by PawScheduler</p>
       </body></html>`,
     };
@@ -82,7 +90,7 @@ exports.handler = async (event) => {
   if (updateError) {
     return {
       statusCode: 500,
-      headers: { "Content-Type": "text/html" },
+      headers: { "Content-Type": "text/html; charset=utf-8" },
       body: `<html><body style="font-family:sans-serif;text-align:center;padding:40px">
         <h2>❌ Something went wrong</h2>
         <p>Please contact your groomer directly to confirm.</p>
@@ -98,9 +106,10 @@ exports.handler = async (event) => {
 
   return {
     statusCode: 200,
-    headers: { "Content-Type": "text/html" },
+    headers: { "Content-Type": "text/html; charset=utf-8" },
     body: `<html>
     <head>
+      <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <title>Appointment Confirmed</title>
     </head>
@@ -113,7 +122,7 @@ exports.handler = async (event) => {
         </p>
         <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:16px;text-align:left;margin-bottom:24px">
           <div style="font-size:14px;color:#166534;margin-bottom:6px"><strong>📅 Date:</strong> ${dateStr}</div>
-          <div style="font-size:14px;color:#166534;margin-bottom:6px"><strong>⏰ Time:</strong> ${appt.time?.slice(0,5)}</div>
+          <div style="font-size:14px;color:#166534;margin-bottom:6px"><strong>⏰ Time:</strong> ${fmtTime(appt.time)}</div>
           <div style="font-size:14px;color:#166534"><strong>✂️ With:</strong> ${groomerName}</div>
         </div>
         <p style="color:#6b7280;font-size:13px">See you then! Reply to your groomer's text if you need to make any changes.</p>

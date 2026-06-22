@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../supabase";
 import Loader from "../components/Loader";
 import ConfirmModal from "../components/ConfirmModal";
@@ -359,6 +359,8 @@ export default function Profile() {
 
   // ---------------- TABS ----------------
   const [activeTab, setActiveTab] = useState("profile");
+  const tabBarRef = useRef(null);
+  const [tabBarHasOverflow, setTabBarHasOverflow] = useState(false);
   const [stripeConnecting, setStripeConnecting] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
   const [reminderTemplate, setReminderTemplate] = useState("");
@@ -413,6 +415,26 @@ export default function Profile() {
       window.history.replaceState({}, "", "/profile");
     }
   }, []);
+
+  // Track whether the tab bar has more content to scroll to,
+  // so the fade/chevron hint only shows when it's actually useful.
+  useEffect(() => {
+    const el = tabBarRef.current;
+    if (!el) return;
+
+    const checkOverflow = () => {
+      const hasMore = el.scrollWidth - el.scrollLeft - el.clientWidth > 4;
+      setTabBarHasOverflow(hasMore);
+    };
+
+    checkOverflow();
+    el.addEventListener("scroll", checkOverflow);
+    window.addEventListener("resize", checkOverflow);
+    return () => {
+      el.removeEventListener("scroll", checkOverflow);
+      window.removeEventListener("resize", checkOverflow);
+    };
+  }, [loading]);
 
   if (loading || hoursLoading) return <Loader />;
 
@@ -473,23 +495,34 @@ export default function Profile() {
       <SubscriptionStatus userId={user?.id} onManageBilling={handleManageBilling} />
 
       {/* TAB BAR */}
-      <div className="flex mt-4 mb-6 border-b border-[var(--border-med)] overflow-x-auto no-scrollbar">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setActiveTab(tab.id)}
-            style={{ minWidth: 76, flexShrink: 0 }}
-            className={`py-2.5 px-1 text-xs font-semibold transition-colors text-center border-b-2 whitespace-nowrap
-              ${activeTab === tab.id
-                ? "border-emerald-500 text-emerald-700"
-                : "border-transparent text-[var(--text-3)] hover:text-[var(--text-2)]"
-              }`}
+      <div className="relative mt-4 mb-6">
+        <div ref={tabBarRef} className="flex border-b border-[var(--border-med)] overflow-x-auto no-scrollbar">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              style={{ minWidth: 76, flexShrink: 0 }}
+              className={`py-2.5 px-1 text-xs font-semibold transition-colors text-center border-b-2 whitespace-nowrap
+                ${activeTab === tab.id
+                  ? "border-emerald-500 text-emerald-700"
+                  : "border-transparent text-[var(--text-3)] hover:text-[var(--text-2)]"
+                }`}
+            >
+              <span className="block text-base leading-none mb-0.5">{tab.emoji}</span>
+              <span className="block">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+        {/* Fade + chevron hint that the tab bar scrolls — only shown while there's more to scroll to */}
+        {tabBarHasOverflow && (
+          <div
+            className="pointer-events-none absolute top-0 right-0 h-full w-10 flex items-center justify-end animate-pulse"
+            style={{ background: "linear-gradient(to right, transparent, var(--bg) 70%)" }}
           >
-            <span className="block text-base leading-none mb-0.5">{tab.emoji}</span>
-            <span className="block">{tab.label}</span>
-          </button>
-        ))}
+            <span className="text-[var(--text-3)] text-base pr-0.5">›</span>
+          </div>
+        )}
       </div>
 
       {/* ── PROFILE TAB ── */}
