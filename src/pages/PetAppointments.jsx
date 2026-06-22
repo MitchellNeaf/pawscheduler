@@ -14,13 +14,21 @@ const toYMD = (d) => {
   return `${year}-${month}-${day}`;
 };
 
+function fmtTime(t) {
+  if (!t) return "";
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
 function getEndTime(start, durationMin) {
   if (!start) return "—";
   const [h, m] = start.split(":").map(Number);
   const endMin = h * 60 + m + (durationMin || 15);
-  return `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(
-    endMin % 60
-  ).padStart(2, "0")}`;
+  const eh = Math.floor(endMin / 60);
+  const em = endMin % 60;
+  const ampm = eh >= 12 ? "PM" : "AM";
+  return `${eh % 12 || 12}:${String(em).padStart(2, "0")} ${ampm}`;
 }
 
 /* =========================
@@ -711,8 +719,8 @@ export default function PetAppointments() {
       ) : (
         <div className="grid gap-4">
           {futureAndPast.map((appt) => {
-            const start = (appt.time || "00:00").slice(0, 5);
-            const end = getEndTime(start, appt.duration_min || 15);
+            const start = fmtTime(appt.time);
+            const end = getEndTime((appt.time || "00:00").slice(0, 5), appt.duration_min || 15);
             const canEdit = isFutureAppointment(appt);
 
             return (

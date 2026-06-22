@@ -13,6 +13,12 @@ const normalizeSvc = (s) => LEGACY_SERVICE_MAP[s] || s;
 
 /* ── quick period helpers ── */
 const toYMD = (d) => d.toISOString().slice(0, 10);
+const fmtTime = (t) => {
+  if (!t) return "";
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
+};
 const PERIODS = [
   {
     label: "This Week", get: () => {
@@ -515,7 +521,7 @@ export default function Revenue() {
                       <td style={{ padding: "10px 12px 10px 8px", whiteSpace: "nowrap" }}>
                         <div style={{ fontWeight: 600, color: "var(--text-1)" }}>{a.date}</div>
                         <div style={{ fontSize: "0.72rem", color: "var(--text-3)" }}>
-                          {a.time?.slice(0, 5)}
+                          {fmtTime(a.time)}
                         </div>
                       </td>
                       <td style={{ padding: "10px 12px", fontWeight: 600,

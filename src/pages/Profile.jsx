@@ -1556,6 +1556,17 @@ export default function Profile() {
       {/* ── SMS BOT TAB ── */}
       {activeTab === "payments" && (
         <div className="space-y-6">
+          {planTier !== "pro" ? (
+            <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-6 text-center space-y-3">
+              <div className="text-3xl">💳</div>
+              <h3 className="font-bold text-[var(--text-1)]">Client payments require Pro</h3>
+              <p className="text-sm text-[var(--text-2)]">Upgrade to Pro to connect Stripe and send payment requests directly to clients after appointments.</p>
+              <a href="/upgrade" className="inline-block px-5 py-2.5 rounded-xl bg-violet-600 text-white font-bold text-sm hover:bg-violet-700 transition">
+                Upgrade to Pro — $79.99/mo →
+              </a>
+            </div>
+          ) : (
+          <>
           <div>
             <h2 className="text-lg font-bold mb-1">Client Payments</h2>
             <p className="text-sm text-[var(--text-3)] mb-5">
@@ -1625,6 +1636,8 @@ export default function Profile() {
                 You'll be redirected to Stripe to set up your account. Takes about 2 minutes.
               </p>
             </div>
+          )}
+          </>
           )}
         </div>
       )}

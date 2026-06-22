@@ -26,6 +26,13 @@ function getAmountNumber(amount) {
   return Number.isFinite(raw) ? raw : 0;
 }
 
+function fmtTime(t) {
+  if (!t) return "";
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  const ampm = h >= 12 ? "PM" : "AM";
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
 export default function UnpaidAppointments() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -170,7 +177,7 @@ export default function UnpaidAppointments() {
       ) : (
         <div className="grid gap-4">
           {appointments.map((appt) => {
-            const start = (appt.time || "").slice(0, 5);
+            const start = fmtTime(appt.time);
             const services = appt.services || [];
             const amountNum = getAmountNumber(appt.amount);
             const daysOverdue = getDaysOverdue(appt.date);

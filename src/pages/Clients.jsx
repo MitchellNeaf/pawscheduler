@@ -409,13 +409,14 @@ export default function Clients() {
 
   const handleDeleteClient = async (client) => {
     if (!window.confirm(`Delete ${client.full_name}? This will also delete all their pets and appointments. This cannot be undone.`)) return;
+    if (!user) return;
     setDeletingClientId(client.id);
     const clientPets = pets.filter(p => p.client_id === client.id);
     for (const pet of clientPets) {
-      await supabase.from("appointments").delete().eq("pet_id", pet.id);
-      await supabase.from("pets").delete().eq("id", pet.id);
+      await supabase.from("appointments").delete().eq("pet_id", pet.id).eq("groomer_id", user.id);
+      await supabase.from("pets").delete().eq("id", pet.id).eq("groomer_id", user.id);
     }
-    await supabase.from("clients").delete().eq("id", client.id);
+    await supabase.from("clients").delete().eq("id", client.id).eq("groomer_id", user.id);
     setClients(prev => prev.filter(c => c.id !== client.id));
     setPets(prev => prev.filter(p => p.client_id !== client.id));
     setDeletingClientId(null);
