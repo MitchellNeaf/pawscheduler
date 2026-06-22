@@ -459,8 +459,8 @@ export default function Profile() {
     { id: "schedule",  emoji: "🗓", label: "Schedule" },
     { id: "pricing",   emoji: "💲", label: "Pricing"  },
     { id: "reminders", emoji: "🔔", label: (planTier === "basic" || planTier === "growth" || planTier === "pro") ? "Reminders" : "Reminders 🔒" },
-    { id: "payments",  emoji: "💳", label: planTier === "pro" ? "Payments" : "Payments 🔒" },
     { id: "intake",    emoji: "📋", label: (planTier === "growth" || planTier === "pro") ? "Intake" : "Intake 🔒" },
+    { id: "payments",  emoji: "💳", label: planTier === "pro" ? "Payments" : "Payments 🔒" },
     { id: "smsbot",    emoji: "💬", label: planTier === "pro" ? "SMS Bot" : "SMS Bot 🔒" },
   ];
 
