@@ -98,6 +98,7 @@ export default function Profile() {
           })));
         }
         setBookingRequiresApproval(data.booking_requires_approval || false);
+        setBookingEnabled(data.booking_enabled !== false); // default true if null
         setFullName(data.full_name || "");
         setBio(data.bio || "");
         setSlug(data.slug || "");
@@ -286,6 +287,7 @@ export default function Profile() {
         max_appts_per_day: maxApptsPerDay || null,
         time_zone: timeZone,
         booking_requires_approval: bookingRequiresApproval,
+        booking_enabled: bookingEnabled,
         reminder_message_template: reminderTemplate.trim() || null,
         sms_confirmation_template: confirmationTemplate.trim() || null,
         reminder_rules: reminderRules.length ? reminderRules : [48],
@@ -370,6 +372,7 @@ export default function Profile() {
   const [customAddons, setCustomAddons] = useState([]);
   const [customFees, setCustomFees] = useState([]);
   const [bookingRequiresApproval, setBookingRequiresApproval] = useState(false);
+  const [bookingEnabled, setBookingEnabled] = useState(true);
   const [stripeError, setStripeError] = useState("");
   const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
   const [customIntakeQuestions, setCustomIntakeQuestions] = useState(null);
@@ -803,6 +806,45 @@ export default function Profile() {
       {/* ── BOOKING PAGE TAB ── */}
       {activeTab === "booking" && (
         <div className="space-y-4">
+
+          {/* ── Online Booking Toggle ── */}
+          <div className={`rounded-2xl border-2 p-4 transition-colors ${
+            bookingEnabled
+              ? "border-emerald-200 bg-emerald-50"
+              : "border-red-200 bg-red-50"
+          }`}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h3 className={`font-bold text-sm ${bookingEnabled ? "text-emerald-800" : "text-red-800"}`}>
+                  {bookingEnabled ? "🟢 Online booking is open" : "🔴 Online booking is closed"}
+                </h3>
+                <p className={`text-xs mt-0.5 ${bookingEnabled ? "text-emerald-700" : "text-red-700"}`}>
+                  {bookingEnabled
+                    ? "Clients can book appointments from your public booking page."
+                    : "Your booking page is hidden. Clients will see a \"not accepting bookings\" message."}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  const newVal = !bookingEnabled;
+                  setBookingEnabled(newVal);
+                  await supabase
+                    .from("groomers")
+                    .update({ booking_enabled: newVal })
+                    .eq("id", user.id);
+                }}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors flex-shrink-0 ${
+                  bookingEnabled ? "bg-emerald-500" : "bg-red-400"
+                }`}
+              >
+                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                  bookingEnabled ? "translate-x-6" : "translate-x-1"
+                }`} />
+              </button>
+            </div>
+          </div>
+
           <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4">
             <h3 className="font-bold text-[var(--text-1)] text-sm mb-1">Your Booking Page</h3>
             <p className="text-xs text-[var(--text-3)] mb-2">Share this link with clients so they can book appointments online.</p>
