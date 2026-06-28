@@ -382,13 +382,6 @@ export default function IntakePage() {
                 {waiverSubmitting ? "Signing…" : "Sign Waiver"}
               </button>
 
-              <button
-                onClick={() => setShowWaiver(false)}
-                className="w-full py-2.5 rounded-xl font-semibold text-sm text-[var(--text-3)] hover:text-[var(--text-2)] transition"
-              >
-                Skip for now
-              </button>
-
               <p className="text-xs text-[var(--text-3)] text-center">
                 Your name and the date/time of signing will be recorded.
                 This constitutes a legally binding electronic signature.
