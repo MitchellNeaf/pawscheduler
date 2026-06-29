@@ -64,7 +64,7 @@ function PhotoLightbox({ url, onClose }) {
     >
       <img
         src={url}
-        alt="Pet photo"
+        alt="Pet portrait"
         className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
         onClick={e => e.stopPropagation()}
       />
