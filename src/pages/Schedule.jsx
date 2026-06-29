@@ -186,9 +186,10 @@ function getEndTime(start, durationMin) {
   if (!start) return "—";
   const [h, m] = start.split(":").map(Number);
   const endMin = h * 60 + m + durationMin;
-  return `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(
-    endMin % 60
-  ).padStart(2, "0")}`;
+  const eh = Math.floor(endMin / 60);
+  const em = endMin % 60;
+  const ampm = eh >= 12 ? "PM" : "AM";
+  return `${eh % 12 || 12}:${String(em).padStart(2, "0")} ${ampm}`;
 }
 
 /** Build bullet-list HTML for services (• item<br/>) */
@@ -3060,8 +3061,8 @@ export default function Schedule() {
           {groupedAppointments.map((group) => {
             const appt = group[0]; // primary appointment for shared fields
             const isMulti = group.length > 1;
-            const start = (appt.time || "00:00").slice(0, 5);
-            const end = getEndTime(start, Math.max(...group.map(a => a.duration_min || 15)));
+            const start = fmt12Hour((appt.time || "00:00").slice(0, 5));
+            const end = getEndTime((appt.time || "00:00").slice(0, 5), Math.max(...group.map(a => a.duration_min || 15)));
             const size = sizeBadge(appt.size_category || appt.pets?.size_category || 1);
             const displayName = groupPetNames(group);
             const totalAmount = groupTotal(group);
