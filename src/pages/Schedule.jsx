@@ -1781,12 +1781,12 @@ export default function Schedule() {
         return;
       }
 
-      const startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
-      const endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
-      const range =
-        startIdx === -1 || endIdx === -1
-          ? []
-          : TIME_SLOTS.slice(startIdx, endIdx + 1);
+      let startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
+      let endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
+      // Clamp to valid range if start/end fall outside TIME_SLOTS
+      if (startIdx === -1) startIdx = 0;
+      if (endIdx === -1) endIdx = TIME_SLOTS.length - 1;
+      const range = TIME_SLOTS.slice(startIdx, endIdx + 1);
       setWorkingRange(range);
 
       const breakSet = new Set();
