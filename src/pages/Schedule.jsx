@@ -723,6 +723,8 @@ function AppointmentModal({
   addonOptions = [],
   feeOptions = [],
 }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+
   if (!open) return null;
   if (isEdit && !appt) return null;
   if (!isEdit && !pet) return null;
@@ -764,7 +766,6 @@ function AppointmentModal({
   const expired = isExpired(rabies?.date_expires);
   const expSoon = isExpiringSoon(rabies?.date_expires);
 
-  const [lightboxOpen, setLightboxOpen] = useState(false);
   const petPhotoUrl = isEdit ? appt.pets?.photo_url : pet.photo_url;
 
   return (
