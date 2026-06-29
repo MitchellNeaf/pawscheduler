@@ -764,8 +764,31 @@ function AppointmentModal({
   const expired = isExpired(rabies?.date_expires);
   const expSoon = isExpiringSoon(rabies?.date_expires);
 
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const petPhotoUrl = isEdit ? appt.pets?.photo_url : pet.photo_url;
+
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+
+      {/* Photo lightbox */}
+      {lightboxOpen && petPhotoUrl && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <img
+            src={petPhotoUrl}
+            alt={petName}
+            className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
+            onClick={e => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setLightboxOpen(false)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white text-xl flex items-center justify-center hover:bg-white/40 transition"
+          >✕</button>
+        </div>
+      )}
+
       <div className="bg-white rounded-lg shadow-lg max-w-md w-full max-h-[90vh] flex flex-col">
 
         {/* Header */}
@@ -780,9 +803,19 @@ function AppointmentModal({
         <div className="p-4 space-y-3 overflow-y-auto flex-1">
 
           {/* Pet / client name */}
-          <div className="text-sm text-gray-700">
-            <div className="font-semibold">{petName}</div>
-            <div className="text-xs text-gray-500">{clientName}</div>
+          <div className="flex items-center gap-3">
+            {petPhotoUrl && (
+              <img
+                src={petPhotoUrl}
+                alt={petName}
+                onClick={() => setLightboxOpen(true)}
+                className="w-14 h-14 rounded-full object-cover border-2 border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-90 transition"
+              />
+            )}
+            <div className="text-sm text-gray-700">
+              <div className="font-semibold">{petName}</div>
+              <div className="text-xs text-gray-500">{clientName}</div>
+            </div>
           </div>
 
           {/* Pet notes — shown prominently if set */}
