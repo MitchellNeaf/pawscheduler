@@ -722,8 +722,9 @@ function AppointmentModal({
   serviceOptions,
   addonOptions = [],
   feeOptions = [],
+  onViewPhoto,
 }) {
-  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [lightboxOpen, setLightboxOpen] = useState(false); // kept for hook order
 
   if (!open) return null;
   if (isEdit && !appt) return null;
@@ -771,25 +772,6 @@ function AppointmentModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
 
-      {/* Photo lightbox */}
-      {lightboxOpen && petPhotoUrl && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setLightboxOpen(false)}
-        >
-          <img
-            src={petPhotoUrl}
-            alt={petName}
-            className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
-            onClick={e => e.stopPropagation()}
-          />
-          <button
-            onClick={() => setLightboxOpen(false)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white text-xl flex items-center justify-center hover:bg-white/40 transition"
-          >✕</button>
-        </div>
-      )}
-
       <div className="bg-white rounded-lg shadow-lg max-w-md w-full max-h-[90vh] flex flex-col">
 
         {/* Header */}
@@ -802,7 +784,7 @@ function AppointmentModal({
               <img
                 src={petPhotoUrl}
                 alt={petName}
-                onClick={() => setLightboxOpen(true)}
+                onClick={() => onViewPhoto && onViewPhoto(petPhotoUrl)}
                 className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 cursor-pointer hover:opacity-90 transition"
               />
             )}
@@ -1568,6 +1550,7 @@ export default function Schedule() {
   const [capacity, setCapacity] = useState(1);
   const [editingBlock, setEditingBlock] = useState(null);
   const [monthRefreshKey, setMonthRefreshKey] = useState(0);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
   const [viewMode, setViewMode] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "list" : "grid"
   );
@@ -2490,6 +2473,24 @@ export default function Schedule() {
 
   return (
     <main className="px-2 sm:px-4 py-4 space-y-4 max-w-6xl mx-auto">
+      {/* Global photo lightbox — renders above everything */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <img
+            src={lightboxUrl}
+            alt="Pet"
+            className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
+            onClick={e => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white text-xl flex items-center justify-center hover:bg-white/40 transition"
+          >✕</button>
+        </div>
+      )}
       <Link to="/" className="text-sm text-blue-600 hover:underline">
         ← Back to Home
       </Link>
@@ -2868,7 +2869,8 @@ export default function Schedule() {
                                     src={appt.pets.photo_url}
                                     alt={appt.pets.name}
                                     loading="lazy"
-                                    className="w-8 h-8 rounded-full object-cover border border-gray-200 mb-1"
+                                    onClick={e => { e.stopPropagation(); setLightboxUrl(appt.pets.photo_url); }}
+                                    className="w-8 h-8 rounded-full object-cover border border-gray-200 mb-1 cursor-pointer hover:opacity-90 transition"
                                   />
                                 )}
 
@@ -3681,6 +3683,7 @@ export default function Schedule() {
         pricing={pricing}
         workingRange={workingRange}
         breakSlots={breakSlots}
+        onViewPhoto={setLightboxUrl}
       />
 
       <RebookWeekModal
