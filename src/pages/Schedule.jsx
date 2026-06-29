@@ -3492,6 +3492,34 @@ export default function Schedule() {
                         </span>
                       )}
                     </div>
+
+                    {/* Quick payment row — shows after checkout if not yet paid */}
+                    {appt.checked_out_at && !appt.paid && (
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        {["cash", "card", "venmo", "cashapp", "zelle", "check"].map(method => (
+                          <button
+                            key={method}
+                            onClick={async () => {
+                              await supabase.from("appointments").update({
+                                paid: true,
+                                payment_method: method,
+                              }).eq("id", appt.id);
+                              setAppointments(prev => prev.map(a =>
+                                a.id === appt.id ? { ...a, paid: true, payment_method: method } : a
+                              ));
+                            }}
+                            className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-[var(--border-med)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition capitalize"
+                          >
+                            💵 {method === "cashapp" ? "Cash App" : method.charAt(0).toUpperCase() + method.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {appt.checked_out_at && appt.paid && (
+                      <div className="mt-2 text-xs text-emerald-700 font-semibold">
+                        ✅ Paid{appt.payment_method ? ` via ${appt.payment_method === "cashapp" ? "Cash App" : appt.payment_method.charAt(0).toUpperCase() + appt.payment_method.slice(1)}` : ""}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

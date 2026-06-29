@@ -54,9 +54,33 @@ function compressImage(file) {
   });
 }
 
+/* ---------------- Photo lightbox ---------------- */
+function PhotoLightbox({ url, onClose }) {
+  if (!url) return null;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      onClick={onClose}
+    >
+      <img
+        src={url}
+        alt="Pet photo"
+        className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
+        onClick={e => e.stopPropagation()}
+      />
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white text-xl flex items-center justify-center hover:bg-white/40 transition"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
 /* ---------------- Lazy pet photo ---------------- */
 // Only loads the image URL when the element scrolls into view
-function LazyPetPhoto({ url, name }) {
+function LazyPetPhoto({ url, name, onClick }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
 
@@ -80,7 +104,8 @@ function LazyPetPhoto({ url, name }) {
         <img
           src={url}
           alt={name}
-          className="w-16 h-16 rounded-full object-cover border-2 border-[var(--border-med)] shadow-sm"
+          onClick={onClick}
+          className="w-16 h-16 rounded-full object-cover border-2 border-[var(--border-med)] shadow-sm cursor-pointer hover:opacity-90 transition"
         />
       ) : (
         <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] border-2 border-[var(--border-med)]" />
@@ -488,6 +513,7 @@ function ShotModal({
 export default function ClientPets() {
   const { clientId } = useParams();
   const [client, setClient] = useState(null);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
   const [upcomingAppts, setUpcomingAppts] = useState([]);
   const [pets, setPets] = useState([]);
   const [user, setUser] = useState(null);
@@ -853,6 +879,7 @@ export default function ClientPets() {
 
   return (
     <main>
+      {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       <div className="mb-2">
         <Link to="/clients">&larr; Back to Clients</Link>
       </div>
@@ -1148,7 +1175,7 @@ export default function ClientPets() {
                     >
                       ✏️ Edit
                     </button>
-                    <LazyPetPhoto url={pet.photo_url} name={pet.name} />
+                    <LazyPetPhoto url={pet.photo_url} name={pet.name} onClick={() => pet.photo_url && setLightboxUrl(pet.photo_url)} />
                   </div>
                 </div>
 
@@ -1157,7 +1184,8 @@ export default function ClientPets() {
                   <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
                     {pet.photo_urls.map((url, i) => (
                       <img key={i} src={url} alt={`${pet.name} ${i + 1}`}
-                        className="w-14 h-14 rounded-lg object-cover border border-gray-200 flex-shrink-0" />
+                        onClick={() => setLightboxUrl(url)}
+                        className="w-14 h-14 rounded-lg object-cover border border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-90 transition" />
                     ))}
                   </div>
                 )}
