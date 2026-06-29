@@ -82,7 +82,6 @@ exports.handler = async (event) => {
   }
 
   const now = new Date();
-  const nowMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   const WINDOW = 29; // ±29 minutes — pairs with 30-min cron to catch any appointment time
 
   try {
@@ -157,7 +156,7 @@ exports.handler = async (event) => {
           // Build confirm link
           const token = await ensureConfirmToken(appt.id);
           const confirmLink = token
-            ? `${process.env.URL || "https://pawscheduler.app"}/confirm/${token}`
+            ? `${process.env.URL || "https://app.pawscheduler.app"}/confirm/${token}`
             : "";
 
           // Build token vars

@@ -77,20 +77,6 @@ exports.handler = async (event) => {
       .is("confirmation_sent_at", null)
       .or("no_show.is.null,no_show.eq.false");
 
-    if (!appts?.length) {
-      console.log("No unconfirmed appointments 48hrs out.");
-      return { statusCode: 200, body: JSON.stringify({ sent: 0, skipped: 0 }) };
-    }
-
-    // Load groomer data separately
-    const groomerIds = [...new Set(appts.map(a => a.groomer_id).filter(Boolean))];
-    const { data: groomers } = await supabase
-      .from("groomers")
-      .select("id, full_name, business_name, email, sms_number, plan_tier, subscription_status")
-      .in("id", groomerIds);
-    const groomerMap = {};
-    (groomers || []).forEach(g => { groomerMap[g.id] = g; });
-
     if (apptErr) {
       console.error("Query error:", apptErr);
       await alertAdmin("send48hrConfirmations", apptErr);
@@ -101,6 +87,8 @@ exports.handler = async (event) => {
       console.log("No unconfirmed appointments 48hrs out.");
       return { statusCode: 200, body: JSON.stringify({ sent: 0, skipped: 0 }) };
     }
+
+    // Load groomer data separately
 
     let sent = 0;
     let skipped = 0;
