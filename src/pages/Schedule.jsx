@@ -3250,7 +3250,8 @@ export default function Schedule() {
                           src={appt.pets.photo_url}
                           alt={appt.pets.name}
                           loading="lazy"
-                          className="w-12 h-12 rounded-full object-cover border border-gray-200 flex-shrink-0 mt-0.5"
+                          onClick={e => { e.stopPropagation(); setLightboxUrl(appt.pets.photo_url); }}
+                          className="w-12 h-12 rounded-full object-cover border border-gray-200 flex-shrink-0 mt-0.5 cursor-pointer hover:opacity-90 transition"
                         />
                       )}
                       <div className="min-w-0">
