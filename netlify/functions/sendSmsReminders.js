@@ -94,34 +94,34 @@ exports.handler = async (event) => {
 
     if (gErr) throw gErr;
 
+    console.log(`sendSmsReminders: found ${(groomers || []).length} groomer(s) with SMS numbers`);
+
     let sent = 0;
     let skipped = 0;
 
     for (const groomer of (groomers || [])) {
       // Must be basic+ for reminders
-      if (groomer.plan_tier === "free") { skipped++; continue; }
+      if (groomer.plan_tier === "free") {
+        console.log(`Skipping groomer ${groomer.id} — free plan`);
+        skipped++; continue;
+      }
 
       const rules = Array.isArray(groomer.reminder_rules) && groomer.reminder_rules.length
         ? groomer.reminder_rules
-        : [48]; // default: 48hr only
+        : [48];
 
       const tz = groomer.time_zone || "America/New_York";
+      console.log(`Processing groomer ${groomer.id} (${groomer.full_name}) — rules: ${JSON.stringify(rules)}, tz: ${tz}`);
 
-      // For each reminder rule (in hours), find appointments whose start time
-      // is approximately `rule` hours from now
       for (const hoursAhead of rules) {
         const targetTime = new Date(now.getTime() + hoursAhead * 60 * 60 * 1000);
-
-        // Get the target date in groomer's timezone
-        const targetDateStr = targetTime.toLocaleDateString("en-CA", { timeZone: tz }); // YYYY-MM-DD
+        const targetDateStr = targetTime.toLocaleDateString("en-CA", { timeZone: tz });
         const targetHour = targetTime.toLocaleTimeString("en-US", { timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit" });
-
-        // targetHour is "HH:MM" in groomer tz
         const [th, tm] = targetHour.split(":").map(Number);
         const targetMinutesInDay = th * 60 + tm;
 
-        // Fetch appointments on that date with reminder_enabled that haven't been reminded yet for this window
-        // We use a column sms_reminder_sent_at — if null, not sent; if set, already sent
+        console.log(`  Rule ${hoursAhead}hr: targeting ${targetDateStr} at ${targetHour} (${targetMinutesInDay} min)`);
+
         const { data: appts } = await supabase
           .from("appointments")
           .select(`
@@ -134,24 +134,35 @@ exports.handler = async (event) => {
           .eq("reminder_enabled", true)
           .or("no_show.is.null,no_show.eq.false");
 
+        console.log(`  Found ${(appts || []).length} appointment(s) on ${targetDateStr} with reminder_enabled`);
+
         for (const appt of (appts || [])) {
           const client = appt.pets?.clients;
-          if (!client?.phone || !client?.sms_opt_in) { skipped++; continue; }
+          if (!client?.phone || !client?.sms_opt_in) {
+            console.log(`  Skipping appt ${appt.id} — no phone or sms_opt_in false (phone: ${client?.phone}, opt_in: ${client?.sms_opt_in})`);
+            skipped++; continue;
+          }
 
           // Check time window match
           const [ah, am] = (appt.time || "00:00").slice(0, 5).split(":").map(Number);
           const apptMinutes = ah * 60 + am;
           const diff = Math.abs(apptMinutes - targetMinutesInDay);
-          if (diff > WINDOW) { skipped++; continue; }
+          if (diff > WINDOW) {
+            console.log(`  Skipping appt ${appt.id} at ${appt.time} — outside window (diff: ${diff} min, max: ${WINDOW})`);
+            skipped++; continue;
+          }
 
-          // Check if we already sent a reminder within the last (hoursAhead ± 2) hours
-          // to avoid double-sending if cron runs more than once in the window
+          // Check dedup
           if (appt.sms_reminder_sent_at) {
             const lastSent = new Date(appt.sms_reminder_sent_at);
             const hoursSinceLastSent = (now - lastSent) / 3600000;
-            // If last sent was less than (hoursAhead - 1) hours ago, skip
-            if (hoursSinceLastSent < hoursAhead - 1) { skipped++; continue; }
+            if (hoursSinceLastSent < hoursAhead - 1) {
+              console.log(`  Skipping appt ${appt.id} — already sent ${hoursSinceLastSent.toFixed(1)}hr ago`);
+              skipped++; continue;
+            }
           }
+
+          console.log(`  ✓ Sending reminder for appt ${appt.id} (${appt.pets?.name}, ${appt.date} ${appt.time}) to ${client.phone}`);
 
           // Build confirm link
           const token = await ensureConfirmToken(appt.id);
@@ -205,6 +216,7 @@ exports.handler = async (event) => {
               .update({ sms_reminder_sent_at: now.toISOString() })
               .eq("id", appt.id);
 
+            console.log(`  ✅ SMS sent successfully for appt ${appt.id}`);
             sent++;
           } catch (smsErr) {
             console.error(`SMS failed for appt ${appt.id}:`, smsErr.message);
@@ -214,6 +226,7 @@ exports.handler = async (event) => {
       }
     }
 
+    console.log(`sendSmsReminders complete — sent: ${sent}, skipped: ${skipped}`);
     return {
       statusCode: 200,
       body: JSON.stringify({ sent, skipped }),
