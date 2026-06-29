@@ -793,27 +793,25 @@ function AppointmentModal({
       <div className="bg-white rounded-lg shadow-lg max-w-md w-full max-h-[90vh] flex flex-col">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b">
+        <div className="flex items-center justify-between px-4 py-3 border-b relative">
           <h2 className="font-semibold text-gray-800">
             {isEdit ? "Edit Appointment" : "New Appointment"}
           </h2>
-          <button onClick={onClose} className="text-gray-500 text-sm">✕</button>
-        </div>
-
-        {/* Body */}
-        <div className="p-4 space-y-3 overflow-y-auto flex-1">
-
-          {/* Pet photo — full width banner, tap to expand */}
-          {petPhotoUrl && (
-            <div className="-mx-4 -mt-4 mb-1">
+          <div className="flex items-center gap-2">
+            {petPhotoUrl && (
               <img
                 src={petPhotoUrl}
                 alt={petName}
                 onClick={() => setLightboxOpen(true)}
-                className="w-full h-40 object-cover cursor-pointer hover:opacity-95 transition"
+                className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 cursor-pointer hover:opacity-90 transition"
               />
-            </div>
-          )}
+            )}
+            <button onClick={onClose} className="text-gray-500 text-sm">✕</button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-4 space-y-3 overflow-y-auto flex-1">
 
           {/* Pet / client name */}
           <div className="text-sm text-gray-700">
