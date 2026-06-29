@@ -803,20 +803,22 @@ function AppointmentModal({
         {/* Body */}
         <div className="p-4 space-y-3 overflow-y-auto flex-1">
 
-          {/* Pet / client name */}
-          <div className="flex items-center gap-3">
-            {petPhotoUrl && (
+          {/* Pet photo — full width banner, tap to expand */}
+          {petPhotoUrl && (
+            <div className="-mx-4 -mt-4 mb-1">
               <img
                 src={petPhotoUrl}
                 alt={petName}
                 onClick={() => setLightboxOpen(true)}
-                className="w-14 h-14 rounded-full object-cover border-2 border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-90 transition"
+                className="w-full h-40 object-cover cursor-pointer hover:opacity-95 transition"
               />
-            )}
-            <div className="text-sm text-gray-700">
-              <div className="font-semibold">{petName}</div>
-              <div className="text-xs text-gray-500">{clientName}</div>
             </div>
+          )}
+
+          {/* Pet / client name */}
+          <div className="text-sm text-gray-700">
+            <div className="font-semibold">{petName}</div>
+            <div className="text-xs text-gray-500">{clientName}</div>
           </div>
 
           {/* Pet notes — shown prominently if set */}
