@@ -724,8 +724,6 @@ function AppointmentModal({
   feeOptions = [],
   onViewPhoto,
 }) {
-  const [lightboxOpen, setLightboxOpen] = useState(false); // kept for hook order
-
   if (!open) return null;
   if (isEdit && !appt) return null;
   if (!isEdit && !pet) return null;
