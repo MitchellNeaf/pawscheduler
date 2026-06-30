@@ -77,6 +77,20 @@ exports.handler = async (event) => {
       .is("confirmation_sent_at", null)
       .or("no_show.is.null,no_show.eq.false");
 
+    if (!appts?.length) {
+      console.log("No unconfirmed appointments 48hrs out.");
+      return { statusCode: 200, body: JSON.stringify({ sent: 0, skipped: 0 }) };
+    }
+
+    // Load groomer data separately
+    const groomerIds = [...new Set(appts.map(a => a.groomer_id).filter(Boolean))];
+    const { data: groomers } = await supabase
+      .from("groomers")
+      .select("id, full_name, business_name, email, sms_number, plan_tier, subscription_status")
+      .in("id", groomerIds);
+    const groomerMap = {};
+    (groomers || []).forEach(g => { groomerMap[g.id] = g; });
+
     if (apptErr) {
       console.error("Query error:", apptErr);
       await alertAdmin("send48hrConfirmations", apptErr);
@@ -87,8 +101,6 @@ exports.handler = async (event) => {
       console.log("No unconfirmed appointments 48hrs out.");
       return { statusCode: 200, body: JSON.stringify({ sent: 0, skipped: 0 }) };
     }
-
-    // Load groomer data separately
 
     let sent = 0;
     let skipped = 0;
@@ -151,6 +163,17 @@ exports.handler = async (event) => {
             await supabase.from("appointments")
               .update({ confirmation_sent_at: new Date().toISOString() })
               .eq("id", appt.id);
+
+            let telnyxMsgId = null;
+            try { telnyxMsgId = (await res.json())?.data?.id || null; } catch {}
+            await supabase.from("sms_messages").insert({
+              groomer_id: appt.groomer_id,
+              client_phone: client.phone,
+              direction: "outbound",
+              body: message,
+              telnyx_msg_id: telnyxMsgId,
+              message_type: "confirmation_48hr",
+            });
           } else {
             const body = await res.text();
             console.error(`Telnyx error for ${appt.id}:`, body);

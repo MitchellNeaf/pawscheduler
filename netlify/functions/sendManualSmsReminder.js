@@ -150,6 +150,19 @@ exports.handler = async (event) => {
     .eq("id", appointmentId)
     .eq("groomer_id", user.id);
 
+  // Track sent message for usage reporting
+  let telnyxMsgId = null;
+  try { telnyxMsgId = (await telnyxRes.json())?.data?.id || null; } catch {}
+  await supabase.from("sms_messages").insert({
+    groomer_id: user.id,
+    client_phone: client.phone,
+    client_id: client.id || null,
+    direction: "outbound",
+    body: message,
+    telnyx_msg_id: telnyxMsgId,
+    message_type: "manual",
+  });
+
   return {
     statusCode: 200,
     body: JSON.stringify({ ok: true, message: `Reminder sent to ${client.full_name}.` }),

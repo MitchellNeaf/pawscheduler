@@ -128,6 +128,7 @@ exports.handler = async (event) => {
       client_phone:  toPhone,
       client_id:     client?.id || null,
       direction:     "outbound",
+      message_type:  "reply",
       body:          message.trim(),
       telnyx_msg_id: telnyxMsgId || null,
     });

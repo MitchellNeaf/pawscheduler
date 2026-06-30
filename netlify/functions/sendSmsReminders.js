@@ -216,6 +216,18 @@ exports.handler = async (event) => {
               .update({ sms_reminder_sent_at: now.toISOString() })
               .eq("id", appt.id);
 
+            // Track sent message for usage reporting
+            let telnyxMsgId = null;
+            try { telnyxMsgId = (await res.json())?.data?.id || null; } catch {}
+            await supabase.from("sms_messages").insert({
+              groomer_id: groomer.id,
+              client_phone: client.phone,
+              direction: "outbound",
+              body,
+              telnyx_msg_id: telnyxMsgId,
+              message_type: "reminder",
+            });
+
             console.log(`  ✅ SMS sent successfully for appt ${appt.id}`);
             sent++;
           } catch (smsErr) {

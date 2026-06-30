@@ -13,12 +13,6 @@ const normalizeSvc = (s) => LEGACY_SERVICE_MAP[s] || s;
 
 /* ── quick period helpers ── */
 const toYMD = (d) => d.toISOString().slice(0, 10);
-const fmtTime = (t) => {
-  if (!t) return "";
-  const [h, m] = t.slice(0, 5).split(":").map(Number);
-  const ampm = h >= 12 ? "PM" : "AM";
-  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
-};
 const PERIODS = [
   {
     label: "This Week", get: () => {
@@ -101,9 +95,34 @@ export default function Revenue() {
   const [sortCol, setSortCol] = useState("date");
   const [sortAsc, setSortAsc] = useState(false);
 
+  const [smsTotal, setSmsTotal] = useState(0);
+  const [smsMonth, setSmsMonth] = useState(0);
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user || null));
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { count: totalCount } = await supabase
+        .from("sms_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("groomer_id", user.id)
+        .eq("direction", "outbound");
+      setSmsTotal(totalCount || 0);
+
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      const { count: monthCount } = await supabase
+        .from("sms_messages")
+        .select("id", { count: "exact", head: true })
+        .eq("groomer_id", user.id)
+        .eq("direction", "outbound")
+        .gte("created_at", monthStart);
+      setSmsMonth(monthCount || 0);
+    })();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -355,6 +374,8 @@ export default function Revenue() {
           sub="past due"
           accent={unpaidCount > 0 ? "#ef4444" : undefined}
         />
+        <StatCard label="Texts This Month" value={smsMonth} sub="reminders, confirmations & replies" />
+        <StatCard label="Texts Total" value={smsTotal} sub="all time" />
       </div>
 
       {/* No-show loss */}
@@ -521,7 +542,7 @@ export default function Revenue() {
                       <td style={{ padding: "10px 12px 10px 8px", whiteSpace: "nowrap" }}>
                         <div style={{ fontWeight: 600, color: "var(--text-1)" }}>{a.date}</div>
                         <div style={{ fontSize: "0.72rem", color: "var(--text-3)" }}>
-                          {fmtTime(a.time)}
+                          {a.time?.slice(0, 5)}
                         </div>
                       </td>
                       <td style={{ padding: "10px 12px", fontWeight: 600,
