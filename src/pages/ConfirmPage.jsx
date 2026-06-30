@@ -17,13 +17,13 @@ export default function ConfirmPage() {
       // Try by confirm_token first, then fall back to id
       const { data: byToken } = await supabase
         .from("appointments")
-        .select(`id, date, time, confirmed, confirm_token, pets ( name, clients ( full_name ) )`)
+        .select(`id, date, time, confirmed, confirm_token, groomer_id, pets ( name, clients ( full_name ) )`)
         .eq("confirm_token", token)
         .maybeSingle();
 
       const { data: byId } = byToken ? { data: null } : await supabase
         .from("appointments")
-        .select(`id, date, time, confirmed, confirm_token, pets ( name, clients ( full_name ) )`)
+        .select(`id, date, time, confirmed, confirm_token, groomer_id, pets ( name, clients ( full_name ) )`)
         .eq("id", token)
         .maybeSingle();
 
@@ -51,6 +51,22 @@ export default function ConfirmPage() {
         console.error("confirm update error:", updateErr);
         setStatus("error");
         return;
+      }
+
+      // Notify groomer — fire and forget, never block the client's confirmation
+      if (data.groomer_id) {
+        const petName = data.pets?.name || "A pet";
+        const clientFirst = (data.pets?.clients?.full_name || "").split(" ")[0];
+        fetch("/.netlify/functions/sendPushNotification", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            groomerId: data.groomer_id,
+            title: "Appointment Confirmed ✅",
+            message: `${clientFirst ? clientFirst + " confirmed " : ""}${petName}'s appointment on ${fmtDate(data.date)} at ${fmtTime(data.time)}.`,
+            url: "https://app.pawscheduler.app/schedule",
+          }),
+        }).catch(() => {});
       }
 
       setAppt(data);
