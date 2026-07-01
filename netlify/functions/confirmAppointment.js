@@ -111,6 +111,21 @@ exports.handler = async (event) => {
     weekday: "long", month: "long", day: "numeric"
   });
 
+  // Notify groomer — fire and forget
+  if (appt.groomer_id) {
+    const clientFirst = (appt.pets?.clients?.full_name || "").split(" ")[0];
+    fetch(`${process.env.URL || "https://app.pawscheduler.app"}/.netlify/functions/sendPushNotification`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        groomerId: appt.groomer_id,
+        title: "Appointment Confirmed ✅",
+        message: `${clientFirst ? clientFirst + " confirmed " : ""}${petName}'s appointment on ${dateStr} at ${fmtTime(appt.time)}.`,
+        url: "https://app.pawscheduler.app/schedule",
+      }),
+    }).catch(() => {});
+  }
+
   return {
     statusCode: 200,
     headers: { "Content-Type": "text/html; charset=utf-8" },
