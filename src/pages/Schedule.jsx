@@ -751,6 +751,12 @@ function AppointmentModal({
       const newServices = exists
         ? prev.services.filter((s) => s !== svc)
         : [...prev.services, svc];
+
+      // If this pet has a per-pet default price, don't overwrite it with service calc
+      if (prev._defaultPrice != null) {
+        return { ...prev, services: newServices };
+      }
+
       const serviceAmt = calcAmount(newServices, sizeCategory, pricing, addonOptions);
       const addonAmt   = calcFlatItems(newServices, addonOptions);
       const feeAmt     = calcFlatItems(newServices, feeOptions);
@@ -1959,6 +1965,7 @@ export default function Schedule() {
               : pet.default_services?.length
               ? calcAmount(pet.default_services, pet.size_category || 1, pricing, addonOptions)
               : null,
+            _defaultPrice: pet.default_price ?? null, // sentinel — prevents service clicks from wiping per-pet price
           },
         },
       ];
