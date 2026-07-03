@@ -1918,7 +1918,7 @@ export default function Schedule() {
         .from("pets")
         .select(`
           id, name, tags, notes, client_id, slot_weight, size_category,
-          default_services, default_duration_min,
+          default_services, default_duration_min, default_price,
           clients ( id, full_name, notes )
         `)
         .eq("groomer_id", user.id)
@@ -1954,7 +1954,9 @@ export default function Schedule() {
           form: {
             duration_min: pet.default_duration_min || 30,
             services: pet.default_services || [],
-            amount: pet.default_services?.length
+            amount: pet.default_price != null
+              ? pet.default_price
+              : pet.default_services?.length
               ? calcAmount(pet.default_services, pet.size_category || 1, pricing, addonOptions)
               : null,
           },

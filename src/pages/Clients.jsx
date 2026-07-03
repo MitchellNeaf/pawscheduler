@@ -27,6 +27,7 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
   const [sizeCategory, setSizeCategory] = useState(1);
   const [tags, setTags] = useState([]);
   const [notes, setNotes] = useState("");
+  const [defaultPrice, setDefaultPrice] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -34,7 +35,7 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
   useEffect(() => {
     if (open) {
       setName(""); setBreed(""); setSizeCategory(1);
-      setTags([]); setNotes(""); setError("");
+      setTags([]); setNotes(""); setDefaultPrice(""); setError("");
     }
   }, [open, client?.id]);
 
@@ -56,6 +57,7 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
       breed: breed.trim() || null,
       size_category: sizeCategory,
       slot_weight: found?.slotWeight ?? 1,
+      default_price: defaultPrice !== "" ? parseFloat(defaultPrice) : null,
       tags: tags.length ? tags : null,
       notes: notes.trim() || null,
       client_id: client.id,
@@ -162,6 +164,24 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
               rows={2}
               className="border rounded-lg px-3 py-2 text-sm w-full resize-none"
             />
+          </label>
+
+          {/* Default Price */}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">Default Price <span className="text-gray-400 font-normal">(optional)</span></span>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={defaultPrice}
+                onChange={(e) => setDefaultPrice(e.target.value)}
+                className="border rounded-lg pl-7 pr-3 py-2 text-sm w-full"
+              />
+            </div>
+            <p className="text-xs text-gray-400">Auto-fills the price when booking this pet. You can still adjust per appointment.</p>
           </label>
 
           {error && (

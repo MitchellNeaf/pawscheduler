@@ -54,33 +54,9 @@ function compressImage(file) {
   });
 }
 
-/* ---------------- Photo lightbox ---------------- */
-function PhotoLightbox({ url, onClose }) {
-  if (!url) return null;
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      onClick={onClose}
-    >
-      <img
-        src={url}
-        alt="Pet portrait"
-        className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
-        onClick={e => e.stopPropagation()}
-      />
-      <button
-        onClick={onClose}
-        className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white text-xl flex items-center justify-center hover:bg-white/40 transition"
-      >
-        ✕
-      </button>
-    </div>
-  );
-}
-
 /* ---------------- Lazy pet photo ---------------- */
 // Only loads the image URL when the element scrolls into view
-function LazyPetPhoto({ url, name, onClick }) {
+function LazyPetPhoto({ url, name }) {
   const ref = useRef(null);
   const [visible, setVisible] = useState(false);
 
@@ -104,8 +80,7 @@ function LazyPetPhoto({ url, name, onClick }) {
         <img
           src={url}
           alt={name}
-          onClick={onClick}
-          className="w-16 h-16 rounded-full object-cover border-2 border-[var(--border-med)] shadow-sm cursor-pointer hover:opacity-90 transition"
+          className="w-16 h-16 rounded-full object-cover border-2 border-[var(--border-med)] shadow-sm"
         />
       ) : (
         <div className="w-16 h-16 rounded-full bg-[var(--surface-2)] border-2 border-[var(--border-med)]" />
@@ -385,6 +360,34 @@ function PetEditModal({
             </select>
           </div>
 
+          {/* DEFAULT PRICE */}
+          <div className="mt-3">
+            <label className="font-medium block mb-1">
+              Default Price
+              <span className="ml-2 text-xs font-normal text-gray-500">
+                — auto-fills when booking this pet
+              </span>
+            </label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={form.default_price ?? ""}
+                onChange={(e) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    default_price: e.target.value === "" ? null : parseFloat(e.target.value),
+                  }))
+                }
+                className="border rounded-xl w-full p-2 pl-7 text-sm"
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Overrides size-based pricing for this pet. Still adjustable per appointment.</p>
+          </div>
+
           <div className="flex gap-3 pt-2 justify-end">
             <button type="button" className="btn-secondary" onClick={onClose}>
               Cancel
@@ -513,7 +516,6 @@ function ShotModal({
 export default function ClientPets() {
   const { clientId } = useParams();
   const [client, setClient] = useState(null);
-  const [lightboxUrl, setLightboxUrl] = useState(null);
   const [upcomingAppts, setUpcomingAppts] = useState([]);
   const [pets, setPets] = useState([]);
   const [user, setUser] = useState(null);
@@ -542,6 +544,7 @@ export default function ClientPets() {
     size_category: 1,
     default_services: [],
     default_duration_min: null,
+    default_price: null,
   });
 
   const [otherTag, setOtherTag] = useState("");
@@ -656,6 +659,7 @@ export default function ClientPets() {
       size_category: 1,
       default_services: [],
       default_duration_min: null,
+      default_price: null,
     });
     setOtherTag("");
     setEditingId(null);
@@ -692,6 +696,7 @@ export default function ClientPets() {
       size_category: 1,
       default_services: [],
       default_duration_min: null,
+      default_price: null,
     });
     setOtherTag("");
     setEditingId(null);
@@ -755,6 +760,7 @@ export default function ClientPets() {
           size_category: form.size_category ?? 1,
           default_services: form.default_services.length ? form.default_services : null,
           default_duration_min: form.default_duration_min || null,
+          default_price: form.default_price ?? null,
           photo_url: photoUrl,
           photo_urls: allUrls.length > 0 ? allUrls : null,
         })
@@ -781,6 +787,7 @@ export default function ClientPets() {
           size_category: form.size_category ?? 1,
           default_services: form.default_services.length ? form.default_services : null,
           default_duration_min: form.default_duration_min || null,
+          default_price: form.default_price ?? null,
           photo_url: photoUrl,
           photo_urls: allUrls.length > 0 ? allUrls : null,
         }])
@@ -807,6 +814,7 @@ export default function ClientPets() {
       size_category: pet.size_category ?? 1,
       default_services: pet.default_services || [],
       default_duration_min: pet.default_duration_min || null,
+      default_price: pet.default_price ?? null,
     });
 
     if (pet.tags?.some((t) => !TAG_OPTIONS.includes(t))) {
@@ -879,7 +887,6 @@ export default function ClientPets() {
 
   return (
     <main>
-      {lightboxUrl && <PhotoLightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />}
       <div className="mb-2">
         <Link to="/clients">&larr; Back to Clients</Link>
       </div>
@@ -1175,7 +1182,7 @@ export default function ClientPets() {
                     >
                       ✏️ Edit
                     </button>
-                    <LazyPetPhoto url={pet.photo_url} name={pet.name} onClick={() => pet.photo_url && setLightboxUrl(pet.photo_url)} />
+                    <LazyPetPhoto url={pet.photo_url} name={pet.name} />
                   </div>
                 </div>
 
@@ -1184,8 +1191,7 @@ export default function ClientPets() {
                   <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
                     {pet.photo_urls.map((url, i) => (
                       <img key={i} src={url} alt={`${pet.name} ${i + 1}`}
-                        onClick={() => setLightboxUrl(url)}
-                        className="w-14 h-14 rounded-lg object-cover border border-gray-200 flex-shrink-0 cursor-pointer hover:opacity-90 transition" />
+                        className="w-14 h-14 rounded-lg object-cover border border-gray-200 flex-shrink-0" />
                     ))}
                   </div>
                 )}
@@ -1222,7 +1228,7 @@ export default function ClientPets() {
                 </div>
 
                 {/* Default services + duration */}
-                {(pet.default_services?.length > 0 || pet.default_duration_min) && (
+                {(pet.default_services?.length > 0 || pet.default_duration_min || pet.default_price != null) && (
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                     <span className="text-gray-500 font-medium">Defaults:</span>
                     {pet.default_services?.map((svc) => (
@@ -1230,6 +1236,9 @@ export default function ClientPets() {
                     ))}
                     {pet.default_duration_min && (
                       <span className="chip chip-neutral">⏱ {pet.default_duration_min} min</span>
+                    )}
+                    {pet.default_price != null && (
+                      <span className="chip chip-neutral">💵 ${Number(pet.default_price).toFixed(2)}</span>
                     )}
                   </div>
                 )}
