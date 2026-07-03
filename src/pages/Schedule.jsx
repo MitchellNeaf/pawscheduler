@@ -395,6 +395,12 @@ function MultiPetAppointmentModal({
       const newServices = exists
         ? entry.form.services.filter((s) => s !== svc)
         : [...entry.form.services, svc];
+
+      // If this pet has a per-pet default price, don't overwrite it
+      if (entry.form._defaultPrice != null) {
+        return { ...entry, form: { ...entry.form, services: newServices } };
+      }
+
       const sizeCategory = entry.pet.size_category || 1;
       const serviceAmt = calcAmount(newServices, sizeCategory, pricing, addonOptions);
       const addonAmt   = calcFlatItems(newServices, addonOptions);

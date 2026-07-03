@@ -1278,10 +1278,6 @@ export default function ClientPets() {
                     View Appointments
                   </Link>
 
-                  <button className="btn-primary" onClick={() => handleEdit(pet)}>
-                    ✏️ Edit
-                  </button>
-
                   <button className="btn btn-danger" onClick={() => handleDelete(pet.id)}>
                     🗑 Delete
                   </button>
