@@ -4,10 +4,11 @@ import { Link } from "react-router-dom";
 import { supabase } from "../supabase";
 import Loader from "../components/Loader";
 
-const SLOT_WEIGHT_OPTIONS = [
-  { value: 1, label: "Small / Medium" },
-  { value: 2, label: "Large" },
-  { value: 3, label: "XL" },
+const SIZE_CATEGORIES = [
+  { value: 1, label: "Small",  slotWeight: 1 },
+  { value: 2, label: "Medium", slotWeight: 1 },
+  { value: 3, label: "Large",  slotWeight: 2 },
+  { value: 4, label: "XL",     slotWeight: 3 },
 ];
 
 const PET_TAG_OPTIONS = [
@@ -23,7 +24,7 @@ const PET_TAG_OPTIONS = [
 function AddPetModal({ open, onClose, client, user, onSaved }) {
   const [name, setName] = useState("");
   const [breed, setBreed] = useState("");
-  const [slotWeight, setSlotWeight] = useState(1);
+  const [sizeCategory, setSizeCategory] = useState(1);
   const [tags, setTags] = useState([]);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -32,7 +33,7 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
   // Reset form when modal opens for a new client
   useEffect(() => {
     if (open) {
-      setName(""); setBreed(""); setSlotWeight(1);
+      setName(""); setBreed(""); setSizeCategory(1);
       setTags([]); setNotes(""); setError("");
     }
   }, [open, client?.id]);
@@ -49,10 +50,12 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
     setSaving(true);
     setError("");
 
+    const found = SIZE_CATEGORIES.find(s => s.value === sizeCategory);
     const { error: err } = await supabase.from("pets").insert({
       name: name.trim(),
       breed: breed.trim() || null,
-      slot_weight: slotWeight,
+      size_category: sizeCategory,
+      slot_weight: found?.slotWeight ?? 1,
       tags: tags.length ? tags : null,
       notes: notes.trim() || null,
       client_id: client.id,
@@ -109,14 +112,14 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
           {/* Size */}
           <div className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">Size</span>
-            <div className="grid grid-cols-3 gap-2">
-              {SLOT_WEIGHT_OPTIONS.map(({ value, label }) => (
+            <div className="grid grid-cols-4 gap-2">
+              {SIZE_CATEGORIES.map(({ value, label }) => (
                 <button
                   key={value}
                   type="button"
-                  onClick={() => setSlotWeight(value)}
+                  onClick={() => setSizeCategory(value)}
                   className={`py-2 px-2 rounded-lg border text-xs font-semibold transition-colors
-                    ${slotWeight === value
+                    ${sizeCategory === value
                       ? "bg-emerald-600 border-emerald-600 text-white"
                       : "bg-white border-gray-200 text-gray-600 hover:border-emerald-400"
                     }`}
@@ -125,6 +128,7 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
                 </button>
               ))}
             </div>
+            <p className="text-xs text-gray-400">Small and Medium both use 1 booking slot — this only affects pricing.</p>
           </div>
 
           {/* Tags */}
