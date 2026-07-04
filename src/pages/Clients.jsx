@@ -28,6 +28,7 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
   const [tags, setTags] = useState([]);
   const [notes, setNotes] = useState("");
   const [defaultPrice, setDefaultPrice] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -35,7 +36,7 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
   useEffect(() => {
     if (open) {
       setName(""); setBreed(""); setSizeCategory(1);
-      setTags([]); setNotes(""); setDefaultPrice(""); setError("");
+      setTags([]); setNotes(""); setDefaultPrice(""); setDateOfBirth(""); setError("");
     }
   }, [open, client?.id]);
 
@@ -58,6 +59,7 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
       size_category: sizeCategory,
       slot_weight: found?.slotWeight ?? 1,
       default_price: defaultPrice !== "" ? parseFloat(defaultPrice) : null,
+      date_of_birth: dateOfBirth || null,
       tags: tags.length ? tags : null,
       notes: notes.trim() || null,
       client_id: client.id,
@@ -107,6 +109,17 @@ function AddPetModal({ open, onClose, client, user, onSaved }) {
               placeholder="e.g. Golden Retriever"
               value={breed}
               onChange={(e) => setBreed(e.target.value)}
+              className="border rounded-lg px-3 py-2 text-sm w-full"
+            />
+          </label>
+
+          {/* Birthday */}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">Birthday <span className="text-gray-400 font-normal">(optional)</span></span>
+            <input
+              type="date"
+              value={dateOfBirth}
+              onChange={(e) => setDateOfBirth(e.target.value)}
               className="border rounded-lg px-3 py-2 text-sm w-full"
             />
           </label>

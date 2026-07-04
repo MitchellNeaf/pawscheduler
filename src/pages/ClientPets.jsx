@@ -153,6 +153,18 @@ function PetEditModal({
             placeholder="Breed"
           />
 
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Birthday <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <input
+              type="date"
+              value={form.date_of_birth || ""}
+              onChange={(e) => setForm((prev) => ({ ...prev, date_of_birth: e.target.value || null }))}
+              className="border rounded w-full p-2 text-sm"
+            />
+          </div>
+
           {/* PHOTO UPLOAD — Basic+ */}
           {(planTier === "basic" || planTier === "growth" || planTier === "pro") ? (
           <div>
@@ -545,6 +557,7 @@ export default function ClientPets() {
     default_services: [],
     default_duration_min: null,
     default_price: null,
+    date_of_birth: null,
   });
 
   const [otherTag, setOtherTag] = useState("");
@@ -660,6 +673,7 @@ export default function ClientPets() {
       default_services: [],
       default_duration_min: null,
       default_price: null,
+      date_of_birth: null,
     });
     setOtherTag("");
     setEditingId(null);
@@ -697,6 +711,7 @@ export default function ClientPets() {
       default_services: [],
       default_duration_min: null,
       default_price: null,
+      date_of_birth: null,
     });
     setOtherTag("");
     setEditingId(null);
@@ -761,6 +776,7 @@ export default function ClientPets() {
           default_services: form.default_services.length ? form.default_services : null,
           default_duration_min: form.default_duration_min || null,
           default_price: form.default_price ?? null,
+          date_of_birth: form.date_of_birth || null,
           photo_url: photoUrl,
           photo_urls: allUrls.length > 0 ? allUrls : null,
         })
@@ -788,6 +804,7 @@ export default function ClientPets() {
           default_services: form.default_services.length ? form.default_services : null,
           default_duration_min: form.default_duration_min || null,
           default_price: form.default_price ?? null,
+          date_of_birth: form.date_of_birth || null,
           photo_url: photoUrl,
           photo_urls: allUrls.length > 0 ? allUrls : null,
         }])
@@ -815,6 +832,7 @@ export default function ClientPets() {
       default_services: pet.default_services || [],
       default_duration_min: pet.default_duration_min || null,
       default_price: pet.default_price ?? null,
+      date_of_birth: pet.date_of_birth || null,
     });
 
     if (pet.tags?.some((t) => !TAG_OPTIONS.includes(t))) {
@@ -1174,6 +1192,16 @@ export default function ClientPets() {
                   <div className="min-w-0">
                     <div className="font-semibold text-lg">{pet.name}</div>
                     <div className="text-gray-600">{pet.breed}</div>
+                    {pet.date_of_birth && (() => {
+                      const dob = new Date(pet.date_of_birth + "T00:00:00");
+                      const now = new Date();
+                      const totalMonths = (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
+                      const yrs = Math.floor(totalMonths / 12);
+                      const mos = totalMonths % 12;
+                      const age = yrs > 0 ? `${yrs} yr${yrs !== 1 ? "s" : ""}${mos > 0 ? ` ${mos} mo` : ""}` : `${mos} mo`;
+                      const bday = dob.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+                      return <div className="text-xs text-[var(--text-3)] mt-0.5">🎂 {bday} · {age} old</div>;
+                    })()}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button
