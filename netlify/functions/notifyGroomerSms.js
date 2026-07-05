@@ -5,10 +5,10 @@
  * is submitted from their booking page.
  *
  * POST body:
- *   { groomerId, petName, clientName, date, time, requiresApproval }
+ *   { slug, petName, clientName, date, time, requiresApproval }
  *
- * No auth required — this is called from the public booking page.
- * Rate-limiting is handled by Telnyx.
+ * No auth required — called from the public booking page.
+ * Uses slug (already public) instead of internal groomerId.
  */
 
 const { createClient } = require("@supabase/supabase-js");
@@ -30,30 +30,46 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  let groomerId, petName, clientName, date, time, requiresApproval;
+  let slug, petName, clientName, date, time, requiresApproval;
   try {
-    ({ groomerId, petName, clientName, date, time, requiresApproval } = JSON.parse(event.body || "{}"));
+    ({ slug, petName, clientName, date, time, requiresApproval } = JSON.parse(event.body || "{}"));
   } catch {
     return { statusCode: 400, body: "Invalid JSON" };
   }
 
-  if (!groomerId) {
-    return { statusCode: 400, body: "Missing groomerId" };
+  if (!slug) {
+    return { statusCode: 400, body: "Missing slug" };
   }
 
-  // Load groomer phone number
+  // Load groomer by slug (public identifier, already in booking URL)
   const { data: groomer } = await supabase
     .from("groomers")
-    .select("business_phone, sms_number, full_name")
-    .eq("id", groomerId)
+    .select("id, business_phone, sms_number, full_name")
+    .eq("slug", slug)
     .single();
 
-  // Need a phone to text and a from number
-  const toPhone = groomer?.business_phone;
-  const fromNumber = groomer?.sms_number || process.env.TELNYX_PHONE_NUMBER;
+  if (!groomer) {
+    return { statusCode: 404, body: "Groomer not found" };
+  }
+
+  // Basic rate limit — max 20 booking notifications per groomer per hour
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count } = await supabase
+    .from("sms_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("groomer_id", groomer.id)
+    .eq("message_type", "booking_notify")
+    .gte("created_at", oneHourAgo);
+
+  if (count >= 20) {
+    console.warn(`Rate limit hit for groomer ${groomer.id} — ${count} booking notifications in last hour`);
+    return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "Rate limit" }) };
+  }
+
+  const toPhone = groomer.business_phone;
+  const fromNumber = groomer.sms_number || process.env.TELNYX_PHONE_NUMBER;
 
   if (!toPhone || !fromNumber) {
-    // No phone on file — silently succeed, email already sent
     return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "No phone configured" }) };
   }
 
@@ -66,11 +82,7 @@ exports.handler = async (event) => {
       "Content-Type": "application/json",
       Authorization: `Bearer ${process.env.TELNYX_API_KEY}`,
     },
-    body: JSON.stringify({
-      from: fromNumber,
-      to: toPhone,
-      text: message,
-    }),
+    body: JSON.stringify({ from: fromNumber, to: toPhone, text: message }),
   });
 
   if (!res.ok) {
@@ -78,6 +90,15 @@ exports.handler = async (event) => {
     console.error("SMS notify failed:", err);
     return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "Telnyx error" }) };
   }
+
+  // Log to sms_messages for rate limiting and usage tracking
+  await supabase.from("sms_messages").insert({
+    groomer_id:   groomer.id,
+    client_phone: null,
+    direction:    "outbound",
+    body:         message,
+    message_type: "booking_notify",
+  }).catch(() => {}); // non-blocking
 
   return { statusCode: 200, body: JSON.stringify({ sent: true }) };
 };

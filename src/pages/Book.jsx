@@ -562,7 +562,7 @@ export default function BookPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          groomerId,
+          slug: groomer?.slug,
           petName: pets.find((p) => p.id === selectedPetId)?.name || "a pet",
           clientName: client?.full_name || "a client",
           date: form.date,
