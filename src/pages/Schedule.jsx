@@ -186,9 +186,10 @@ function getEndTime(start, durationMin) {
   if (!start) return "—";
   const [h, m] = start.split(":").map(Number);
   const endMin = h * 60 + m + durationMin;
-  return `${String(Math.floor(endMin / 60)).padStart(2, "0")}:${String(
-    endMin % 60
-  ).padStart(2, "0")}`;
+  const eh = Math.floor(endMin / 60);
+  const em = endMin % 60;
+  const ampm = eh >= 12 ? "PM" : "AM";
+  return `${eh % 12 || 12}:${String(em).padStart(2, "0")} ${ampm}`;
 }
 
 /** Build bullet-list HTML for services (• item<br/>) */
@@ -394,6 +395,12 @@ function MultiPetAppointmentModal({
       const newServices = exists
         ? entry.form.services.filter((s) => s !== svc)
         : [...entry.form.services, svc];
+
+      // If this pet has a per-pet default price, don't overwrite it
+      if (entry.form._defaultPrice != null) {
+        return { ...entry, form: { ...entry.form, services: newServices } };
+      }
+
       const sizeCategory = entry.pet.size_category || 1;
       const serviceAmt = calcAmount(newServices, sizeCategory, pricing, addonOptions);
       const addonAmt   = calcFlatItems(newServices, addonOptions);
@@ -722,6 +729,7 @@ function AppointmentModal({
   serviceOptions,
   addonOptions = [],
   feeOptions = [],
+  onViewPhoto,
 }) {
   if (!open) return null;
   if (isEdit && !appt) return null;
@@ -763,17 +771,28 @@ function AppointmentModal({
   const rabies  = getRabiesRecord(subject.shot_records);
   const expired = isExpired(rabies?.date_expires);
   const expSoon = isExpiringSoon(rabies?.date_expires);
+  const petPhotoUrl = isEdit ? appt.pets?.photo_url : pet.photo_url;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-lg max-w-md w-full max-h-[90vh] flex flex-col">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b">
+        <div className="flex items-center justify-between px-4 py-3 border-b relative">
           <h2 className="font-semibold text-gray-800">
             {isEdit ? "Edit Appointment" : "New Appointment"}
           </h2>
-          <button onClick={onClose} className="text-gray-500 text-sm">✕</button>
+          <div className="flex items-center gap-2">
+            {petPhotoUrl && (
+              <img
+                src={petPhotoUrl}
+                alt={petName}
+                onClick={() => onViewPhoto && onViewPhoto(petPhotoUrl)}
+                className="w-10 h-10 rounded-full object-cover border-2 border-gray-200 cursor-pointer hover:opacity-90 transition"
+              />
+            )}
+            <button onClick={onClose} className="text-gray-500 text-sm">✕</button>
+          </div>
         </div>
 
         {/* Body */}
@@ -782,22 +801,7 @@ function AppointmentModal({
           {/* Pet / client name */}
           <div className="text-sm text-gray-700">
             <div className="font-semibold">{petName}</div>
-            <div className="flex items-center gap-2 flex-wrap mt-0.5">
-              <span className="text-xs text-gray-500">{clientName}</span>
-              {(() => {
-                const phone = isEdit ? appt.pets?.clients?.phone : pet.clients?.phone;
-                if (!phone) return null;
-                return (
-                  <a
-                    href={`/inbox?phone=${encodeURIComponent(phone)}&name=${encodeURIComponent(clientName || "")}`}
-                    onClick={(e) => e.stopPropagation()}
-                    className="text-[11px] px-2 py-0.5 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-700 font-semibold hover:bg-emerald-100 transition"
-                  >
-                    💬 Inbox
-                  </a>
-                );
-              })()}
-            </div>
+            <div className="text-xs text-gray-500">{clientName}</div>
           </div>
 
           {/* Pet notes — shown prominently if set */}
@@ -1549,7 +1553,6 @@ export default function Schedule() {
   const [capacity, setCapacity] = useState(1);
   const [editingBlock, setEditingBlock] = useState(null);
   const [monthRefreshKey, setMonthRefreshKey] = useState(0);
-  const [lightboxUrl, setLightboxUrl] = useState(null);
   const [viewMode, setViewMode] = useState(() =>
     typeof window !== "undefined" && window.innerWidth < 640 ? "list" : "grid"
   );
@@ -1918,7 +1921,7 @@ export default function Schedule() {
         .from("pets")
         .select(`
           id, name, tags, notes, client_id, slot_weight, size_category,
-          default_services, default_duration_min,
+          default_services, default_duration_min, default_price,
           clients ( id, full_name, notes )
         `)
         .eq("groomer_id", user.id)
@@ -1954,9 +1957,12 @@ export default function Schedule() {
           form: {
             duration_min: pet.default_duration_min || 30,
             services: pet.default_services || [],
-            amount: pet.default_services?.length
+            amount: pet.default_price != null
+              ? pet.default_price
+              : pet.default_services?.length
               ? calcAmount(pet.default_services, pet.size_category || 1, pricing, addonOptions)
               : null,
+            _defaultPrice: pet.default_price ?? null, // sentinel — prevents service toggles from wiping per-pet price
           },
         },
       ];
@@ -2472,24 +2478,6 @@ export default function Schedule() {
 
   return (
     <main className="px-2 sm:px-4 py-4 space-y-4 max-w-6xl mx-auto">
-      {/* Global photo lightbox — renders above everything */}
-      {lightboxUrl && (
-        <div
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/85 p-4"
-          onClick={() => setLightboxUrl(null)}
-        >
-          <img
-            src={lightboxUrl}
-            alt="Pet"
-            className="max-w-full max-h-full rounded-2xl shadow-2xl object-contain"
-            onClick={e => e.stopPropagation()}
-          />
-          <button
-            onClick={() => setLightboxUrl(null)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/20 text-white text-xl flex items-center justify-center hover:bg-white/40 transition"
-          >✕</button>
-        </div>
-      )}
       <Link to="/" className="text-sm text-blue-600 hover:underline">
         ← Back to Home
       </Link>
@@ -2868,8 +2856,7 @@ export default function Schedule() {
                                     src={appt.pets.photo_url}
                                     alt={appt.pets.name}
                                     loading="lazy"
-                                    onClick={e => { e.stopPropagation(); setLightboxUrl(appt.pets.photo_url); }}
-                                    className="w-8 h-8 rounded-full object-cover border border-gray-200 mb-1 cursor-pointer hover:opacity-90 transition"
+                                    className="w-8 h-8 rounded-full object-cover border border-gray-200 mb-1"
                                   />
                                 )}
 
@@ -3062,6 +3049,7 @@ export default function Schedule() {
             const appt = group[0]; // primary appointment for shared fields
             const isMulti = group.length > 1;
             const start = (appt.time || "00:00").slice(0, 5);
+            const startDisplay = fmt12Hour(start);
             const end = getEndTime(start, Math.max(...group.map(a => a.duration_min || 15)));
             const size = sizeBadge(appt.size_category || appt.pets?.size_category || 1);
             const displayName = groupPetNames(group);
@@ -3223,7 +3211,7 @@ export default function Schedule() {
                         })()}
                       </div>
                       <div className="text-lg font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
-                        {start} – {end}
+                        {startDisplay} – {end}
                         <span>{size.icon}</span>
                         {vaccineIcon && (
                           <span className="text-xl">{vaccineIcon}</span>
@@ -3251,8 +3239,7 @@ export default function Schedule() {
                           src={appt.pets.photo_url}
                           alt={appt.pets.name}
                           loading="lazy"
-                          onClick={e => { e.stopPropagation(); setLightboxUrl(appt.pets.photo_url); }}
-                          className="w-12 h-12 rounded-full object-cover border border-gray-200 flex-shrink-0 mt-0.5 cursor-pointer hover:opacity-90 transition"
+                          className="w-12 h-12 rounded-full object-cover border border-gray-200 flex-shrink-0 mt-0.5"
                         />
                       )}
                       <div className="min-w-0">
@@ -3528,6 +3515,34 @@ export default function Schedule() {
                         </span>
                       )}
                     </div>
+
+                    {/* Quick payment buttons — appear after checkout if not yet paid */}
+                    {appt.checked_out_at && !appt.paid && (
+                      <div className="flex gap-2 mt-2 flex-wrap">
+                        {["cash", "card", "venmo", "cashapp", "zelle", "check"].map(method => (
+                          <button
+                            key={method}
+                            onClick={async () => {
+                              await supabase.from("appointments").update({
+                                paid: true,
+                                payment_method: method,
+                              }).eq("id", appt.id);
+                              setAppointments(prev => prev.map(a =>
+                                a.id === appt.id ? { ...a, paid: true, payment_method: method } : a
+                              ));
+                            }}
+                            className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-[var(--border-med)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition capitalize"
+                          >
+                            💵 {method === "cashapp" ? "Cash App" : method.charAt(0).toUpperCase() + method.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {appt.checked_out_at && appt.paid && (
+                      <div className="mt-2 text-xs text-emerald-700 font-semibold">
+                        ✅ Paid{appt.payment_method ? ` via ${appt.payment_method === "cashapp" ? "Cash App" : appt.payment_method.charAt(0).toUpperCase() + appt.payment_method.slice(1)}` : ""}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3655,7 +3670,6 @@ export default function Schedule() {
         pricing={pricing}
         workingRange={workingRange}
         breakSlots={breakSlots}
-        onViewPhoto={setLightboxUrl}
       />
 
       <RebookWeekModal
