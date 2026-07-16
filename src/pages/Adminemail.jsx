@@ -1,7 +1,8 @@
 /**
+ * 
  * adminSendEmail.js
  * Admin-only Netlify function — sends emails to groomers.
- * Locked to Mitchell's user ID. No template file needed.
+ * Locked to Mitchell's user ID. No template file needed. Update
  */
 
 const { createClient } = require("@supabase/supabase-js");
