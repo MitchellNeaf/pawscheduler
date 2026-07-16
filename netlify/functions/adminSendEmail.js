@@ -42,22 +42,18 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "recipients, subject, and body required" }) };
   }
 
-  // Simple branded HTML wrapper
-  const html = `
-<!DOCTYPE html>
+  // Minimal plain-text style HTML — avoids Gmail promotional tab
+  const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
-    <div style="background:#059669;padding:20px 28px;">
-      <span style="color:#fff;font-size:18px;font-weight:700;">🐾 PawScheduler</span>
-    </div>
-    <div style="padding:28px;color:#111827;font-size:15px;line-height:1.7;">
-      ${body.replace(/\n/g, "<br/>")}
-    </div>
-    <div style="padding:16px 28px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;">
+<body style="margin:0;padding:0;font-family:Arial,sans-serif;font-size:15px;color:#111827;background:#ffffff;">
+  <div style="max-width:580px;margin:0 auto;padding:32px 24px;">
+    ${body.replace(/\n/g, "<br>")}
+    <br><br>
+    <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
+    <p style="font-size:12px;color:#9ca3af;margin:0;">
       PawScheduler · You're receiving this because you have an account with us.
-    </div>
+    </p>
   </div>
 </body>
 </html>`;
@@ -73,10 +69,11 @@ exports.handler = async (event) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: { email: "noreply@pawscheduler.app", name: "PawScheduler" },
+          from: { email: "noreply@pawscheduler.app", name: "Mitchell from PawScheduler" },
           to: [{ email }],
           subject,
           html,
+          text: body,
         }),
       });
 
