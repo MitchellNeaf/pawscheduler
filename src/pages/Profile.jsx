@@ -382,16 +382,16 @@ export default function Profile() {
 
   // ---------------- BILLING PORTAL ----------------
   const handleManageBilling = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
 
     const resp = await fetch("/.netlify/functions/billingPortal", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        userId: user.id,
         returnUrl: window.location.origin + "/profile",
       }),
     });
@@ -1922,10 +1922,15 @@ export default function Profile() {
             <div>
               <label className="block text-sm font-medium mb-1">Max Dogs at Same Time</label>
               <div className="flex items-center gap-3">
-                <select value={maxParallel} onChange={(e) => setMaxParallel(Number(e.target.value))} className="border border-[var(--border-med)] rounded p-2 w-28 bg-[var(--surface)] text-[var(--text-1)]">
-                  {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-                <span className="text-sm text-[var(--text-3)]">pets simultaneously</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={maxParallel}
+                  onChange={(e) => setMaxParallel(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}
+                  className="border border-[var(--border-med)] rounded p-2 w-28 bg-[var(--surface)] text-[var(--text-1)] text-center"
+                />
+                <span className="text-sm text-[var(--text-3)]">pets simultaneously (up to 30)</span>
               </div>
             </div>
             <div>
