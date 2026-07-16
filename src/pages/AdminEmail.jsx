@@ -8,7 +8,6 @@
 const { createClient } = require("@supabase/supabase-js");
 const fetch = require("node-fetch");
 
-const ADMIN_USER_ID = "b643ea7b-0000-0000-0000-000000000000"; // Mitchell
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
