@@ -34,7 +34,6 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancelled from "./pages/PaymentCancelled";
 import ConfirmPage from "./pages/ConfirmPage";
 import OnboardingTour from "./components/OnboardingTour";
-import AdminEmail from "./pages/AdminEmail";
 
 // Legal pages
 import Terms from "./pages/legal/Terms";
@@ -542,14 +541,6 @@ function AppShell() {
           element={
             <ProtectedRoute>
               <Help />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/admin/email"
-          element={
-            <ProtectedRoute>
-              <AdminEmail />
             </ProtectedRoute>
           }
         />
