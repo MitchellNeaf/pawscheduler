@@ -15,8 +15,7 @@ const PLAN_TIERS = [
 
 export default function AdminEmail() {
   const [supabase, setSupabase] = useState(null);
-  const [user, setUser]           = useState(null);
-  const [authorized, setAuthorized] = useState(null);
+  const [, setUser] = useState(null);  const [authorized, setAuthorized] = useState(null);
   const [groomers, setGroomers]   = useState([]);
   const [filter, setFilter]       = useState("all");
   const [selected, setSelected]   = useState(new Set());
