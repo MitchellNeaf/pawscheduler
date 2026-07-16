@@ -34,7 +34,7 @@ import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancelled from "./pages/PaymentCancelled";
 import ConfirmPage from "./pages/ConfirmPage";
 import OnboardingTour from "./components/OnboardingTour";
-
+import AdminEmail from "./pages/AdminEmail";
 // Legal pages
 import Terms from "./pages/legal/Terms";
 import Privacy from "./pages/legal/Privacy";
@@ -544,8 +544,16 @@ function AppShell() {
             </ProtectedRoute>
           }
         />
-      </Routes>
 
+      <Route
+          path="/admin/email"
+          element={
+            <ProtectedRoute>
+              <AdminEmail />
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
       {!hideFooter && (
         <footer className="text-center text-xs text-gray-500 py-6">
           © {new Date().getFullYear()} PawScheduler

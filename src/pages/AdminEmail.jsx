@@ -1,98 +1,289 @@
-/**
- * 
- * adminSendEmail.js
- * Admin-only Netlify function — sends emails to groomers.
- * Locked to Mitchell's user ID. No template file needed. Update
- */
+// src/pages/AdminEmail.jsx
+// Admin-only email composer — locked to Mitchell's user ID
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 
-const { createClient } = require("@supabase/supabase-js");
-const fetch = require("node-fetch");
+const ADMIN_ID = "b643ea7b";
 
+const PLAN_TIERS = [
+  { value: "all",    label: "All users" },
+  { value: "free",   label: "Free" },
+  { value: "basic",  label: "Basic" },
+  { value: "growth", label: "Growth" },
+  { value: "pro",    label: "Pro" },
+];
 
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+export default function AdminEmail() {
+  const [supabase, setSupabase] = useState(null);
+  const [user, setUser]           = useState(null);
+  const [authorized, setAuthorized] = useState(null);
+  const [groomers, setGroomers]   = useState([]);
+  const [filter, setFilter]       = useState("all");
+  const [selected, setSelected]   = useState(new Set());
+  const [subject, setSubject]     = useState("");
+  const [body, setBody]           = useState("");
+  const [sending, setSending]     = useState(false);
+  const [result, setResult]       = useState(null);
 
-exports.handler = async (event) => {
-  if (event.httpMethod !== "POST") {
-    return { statusCode: 405, body: "Method Not Allowed" };
-  }
+  // Lazy-load supabase so it doesn't crash on module init
+  useEffect(() => {
+    import("../supabase").then(({ supabase: sb }) => {
+      setSupabase(sb);
+    });
+  }, []);
 
-  // Auth
-  const token = (event.headers.authorization || "").replace("Bearer ", "").trim();
-  if (!token) return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
+  // Auth check
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getUser().then(({ data }) => {
+      const u = data?.user;
+      setUser(u);
+      setAuthorized(u?.id?.startsWith(ADMIN_ID) ?? false);
+    });
+  }, [supabase]);
 
-  const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
-  if (authErr || !user) return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
+  // Load groomers
+  useEffect(() => {
+    if (!supabase || !authorized) return;
+    supabase
+      .from("groomers")
+      .select("id, full_name, email, plan_tier, subscription_status")
+      .order("full_name")
+      .then(({ data }) => setGroomers(data || []));
+  }, [supabase, authorized]);
 
-  // Admin check — must be Mitchell
-  if (!user.id.startsWith("b643ea7b")) {
-    return { statusCode: 403, body: JSON.stringify({ error: "Forbidden" }) };
-  }
+  // Filtered list
+  const filtered = groomers.filter(g => {
+    if (!g.email) return false;
+    if (filter === "all") return true;
+    return g.plan_tier === filter;
+  });
 
-  let recipients, subject, body;
-  try {
-    ({ recipients, subject, body } = JSON.parse(event.body || "{}"));
-  } catch {
-    return { statusCode: 400, body: JSON.stringify({ error: "Invalid JSON" }) };
-  }
+  // Sync selection when filter changes
+  useEffect(() => {
+    setSelected(new Set(filtered.map(g => g.email)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, groomers]);
 
-  if (!recipients?.length || !subject || !body) {
-    return { statusCode: 400, body: JSON.stringify({ error: "recipients, subject, and body required" }) };
-  }
+  const toggleOne = (email) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(email) ? next.delete(email) : next.add(email);
+      return next;
+    });
+  };
 
-  // Simple branded HTML wrapper
-  const html = `
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-  <div style="max-width:600px;margin:32px auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;">
-    <div style="background:#059669;padding:20px 28px;">
-      <span style="color:#fff;font-size:18px;font-weight:700;">🐾 PawScheduler</span>
-    </div>
-    <div style="padding:28px;color:#111827;font-size:15px;line-height:1.7;">
-      ${body.replace(/\n/g, "<br/>")}
-    </div>
-    <div style="padding:16px 28px;background:#f9fafb;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;">
-      PawScheduler · You're receiving this because you have an account with us.
-    </div>
-  </div>
-</body>
-</html>`;
+  const toggleAll = () => {
+    if (selected.size === filtered.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filtered.map(g => g.email)));
+    }
+  };
 
-  const results = [];
+  const handleSend = async () => {
+    if (!subject.trim() || !body.trim() || selected.size === 0) return;
 
-  for (const email of recipients) {
+    const confirmed = window.confirm(
+      `Send "${subject}" to ${selected.size} recipient${selected.size !== 1 ? "s" : ""}?`
+    );
+    if (!confirmed) return;
+
+    setSending(true);
+    setResult(null);
+
     try {
-      const res = await fetch("https://api.mailersend.com/v1/email", {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/.netlify/functions/adminSendEmail", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${process.env.MAILERSEND_API_KEY}`,
           "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
-          from: { email: "noreply@pawscheduler.app", name: "PawScheduler" },
-          to: [{ email }],
-          subject,
-          html,
+          recipients: [...selected],
+          subject: subject.trim(),
+          body: body.trim(),
         }),
       });
 
-      results.push({ email, ok: res.ok, status: res.status });
+      const json = await res.json();
+      setResult(json);
     } catch (err) {
-      results.push({ email, ok: false, error: err.message });
+      setResult({ error: err.message });
+    } finally {
+      setSending(false);
     }
+  };
+
+  if (authorized === null) {
+    return <div className="p-8 text-gray-500">Loading…</div>;
   }
 
-  const failed = results.filter(r => !r.ok);
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      sent: results.filter(r => r.ok).length,
-      failed: failed.length,
-      results,
-    }),
-  };
-};
+  if (!authorized) {
+    return (
+      <div className="p-8 text-center space-y-2">
+        <div className="text-2xl">🚫</div>
+        <div className="font-semibold text-gray-700">Admin only</div>
+        <Link to="/" className="text-sm text-blue-600 hover:underline">← Back to Home</Link>
+      </div>
+    );
+  }
+
+  const allChecked = filtered.length > 0 && selected.size === filtered.length;
+  const someChecked = selected.size > 0 && selected.size < filtered.length;
+
+  return (
+    <main className="px-4 py-6 max-w-3xl mx-auto space-y-6">
+      <Link to="/" className="text-sm text-blue-600 hover:underline">← Back to Home</Link>
+
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">📧 Send Email</h1>
+        <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-semibold">Admin only</span>
+      </div>
+
+      {/* Plan filter */}
+      <div className="bg-white border rounded-2xl p-4 space-y-3">
+        <p className="text-sm font-semibold text-gray-700">Recipients</p>
+        <div className="flex flex-wrap gap-2">
+          {PLAN_TIERS.map(t => (
+            <button
+              key={t.value}
+              onClick={() => setFilter(t.value)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                filter === t.value
+                  ? "bg-emerald-600 text-white border-emerald-600"
+                  : "bg-white text-gray-600 border-gray-300 hover:border-emerald-400"
+              }`}
+            >
+              {t.label}
+              <span className="ml-1.5 opacity-70">
+                ({t.value === "all"
+                  ? groomers.filter(g => g.email).length
+                  : groomers.filter(g => g.email && g.plan_tier === t.value).length})
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div className="border rounded-xl overflow-hidden">
+          <label className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-b cursor-pointer hover:bg-gray-100">
+            <input
+              type="checkbox"
+              checked={allChecked}
+              ref={el => { if (el) el.indeterminate = someChecked; }}
+              onChange={toggleAll}
+              className="w-4 h-4 accent-emerald-600"
+            />
+            <span className="text-sm font-semibold text-gray-700">
+              {allChecked ? "Deselect all" : "Select all"} — {filtered.length} users
+            </span>
+          </label>
+
+          <div className="max-h-64 overflow-y-auto divide-y">
+            {filtered.length === 0 && (
+              <p className="px-4 py-3 text-sm text-gray-500 italic">No users on this plan.</p>
+            )}
+            {filtered.map(g => (
+              <label key={g.id} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50">
+                <input
+                  type="checkbox"
+                  checked={selected.has(g.email)}
+                  onChange={() => toggleOne(g.email)}
+                  className="w-4 h-4 accent-emerald-600 flex-shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-gray-900 truncate">{g.full_name}</div>
+                  <div className="text-xs text-gray-500 truncate">{g.email}</div>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${
+                  g.plan_tier === "pro"    ? "bg-purple-100 text-purple-700" :
+                  g.plan_tier === "growth" ? "bg-blue-100 text-blue-700" :
+                  g.plan_tier === "basic"  ? "bg-emerald-100 text-emerald-700" :
+                  "bg-gray-100 text-gray-600"
+                }`}>
+                  {g.plan_tier}
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        <p className="text-xs text-gray-500">
+          {selected.size} recipient{selected.size !== 1 ? "s" : ""} selected
+        </p>
+      </div>
+
+      {/* Compose */}
+      <div className="bg-white border rounded-2xl p-4 space-y-4">
+        <p className="text-sm font-semibold text-gray-700">Compose</p>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-gray-700">Subject</span>
+          <input
+            type="text"
+            value={subject}
+            onChange={e => setSubject(e.target.value)}
+            placeholder="e.g. Exciting new features in PawScheduler!"
+            className="border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-gray-700">Message</span>
+          <textarea
+            value={body}
+            onChange={e => setBody(e.target.value)}
+            placeholder={"Hi there,\n\nJust wanted to let you know..."}
+            rows={10}
+            className="border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"
+          />
+          <p className="text-xs text-gray-400">Plain text — line breaks are preserved. Sent from noreply@pawscheduler.app.</p>
+        </label>
+
+        {body.trim() && (
+          <div className="rounded-xl border border-dashed border-gray-200 p-3 space-y-1">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Preview</p>
+            <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{body}</p>
+          </div>
+        )}
+
+        <button
+          onClick={handleSend}
+          disabled={sending || selected.size === 0 || !subject.trim() || !body.trim()}
+          className="w-full py-3 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {sending
+            ? `Sending to ${selected.size} recipient${selected.size !== 1 ? "s" : ""}…`
+            : `Send to ${selected.size} recipient${selected.size !== 1 ? "s" : ""}`}
+        </button>
+      </div>
+
+      {/* Result */}
+      {result && (
+        <div className={`rounded-2xl border p-4 space-y-2 ${
+          result.error || result.failed > 0
+            ? "bg-red-50 border-red-200"
+            : "bg-emerald-50 border-emerald-200"
+        }`}>
+          {result.error ? (
+            <p className="text-sm text-red-700 font-semibold">❌ Error: {result.error}</p>
+          ) : (
+            <>
+              <p className="text-sm font-semibold text-emerald-800">
+                ✅ Sent {result.sent} · Failed {result.failed}
+              </p>
+              {result.failed > 0 && (
+                <div className="space-y-1">
+                  {result.results.filter(r => !r.ok).map(r => (
+                    <p key={r.email} className="text-xs text-red-600">❌ {r.email} ({r.status})</p>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </main>
+  );
+}
