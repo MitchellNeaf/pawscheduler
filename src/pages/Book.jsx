@@ -30,7 +30,7 @@ function getTheme(key) { return BOOKING_THEMES[key] || BOOKING_THEMES.forest; }
    TIME SLOTS
 -------------------------------------------- */
 const TIME_SLOTS = [];
-for (let hour = 6; hour <= 20; hour++) {
+for (let hour = 5; hour <= 22; hour++) {
   for (let min of [0, 15, 30, 45]) {
     TIME_SLOTS.push(`${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
   }
@@ -287,7 +287,9 @@ export default function BookPage() {
 
     const startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
     const endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
-    const activeSlots = TIME_SLOTS.slice(startIdx, endIdx + 1);
+    const clampedStart = startIdx === -1 ? 0 : startIdx;
+    const clampedEnd = endIdx === -1 ? TIME_SLOTS.length - 1 : endIdx;
+    const activeSlots = TIME_SLOTS.slice(clampedStart, clampedEnd + 1);
     setWorkingRange(activeSlots);
 
     // Breaks
@@ -562,7 +564,7 @@ export default function BookPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          slug: groomer?.slug,
+          groomerId,
           petName: pets.find((p) => p.id === selectedPetId)?.name || "a pet",
           clientName: client?.full_name || "a client",
           date: form.date,
