@@ -878,6 +878,37 @@ export default function ClientPets() {
     });
   };
 
+  // Delete shot record
+  const handleDeleteShotRecord = (recordId, petId) => {
+    setConfirmConfig({
+      title: "Delete this shot record?",
+      message: "This cannot be undone.",
+      confirmLabel: "Delete",
+      danger: true,
+      onConfirm: async () => {
+        const { error } = await supabase
+          .from("pet_shot_records")
+          .delete()
+          .eq("id", recordId);
+
+        if (!error) {
+          setPets((prev) =>
+            prev.map((p) =>
+              p.id === petId
+                ? {
+                    ...p,
+                    pet_shot_records: (p.pet_shot_records || []).filter(
+                      (r) => r.id !== recordId
+                    ),
+                  }
+                : p
+            )
+          );
+        }
+      },
+    });
+  };
+
   if (loading) return (
     <main className="px-4 py-6 space-y-4 max-w-2xl mx-auto">
       {/* Back link skeleton */}
@@ -1276,10 +1307,21 @@ export default function ClientPets() {
                   <div className="font-medium text-gray-800 mb-1">Shot Records</div>
 
                   {pet.pet_shot_records?.length > 0 ? (
-                    <ul className="ml-3 list-disc text-sm text-gray-700">
+                    <ul className="text-sm text-gray-700 space-y-1">
                       {pet.pet_shot_records.map((rec) => (
-                        <li key={rec.id}>
-                          <strong>{rec.shot_type}</strong> — expires {rec.date_expires}
+                        <li key={rec.id} className="flex items-center justify-between gap-2 pl-3">
+                          <span>
+                            <span className="text-gray-400 mr-1">•</span>
+                            <strong>{rec.shot_type}</strong> — expires {rec.date_expires}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteShotRecord(rec.id, pet.id)}
+                            className="flex-shrink-0 w-5 h-5 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600 text-xs flex items-center justify-center leading-none font-bold transition"
+                            title="Delete shot record"
+                          >
+                            ✕
+                          </button>
                         </li>
                       ))}
                     </ul>
