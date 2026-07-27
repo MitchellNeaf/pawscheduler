@@ -82,7 +82,6 @@ const PLANS = [
     excluded: [
       "Client payments via Stripe",
       "AI SMS booking bot",
-      "Dedicated scheduling phone number",
     ],
   },
   {
