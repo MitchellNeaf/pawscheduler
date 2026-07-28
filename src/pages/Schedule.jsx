@@ -2993,25 +2993,32 @@ export default function Schedule() {
                           className="text-xs px-2.5 py-1 rounded-lg border border-blue-200 bg-blue-50 text-blue-700 font-semibold hover:bg-blue-100 transition">
                           Edit
                         </button>
-                        <button onClick={async () => {
-                          if (!window.confirm("Delete this time block?")) return;
-                          await supabase.from("vacation_days").delete().eq("id", b.id);
-                          const remaining = dayBreaks.filter(x => x.id !== b.id);
-                          setDayBreaks(remaining);
-                          const bs = new Set();
-                          remaining.forEach(br => {
-                            if (br._source === "working_breaks") {
-                              const bi = TIME_SLOTS.indexOf((br.break_start||"").slice(0,5));
-                              const ei = TIME_SLOTS.indexOf((br.break_end||"").slice(0,5));
-                              if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei+1).forEach(s=>bs.add(s));
-                            } else if (!br.fullDay && br.break_start) {
-                              const bi = TIME_SLOTS.indexOf((br.break_start||"").slice(0,5));
-                              const ei = TIME_SLOTS.indexOf((br.break_end||"").slice(0,5));
-                              if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei+1).forEach(s=>bs.add(s));
-                            }
+                        <button onClick={() => {
+                          setConfirmConfig({
+                            title: "Delete this time block?",
+                            message: "This cannot be undone.",
+                            confirmLabel: "Delete",
+                            danger: true,
+                            onConfirm: async () => {
+                              await supabase.from("vacation_days").delete().eq("id", b.id);
+                              const remaining = dayBreaks.filter(x => x.id !== b.id);
+                              setDayBreaks(remaining);
+                              const bs = new Set();
+                              remaining.forEach(br => {
+                                if (br._source === "working_breaks") {
+                                  const bi = TIME_SLOTS.indexOf((br.break_start||"").slice(0,5));
+                                  const ei = TIME_SLOTS.indexOf((br.break_end||"").slice(0,5));
+                                  if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei+1).forEach(s=>bs.add(s));
+                                } else if (!br.fullDay && br.break_start) {
+                                  const bi = TIME_SLOTS.indexOf((br.break_start||"").slice(0,5));
+                                  const ei = TIME_SLOTS.indexOf((br.break_end||"").slice(0,5));
+                                  if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei+1).forEach(s=>bs.add(s));
+                                }
+                              });
+                              setBreakSlots([...bs]);
+                              setMonthRefreshKey(k => k + 1);
+                            },
                           });
-                          setBreakSlots([...bs]);
-                          setMonthRefreshKey(k => k + 1);
                         }}
                           className="text-xs px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-600 font-semibold hover:bg-red-100 transition">
                           Delete
@@ -3155,31 +3162,37 @@ export default function Schedule() {
 
                         {/* Decline */}
                         <button
-                          onClick={async () => {
-                            if (window.confirm("Decline this booking request? The appointment will be deleted and the client notified.")) {
-                              const clientEmail = appt.pets?.clients?.email;
-                              if (clientEmail) {
-                                await fetch("/.netlify/functions/sendEmail", {
-                                  method: "POST",
-                                  headers: { "Content-Type": "application/json" },
-                                  body: JSON.stringify({
-                                    to: clientEmail,
-                                    subject: `Booking request update — ${appt.pets?.name}`,
-                                    template: "booking_declined",
-                                    data: {
-                                      groomer_id: appt.groomer_id,
-                                      client_name: appt.pets?.clients?.full_name || "there",
-                                      pet_name: appt.pets?.name || "your pet",
-                                      date: fmtEmailDate(appt.date),
-                                      time: appt.time?.slice(0,5),
-                                      groomer_phone: "",
-                                    }
-                                  })
-                                }).catch(() => {});
-                              }
-                              await supabase.from("appointments").delete().eq("id", appt.id);
-                              setAppointments(prev => prev.filter(a => a.id !== appt.id));
-                            }
+                          onClick={() => {
+                            setConfirmConfig({
+                              title: "Decline this booking request?",
+                              message: "The appointment will be deleted and the client notified.",
+                              confirmLabel: "Decline",
+                              danger: true,
+                              onConfirm: async () => {
+                                const clientEmail = appt.pets?.clients?.email;
+                                if (clientEmail) {
+                                  await fetch("/.netlify/functions/sendEmail", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      to: clientEmail,
+                                      subject: `Booking request update — ${appt.pets?.name}`,
+                                      template: "booking_declined",
+                                      data: {
+                                        groomer_id: appt.groomer_id,
+                                        client_name: appt.pets?.clients?.full_name || "there",
+                                        pet_name: appt.pets?.name || "your pet",
+                                        date: fmtEmailDate(appt.date),
+                                        time: appt.time?.slice(0,5),
+                                        groomer_phone: "",
+                                      }
+                                    })
+                                  }).catch(() => {});
+                                }
+                                await supabase.from("appointments").delete().eq("id", appt.id);
+                                setAppointments(prev => prev.filter(a => a.id !== appt.id));
+                              },
+                            });
                           }}
                           className="flex-1 text-sm py-2 rounded-lg bg-red-100 text-red-700 font-bold hover:bg-red-200 transition text-center"
                         >
@@ -3566,7 +3579,12 @@ export default function Schedule() {
             }]);
             setSaving(false);
             if (error) {
-              alert("Could not save time block: " + error.message);
+              setConfirmConfig({
+                title: "Could not save time block",
+                message: error.message || "Something went wrong. Please try again.",
+                confirmLabel: "OK",
+                onConfirm: () => {},
+              });
             } else {
               setDayActionDate(null);
             }
@@ -3583,7 +3601,15 @@ export default function Schedule() {
             const { error } = await supabase.from("vacation_days")
               .update({ start_time: start, end_time: end, reason: note || null })
               .eq("id", id);
-            if (error) { alert("Could not update time block: " + error.message); return; }
+            if (error) {
+              setConfirmConfig({
+                title: "Could not update time block",
+                message: error.message || "Something went wrong. Please try again.",
+                confirmLabel: "OK",
+                onConfirm: () => {},
+              });
+              return;
+            }
             const fullDay = !start || !end;
             const updated = dayBreaks.map(b => b.id === id
               ? { ...b, start_time: start, end_time: end, break_start: start, break_end: end, reason: note, label: note, fullDay }
