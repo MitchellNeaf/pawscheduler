@@ -505,6 +505,7 @@ export default function Profile() {
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id)}
+              data-tour={`tour-profile-tab-${tab.id}`}
               style={{ minWidth: 76, flexShrink: 0 }}
               className={`py-2.5 px-1 text-xs font-semibold transition-colors text-center border-b-2 whitespace-nowrap
                 ${activeTab === tab.id

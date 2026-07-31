@@ -48,6 +48,133 @@ import Retention from "./pages/legal/Retention";
 // 🔒 HARD GLOBAL LOCK (prevents StrictMode duplication)
 let SAMPLE_SETUP_RUNNING = false;
 
+/* ─── Main onboarding tour (Schedule page, first login) ──────────────────── */
+const SCHEDULE_TOUR_STEPS = [
+  {
+    id: "welcome",
+    emoji: "🐾",
+    title: "Welcome to PawScheduler!",
+    body: "You're all set up. Let's take a 30-second tour of the key features so you can hit the ground running. You can skip anytime.",
+    target: null,
+    placement: "center",
+    cta: "Let's go →",
+  },
+  {
+    id: "tour-schedule-date",
+    emoji: "📅",
+    title: "Navigate Your Schedule",
+    body: "Use the arrows to move between days, or tap the date to jump anywhere on the calendar. Hit 'Today' to snap back to now.",
+    target: "tour-schedule-date",
+    placement: "bottom",
+    cta: "Got it →",
+  },
+  {
+    id: "tour-view-toggle",
+    emoji: "⊞",
+    title: "Three Views",
+    body: "Switch between List (your appointments in order), Grid (time-block view showing capacity), and Month (full calendar overview). Grid is great for spotting open slots at a glance.",
+    target: "tour-view-toggle",
+    placement: "bottom",
+    cta: "Nice →",
+  },
+  {
+    id: "tour-add-appointment",
+    emoji: "➕",
+    title: "Book an Appointment",
+    body: "In Grid view, tap any open slot to book instantly. In List view, use the + button. You can pick the pet, services, duration, and price — and reminders fire automatically.",
+    target: "tour-add-appointment",
+    placement: "bottom",
+    cta: "Understood →",
+  },
+  {
+    id: "tour-nav-menu",
+    emoji: "🧭",
+    title: "Clients, Pets & Profile",
+    body: "Everything else lives up here — on desktop, click the links directly; on mobile, tap the ☰ menu icon. Clients & Pets is where you manage client records, pets, breeds, and vaccination records. Profile is where you set working hours, services and pricing, your public booking link, and reminder templates — set that up first.",
+    target: "tour-nav-menu",
+    placement: "bottom",
+    cta: "Makes sense →",
+  },
+  {
+    id: "tour-booking-link",
+    emoji: "🔗",
+    title: "Your Client Booking Page",
+    body: "Share your personal booking link with clients and they can request appointments directly — no back-and-forth texting. Find it under Profile → Schedule tab. You can approve or auto-accept bookings.",
+    target: null,
+    placement: "center",
+    cta: "One more →",
+  },
+  {
+    id: "done",
+    emoji: "🎉",
+    title: "You're Ready!",
+    body: "That's the core of PawScheduler. Head to Profile to set your hours and services, then start adding clients. Hit Help anytime if you get stuck.",
+    target: null,
+    placement: "center",
+    cta: "Start using PawScheduler",
+    isFinal: true,
+  },
+];
+
+/* ─── Profile-page tour (first visit to Profile) ──────────────────────────── */
+const PROFILE_TOUR_STEPS = [
+  {
+    id: "profile-welcome",
+    emoji: "👤",
+    title: "Your Profile Settings",
+    body: "This is where you configure everything about how PawScheduler works for your business. Quick tour of what's here.",
+    target: null,
+    placement: "center",
+    cta: "Show me →",
+  },
+  {
+    id: "tour-profile-tab-profile",
+    emoji: "🪪",
+    title: "Profile Tab",
+    body: "Your business name, bio, logo, timezone, and public booking slug all live here. Set your timezone first — it affects every reminder time.",
+    target: "tour-profile-tab-profile",
+    placement: "bottom",
+    cta: "Next →",
+  },
+  {
+    id: "tour-profile-tab-schedule",
+    emoji: "🗓",
+    title: "Schedule Tab",
+    body: "Your working hours, breaks, vacation days, and booking limits (max dogs at once, max appointments per day) are all set here.",
+    target: "tour-profile-tab-schedule",
+    placement: "bottom",
+    cta: "Next →",
+  },
+  {
+    id: "tour-profile-tab-pricing",
+    emoji: "💲",
+    title: "Pricing Tab",
+    body: "Set your prices by service and dog size once — they'll auto-fill every time you book an appointment.",
+    target: "tour-profile-tab-pricing",
+    placement: "bottom",
+    cta: "Next →",
+  },
+  {
+    id: "tour-profile-tab-booking",
+    emoji: "🎨",
+    title: "Booking Page Tab",
+    body: "Pick a color theme for your public booking page, toggle booking on or off, and copy your booking link to share with clients.",
+    target: "tour-profile-tab-booking",
+    placement: "bottom",
+    cta: "Got it →",
+  },
+  {
+    id: "profile-done",
+    emoji: "🎉",
+    title: "That's Profile!",
+    body: "Reminders, Intake, Payments, and SMS Bot unlock as you upgrade plans — explore them anytime. Set your working hours in the Schedule tab first if you haven't.",
+    target: null,
+    placement: "center",
+    cta: "Done",
+    isFinal: true,
+  },
+];
+
 // =============================
 // 🔐 PROTECTED ROUTE
 // =============================
@@ -59,6 +186,7 @@ function ProtectedRoute({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showTour, setShowTour] = useState(false);
+  const [showProfileTour, setShowProfileTour] = useState(false);
   const showBanner = false;
 
   const pilot = searchParams.get("pilot");
@@ -105,6 +233,11 @@ function ProtectedRoute({ children }) {
       if (groomer && !groomer.onboarding_complete && location.pathname === "/schedule") {
         // Small delay so the schedule page renders first
         setTimeout(() => setShowTour(true), 800);
+      }
+
+      // Show Profile-page tour on first visit to Profile
+      if (groomer && !groomer.has_seen_profile_tour && location.pathname === "/profile") {
+        setTimeout(() => setShowProfileTour(true), 800);
       }
 
       // =============================
@@ -175,7 +308,17 @@ function ProtectedRoute({ children }) {
       {showTour && (
         <OnboardingTour
           userId={user?.id}
+          steps={SCHEDULE_TOUR_STEPS}
+          completionField="onboarding_complete"
           onComplete={() => setShowTour(false)}
+        />
+      )}
+      {showProfileTour && (
+        <OnboardingTour
+          userId={user?.id}
+          steps={PROFILE_TOUR_STEPS}
+          completionField="has_seen_profile_tour"
+          onComplete={() => setShowProfileTour(false)}
         />
       )}
       {showBanner && (

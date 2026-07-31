@@ -1,78 +1,12 @@
 // src/components/OnboardingTour.jsx
-// Spotlight-style onboarding tour for new groomers.
+// Reusable spotlight-style tour engine — pass in `steps` and `completionField`
+// so it can drive the main Schedule-page walkthrough, or a page-specific tour
+// like the Profile tour, without duplicating this engine.
 // Uses data-tour="step-id" attributes to find and highlight elements.
-// Stores completion in Supabase groomers.onboarding_complete.
+// Stores completion on the groomers row at whatever column `completionField` names.
 
 import { useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
-
-/* ─── Step definitions ──────────────────────────────────────────────────── */
-const STEPS = [
-  {
-    id: "welcome",
-    emoji: "🐾",
-    title: "Welcome to PawScheduler!",
-    body: "You're all set up. Let's take a 30-second tour of the key features so you can hit the ground running. You can skip anytime.",
-    target: null,
-    placement: "center",
-    cta: "Let's go →",
-  },
-  {
-    id: "tour-schedule-date",
-    emoji: "📅",
-    title: "Navigate Your Schedule",
-    body: "Use the arrows to move between days, or tap the date to jump anywhere on the calendar. Hit 'Today' to snap back to now.",
-    target: "tour-schedule-date",
-    placement: "bottom",
-    cta: "Got it →",
-  },
-  {
-    id: "tour-view-toggle",
-    emoji: "⊞",
-    title: "Three Views",
-    body: "Switch between List (your appointments in order), Grid (time-block view showing capacity), and Month (full calendar overview). Grid is great for spotting open slots at a glance.",
-    target: "tour-view-toggle",
-    placement: "bottom",
-    cta: "Nice →",
-  },
-  {
-    id: "tour-add-appointment",
-    emoji: "➕",
-    title: "Book an Appointment",
-    body: "In Grid view, tap any open slot to book instantly. In List view, use the + button. You can pick the pet, services, duration, and price — and reminders fire automatically.",
-    target: "tour-add-appointment",
-    placement: "bottom",
-    cta: "Understood →",
-  },
-  {
-    id: "tour-nav-menu",
-    emoji: "🧭",
-    title: "Clients, Pets & Profile",
-    body: "Everything else lives up here — on desktop, click the links directly; on mobile, tap the ☰ menu icon. Clients & Pets is where you manage client records, pets, breeds, and vaccination records. Profile is where you set working hours, services and pricing, your public booking link, and reminder templates — set that up first.",
-    target: "tour-nav-menu",
-    placement: "bottom",
-    cta: "Makes sense →",
-  },
-  {
-    id: "tour-booking-link",
-    emoji: "🔗",
-    title: "Your Client Booking Page",
-    body: "Share your personal booking link with clients and they can request appointments directly — no back-and-forth texting. Find it under Profile → Schedule tab. You can approve or auto-accept bookings.",
-    target: null,
-    placement: "center",
-    cta: "One more →",
-  },
-  {
-    id: "done",
-    emoji: "🎉",
-    title: "You're Ready!",
-    body: "That's the core of PawScheduler. Head to Profile to set your hours and services, then start adding clients. Hit Help anytime if you get stuck.",
-    target: null,
-    placement: "center",
-    cta: "Start using PawScheduler",
-    isFinal: true,
-  },
-];
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 function getRect(targetId) {
@@ -160,11 +94,12 @@ function ArrowIndicator({ rect, placement }) {
 }
 
 /* ─── Main component ─────────────────────────────────────────────────────── */
-export default function OnboardingTour({ userId, onComplete }) {
+export default function OnboardingTour({ userId, onComplete, steps, completionField = "onboarding_complete" }) {
   const [step, setStep] = useState(0);
   const [rect, setRect] = useState(null);
   const [visible, setVisible] = useState(false);
 
+  const STEPS = steps;
   const current = STEPS[step];
 
   // Measure target and scroll into view
@@ -206,10 +141,10 @@ export default function OnboardingTour({ userId, onComplete }) {
       const { supabase } = await import("../supabase");
       await supabase
         .from("groomers")
-        .update({ onboarding_complete: true })
+        .update({ [completionField]: true })
         .eq("id", userId);
     } catch (_) {}
-  }, [userId]);
+  }, [userId, completionField]);
 
   const handleNext = useCallback(async () => {
     if (current.isFinal) {

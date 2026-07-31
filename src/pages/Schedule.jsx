@@ -2841,7 +2841,14 @@ export default function Schedule() {
                 {/* Header Row */}
                 <div
                   className="border-b bg-gray-100 px-3 py-2 font-semibold text-gray-700 text-sm shadow-sm"
-                  style={{ position: "sticky", left: 0, zIndex: 2 }}
+                  style={{
+                    position: "sticky",
+                    left: 0,
+                    zIndex: 2,
+                    borderRight: "1px solid #d1d5db",
+                    transform: "translateZ(0)",
+                    WebkitTransform: "translateZ(0)",
+                  }}
                 >
                   Time
                 </div>
@@ -2865,7 +2872,14 @@ export default function Schedule() {
                       {/* TIME COLUMN — pinned so it stays visible while scrolling sideways */}
                       <div
                         className="border-t px-1 py-1 text-gray-700 font-medium text-[10px] leading-tight whitespace-nowrap bg-white"
-                        style={{ position: "sticky", left: 0, zIndex: 1 }}
+                        style={{
+                          position: "sticky",
+                          left: 0,
+                          zIndex: 1,
+                          borderRight: "1px solid #e5e7eb",
+                          transform: "translateZ(0)",
+                          WebkitTransform: "translateZ(0)",
+                        }}
                       >
                         {fmt12Hour(slot)}
                       </div>
