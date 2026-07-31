@@ -1900,8 +1900,9 @@ export default function Schedule() {
     loadDay();
   }, [user, selectedDate]);
 
-  /* Delete appointment */
-  const handleDelete = async (id) => {
+  /* Delete appointment — deletes the whole multi-pet group if this appointment
+     is part of one, not just the single pet's own row. */
+  const handleDelete = async (id, onSuccess) => {
     if (!user) return;
 
     setConfirmConfig({
@@ -1910,16 +1911,24 @@ export default function Schedule() {
       confirmLabel: "Delete",
       danger: true,
       onConfirm: async () => {
+        const target = appointments.find(a => a.id === id);
+        const groupIds = target?.appointment_group_id
+          ? appointments.filter(a => a.appointment_group_id === target.appointment_group_id).map(a => a.id)
+          : [id];
+
         const { error } = await supabase
           .from("appointments")
           .delete()
-          .eq("id", id)
+          .in("id", groupIds)
           .eq("groomer_id", user.id);
 
         if (error) {
           console.error("Delete error:", error.message);
           return;
         }
+
+        setAppointments((prev) => prev.filter((a) => !groupIds.includes(a.id)));
+        if (onSuccess) onSuccess();
       },
     });
   };
@@ -3862,8 +3871,7 @@ export default function Schedule() {
         setForm={setEditForm}
         onSave={handleSaveEdit}
         onDelete={() => {
-          if (editAppt) handleDelete(editAppt.id);
-          setEditModalOpen(false);
+          if (editAppt) handleDelete(editAppt.id, () => setEditModalOpen(false));
         }}
         saving={savingEdit}
         pricing={pricing}
