@@ -2483,6 +2483,18 @@ export default function Schedule() {
     0
   );
 
+  // Multi-pet groups share one start time, but the group's real commitment is
+  // the SUM of every pet's duration (e.g. two 1hr dogs = a 2hr combined block).
+  // Coverage and capacity math both need to use that combined length, not just
+  // one pet's own individual duration, or the group would visually "end" after
+  // the first pet's portion and look bookable again while it's still occupied.
+  const groupTotalDurationFor = (appt) => {
+    if (!appt.appointment_group_id) return appt.duration_min || 15;
+    return appointments
+      .filter((a) => a.appointment_group_id === appt.appointment_group_id)
+      .reduce((s, a) => s + (a.duration_min || 15), 0);
+  };
+
   const appointmentsCoveringSlot = (slot) => {
     const [sh, sm] = slot.split(":").map(Number);
     const slotMinutes = sh * 60 + sm;
@@ -2492,13 +2504,26 @@ export default function Schedule() {
       const startStr = appt.time.slice(0, 5);
       const [ah, am] = startStr.split(":").map(Number);
       const startMin = ah * 60 + am;
-      const endMin = startMin + (appt.duration_min || 15);
+      const endMin = startMin + groupTotalDurationFor(appt);
       return slotMinutes >= startMin && slotMinutes < endMin;
     });
   };
 
+  // Collapses a list of appointments down to one representative row per
+  // multi-pet group (first member wins), so a group occupies exactly one
+  // capacity slot instead of one per pet — matches how List view groups them.
+  const dedupeGroups = (appts) => {
+    const seenGroups = new Set();
+    return appts.filter((a) => {
+      if (!a.appointment_group_id) return true;
+      if (seenGroups.has(a.appointment_group_id)) return false;
+      seenGroups.add(a.appointment_group_id);
+      return true;
+    });
+  };
+
   const expandedSlotAppointments = (slot) => {
-    const appts = appointmentsCoveringSlot(slot);
+    const appts = dedupeGroups(appointmentsCoveringSlot(slot));
     const expanded = [];
     appts.forEach((a) => {
       const weight = a.slot_weight || 1;
@@ -2510,7 +2535,7 @@ export default function Schedule() {
   };
 
   const slotsWithInfo = workingRange.map((slot) => {
-    const slotAppts = appointmentsCoveringSlot(slot);
+    const slotAppts = dedupeGroups(appointmentsCoveringSlot(slot));
     const usedWeight = slotAppts.reduce(
       (sum, a) => sum + (a.slot_weight || 1),
       0
@@ -2931,28 +2956,43 @@ export default function Schedule() {
                                     : ""}
                                 `}
                               >
-                                {/* Pet photo — only in the first slot of this appointment */}
-                                {appt.pets?.photo_url && slot === (appt.time || "").slice(0, 5) && (
-                                  <img
-                                    src={appt.pets.photo_url}
-                                    alt={appt.pets.name}
-                                    loading="lazy"
-                                    className="w-8 h-8 rounded-full object-cover border border-gray-200 mb-1"
-                                  />
-                                )}
+                                {/* Pet photo(s) — only in the first slot of this appointment.
+                                    Multi-pet groups show up to 2 small photos side by side. */}
+                                {slot === (appt.time || "").slice(0, 5) && (() => {
+                                  if (!appt.appointment_group_id) {
+                                    return appt.pets?.photo_url ? (
+                                      <img
+                                        src={appt.pets.photo_url}
+                                        alt={appt.pets.name}
+                                        loading="lazy"
+                                        className="w-8 h-8 rounded-full object-cover border border-gray-200 mb-1"
+                                      />
+                                    ) : null;
+                                  }
+                                  const siblings = appointments.filter(a => a.appointment_group_id === appt.appointment_group_id);
+                                  const withPhotos = siblings.filter(a => a.pets?.photo_url).slice(0, 2);
+                                  if (withPhotos.length === 0) return null;
+                                  return (
+                                    <div className="flex items-center gap-1 mb-1">
+                                      {withPhotos.map((a) => (
+                                        <img
+                                          key={a.id}
+                                          src={a.pets.photo_url}
+                                          alt={a.pets.name}
+                                          loading="lazy"
+                                          className="w-6 h-6 rounded-full object-cover border border-gray-200"
+                                        />
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
 
                                 {/* Pet name + vaccine icon */}
                                 <div className="flex items-center justify-between gap-1">
                                   <span className="font-semibold text-[11px] text-gray-900 truncate leading-tight">
-                                    {(() => {
-                                      if (!appt.appointment_group_id) return appt.pets?.name || "Pet";
-                                      const siblings = appointments.filter(a => a.appointment_group_id === appt.appointment_group_id);
-                                      if (siblings.length <= 1) return appt.pets?.name || "Pet";
-                                      const idx = siblings.findIndex(a => a.id === appt.id);
-                                      return idx === 0
-                                        ? `${appt.pets?.name} +${siblings.length - 1}`
-                                        : appt.pets?.name || "Pet";
-                                    })()}
+                                    {appt.appointment_group_id
+                                      ? groupPetNames(appointments.filter(a => a.appointment_group_id === appt.appointment_group_id))
+                                      : appt.pets?.name || "Pet"}
                                   </span>
                                   {vaccineIcon && (
                                     <span className="text-[11px] flex-shrink-0">{vaccineIcon}</span>
@@ -2976,7 +3016,7 @@ export default function Schedule() {
                                     : "bg-green-400"
                                   }`} />
                                   <span className="text-[9px] text-gray-500 leading-none">
-                                    {(appt.time || "").slice(0,5)}–{getEndTime((appt.time||"").slice(0,5), appt.duration_min||15)}
+                                    {(appt.time || "").slice(0,5)}–{getEndTime((appt.time||"").slice(0,5), groupTotalDurationFor(appt))}
                                   </span>
                                 </div>
 
@@ -3000,22 +3040,23 @@ export default function Schedule() {
                                   </div>
                                 )}
 
-                                {/* Quick Paid toggle — tap without opening modal */}
+                                {/* Quick Paid toggle — tap without opening modal. Applies to every
+                                    pet in this group at once (same as List view's payment logic). */}
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    const { data, error } = await supabase
+                                    const groupIds = appt.appointment_group_id
+                                      ? appointments.filter(a => a.appointment_group_id === appt.appointment_group_id).map(a => a.id)
+                                      : [appt.id];
+                                    const newPaid = !appt.paid;
+                                    const { error } = await supabase
                                       .from("appointments")
-                                      .update({ paid: !appt.paid })
-                                      .eq("id", appt.id)
-                                      .eq("groomer_id", user.id)
-                                      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
-                                        services, notes, confirmed, no_show, paid, amount, reminder_enabled, source, appointment_group_id,
-                                        pets ( *, clients ( id, full_name, phone, email, street, city, state, zip ) )`)
-                                      .single();
-                                    if (!error && data) {
+                                      .update({ paid: newPaid })
+                                      .in("id", groupIds)
+                                      .eq("groomer_id", user.id);
+                                    if (!error) {
                                       setAppointments((prev) =>
-                                        prev.map((a) => a.id === data.id ? { ...a, paid: data.paid } : a)
+                                        prev.map((a) => groupIds.includes(a.id) ? { ...a, paid: newPaid } : a)
                                       );
                                     }
                                   }}
