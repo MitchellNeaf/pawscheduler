@@ -1108,22 +1108,27 @@ function elapsedTime(inTs, outTs) {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
+function ToggleCheckbox({ label, field, appt, user, setAppointments, allAppointments }) {
   return (
     <label className="flex items-center gap-2 text-xs sm:text-sm">
       <input
         type="checkbox"
         checked={appt[field] || false}
         onChange={async () => {
+          const newValue = !appt[field];
+          const groupIds = appt.appointment_group_id
+            ? (allAppointments || []).filter(a => a.appointment_group_id === appt.appointment_group_id).map(a => a.id)
+            : [appt.id];
+
           const { data, error } = await supabase
             .from("appointments")
-            .update({ [field]: !appt[field] })
-            .eq("id", appt.id)
+            .update({ [field]: newValue })
+            .in("id", groupIds)
             .eq("groomer_id", user.id)
             .select(
               `
               id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
-              services, notes, confirmed, no_show, paid, amount, reminder_enabled,
+              services, notes, confirmed, no_show, paid, amount, reminder_enabled, appointment_group_id,
               pets (
                 *,
                 clients (
@@ -1139,20 +1144,28 @@ function ToggleCheckbox({ label, field, appt, user, setAppointments }) {
               )
 
             `
-            )
-            .single();
+            );
 
           if (!error && data) {
-            const { data: shots } = await supabase
-              .from("pet_shot_records")
-              .select("*")
-              .eq("pet_id", data.pet_id)
-              .order("date_expires", { ascending: false });
+            const shotsByPetId = {};
+            for (const row of data) {
+              if (!shotsByPetId[row.pet_id]) {
+                const { data: shots } = await supabase
+                  .from("pet_shot_records")
+                  .select("*")
+                  .eq("pet_id", row.pet_id)
+                  .order("date_expires", { ascending: false });
+                shotsByPetId[row.pet_id] = shots || [];
+              }
+            }
 
-            const updated = { ...data, shot_records: shots || [] };
+            const updatedById = {};
+            data.forEach((row) => {
+              updatedById[row.id] = { ...row, shot_records: shotsByPetId[row.pet_id] };
+            });
 
             setAppointments((prev) =>
-              prev.map((a) => (a.id === appt.id ? updated : a))
+              prev.map((a) => (updatedById[a.id] ? updatedById[a.id] : a))
             );
           }
         }}
@@ -3555,6 +3568,7 @@ export default function Schedule() {
                         appt={appt}
                         user={user}
                         setAppointments={setAppointments}
+                        allAppointments={appointments}
                       />
                       <ToggleCheckbox
                         label="No-show"
@@ -3562,6 +3576,7 @@ export default function Schedule() {
                         appt={appt}
                         user={user}
                         setAppointments={setAppointments}
+                        allAppointments={appointments}
                       />
                       <ToggleCheckbox
                         label="Paid"
@@ -3569,6 +3584,7 @@ export default function Schedule() {
                         appt={appt}
                         user={user}
                         setAppointments={setAppointments}
+                        allAppointments={appointments}
                       />
                     </div>
 
