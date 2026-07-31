@@ -192,17 +192,6 @@ function getEndTime(start, durationMin) {
   return `${eh % 12 || 12}:${String(em).padStart(2, "0")} ${ampm}`;
 }
 
-/** Add minutes to a 24hr "HH:MM" time string, returning "HH:MM". Used to stagger
- *  sequential pets within a multi-pet appointment group. */
-function addMinutesTo24h(start, minutes) {
-  const [h, m] = (start || "00:00").split(":").map(Number);
-  const total = h * 60 + m + (minutes || 0);
-  const wrapped = ((total % 1440) + 1440) % 1440; // clamp within a 24hr day
-  const eh = Math.floor(wrapped / 60);
-  const em = wrapped % 60;
-  return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
-}
-
 /** Build bullet-list HTML for services (• item<br/>) */
 function buildServicesHtml(services) {
   const arr = Array.isArray(services)
@@ -2166,28 +2155,24 @@ export default function Schedule() {
       ? crypto.randomUUID()
       : null;
 
-    let cursorTime = newForm.time;
-    const insertRows = newPets.map(({ pet, form }) => {
-      const durMin = form.duration_min || 30;
-      const row = {
-        groomer_id:           user.id,
-        pet_id:               pet.id,
-        date:                 newForm.date,
-        time:                 cursorTime,
-        duration_min:         durMin,
-        services:             form.services,
-        notes:                newForm.notes,
-        slot_weight:          pet.slot_weight || 1,
-        size_category:        pet.size_category || 1,
-        reminder_enabled:     planTier !== "free" && newForm.reminder_enabled,
-        reminder_sent:        false,
-        amount:               form.amount ?? null,
-        appointment_group_id: groupId,
-      };
-      // Only stagger when it's actually a multi-pet group — solo appointments keep newForm.time as-is
-      if (groupId) cursorTime = addMinutesTo24h(cursorTime, durMin);
-      return row;
-    });
+    // Every pet in a multi-pet group shares the same start time — the group is
+    // treated as one combined appointment (e.g. two 1hr dogs = one 2hr block),
+    // not as sequential back-to-back sub-appointments.
+    const insertRows = newPets.map(({ pet, form }) => ({
+      groomer_id:           user.id,
+      pet_id:               pet.id,
+      date:                 newForm.date,
+      time:                 newForm.time,
+      duration_min:         form.duration_min || 30,
+      services:             form.services,
+      notes:                newForm.notes,
+      slot_weight:          pet.slot_weight || 1,
+      size_category:        pet.size_category || 1,
+      reminder_enabled:     planTier !== "free" && newForm.reminder_enabled,
+      reminder_sent:        false,
+      amount:               form.amount ?? null,
+      appointment_group_id: groupId,
+    }));
 
     const { data: savedAppts, error } = await supabase
       .from("appointments")
@@ -3151,19 +3136,13 @@ export default function Schedule() {
           {groupedAppointments.map((group) => {
             const appt = group[0]; // primary appointment for shared fields
             const isMulti = group.length > 1;
-            // Group time span: earliest pet's start to the latest pet's end.
-            // Multi-pet appointments are staggered sequentially (not stacked at the same time),
-            // so this reflects the real total block, e.g. 11:00–1:00 for two back-to-back 1hr dogs.
-            const start = group.reduce((earliest, a) => {
-              const t = (a.time || "00:00").slice(0, 5);
-              return t < earliest ? t : earliest;
-            }, (group[0].time || "00:00").slice(0, 5));
+            // Every pet in the group shares the same start time — the combined block
+            // is that shared start plus the SUM of every pet's duration (e.g. two 1hr
+            // dogs starting at 11:00 = one 11:00–1:00 block), not each pet's individual time.
+            const start = (group[0].time || "00:00").slice(0, 5);
             const startDisplay = fmt12Hour(start);
-            const groupEndMinutes = Math.max(...group.map(a => {
-              const [h, m] = (a.time || "00:00").slice(0, 5).split(":").map(Number);
-              return h * 60 + m + (a.duration_min || 15);
-            }));
-            const end = getEndTime("00:00", groupEndMinutes);
+            const totalDurationMin = group.reduce((s, a) => s + (a.duration_min || 15), 0);
+            const end = getEndTime(start, totalDurationMin);
             const size = sizeBadge(appt.size_category || appt.pets?.size_category || 1);
             const displayName = groupPetNames(group);
             const totalAmount = groupTotal(group);
@@ -3373,24 +3352,6 @@ export default function Schedule() {
                         <div className="text-sm text-gray-700">
                           {appt.pets?.clients?.full_name || "Client"}
                         </div>
-
-                        {/* Per-pet segments — shows each pet's own slice of the combined time block */}
-                        {isMulti && (
-                          <div className="mt-1 space-y-0.5">
-                            {group.map((a) => {
-                              const segStart = (a.time || "00:00").slice(0, 5);
-                              const segEnd = getEndTime(segStart, a.duration_min || 15);
-                              return (
-                                <div key={a.id} className="text-xs text-gray-600 flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-300 flex-shrink-0" />
-                                  <span className="font-medium text-gray-700">{a.pets?.name}</span>
-                                  <span className="text-gray-400">·</span>
-                                  <span>{fmt12Hour(segStart)}–{segEnd}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
 
                         {appt.pets?.tags?.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
