@@ -201,7 +201,7 @@ export default function Help() {
                 { title: "Time zone", text: "Set this first — incorrect timezone means appointment times will be off in reminders and the nightly reminder function.", tone: "warn" },
                 { title: "Booking slug", text: 'Your public booking URL. Example: slug "sally" → app.pawscheduler.app/book/sally. Keep it short and easy to remember.' },
                 { title: "Booking approval toggle", text: "Turn this on to require you to manually approve every booking before it's confirmed. Off by default." },
-                { title: "Max dogs at once", text: "Found in the SMS Bot tab. Controls how many dogs can be booked at the same time slot." },
+                { title: "Max dogs at once", text: "Found at the top of the Schedule tab. Controls how many dogs can be booked at the same time slot." },
               ]} />
               <div className="rounded-xl border bg-gray-50 p-4">
                 <p className="font-semibold text-gray-900 mb-2">Profile tabs</p>
@@ -209,12 +209,12 @@ export default function Help() {
                   {[
                     ["👤 Profile", "Name, bio, logo, slug, timezone, booking approval"],
                     ["🎨 Booking Page", "Theme picker, waiver intro text, booking link copy"],
-                    ["🗓 Schedule", "Working hours and break times"],
+                    ["🗓 Schedule", "Booking limits (max dogs at once, max appts/day), working hours, and break times"],
                     ["💲 Pricing", "Services, add-ons, fees, and per-service durations"],
                     ["🔔 Reminders", "SMS reminder templates and timing rules (Basic+)"],
                     ["💳 Payments", "Stripe Connect for client payments (Pro)"],
                     ["📋 Intake", "Custom intake questions and waiver text (Growth+)"],
-                    ["💬 SMS Bot", "AI scheduling bot toggle and limits (Pro)"],
+                    ["💬 SMS Bot", "AI scheduling bot toggle (Pro)"],
                   ].map(([tab, desc]) => (
                     <div key={tab} className="flex gap-2">
                       <span className="font-semibold text-gray-900 whitespace-nowrap">{tab}:</span>
@@ -385,7 +385,7 @@ export default function Help() {
               <Callout type="tip" title="Small and Medium are separate for a reason.">
                 A groomer might charge $45 for a Cocker Spaniel (Medium) and $30 for a Chihuahua (Small) — same time slot used, different price. Set both in Profile → Pricing.
               </Callout>
-              <Callout type="info" title="Set max capacity in Profile → SMS Bot tab.">
+              <Callout type="info" title="Set max capacity at the top of Profile → Schedule tab.">
                 This controls how many dogs can occupy the same time slot. For mobile groomers who do one dog at a time, set this to 1.
               </Callout>
             </div>
@@ -667,7 +667,7 @@ export default function Help() {
                 <p className="font-semibold text-gray-900">Option A: You schedule it (Schedule page)</p>
                 <ol className="list-decimal ml-5 space-y-1.5">
                   <li>Go to <strong>Schedule</strong> and pick a date using the arrows or date picker.</li>
-                  <li>Switch to <strong>Grid view</strong> and tap an empty slot, or use <strong>List view</strong> and tap a time.</li>
+                  <li>Switch to <strong>Grid view</strong> and tap an empty slot, or stay in <strong>List view</strong> and tap the green <strong>+</strong> button in the bottom-right corner.</li>
                   <li>Pick the pet from the selector (search by name, client, or tag).</li>
                   <li>The appointment modal opens — services and duration pre-fill from the pet's defaults.</li>
                   <li>Adjust services, duration, amount, and notes as needed. Save.</li>
@@ -783,6 +783,7 @@ export default function Help() {
                 { title: "Month view — tap a day", text: "Opens a quick action sheet: Go to Day View, Add Booking for that day, or Add Time Block (check All Day or set a time range + optional note)." },
                 { title: "Time blocks in list view", text: "Date-specific blocks show as 🚫 cards at the top of the list view with Edit and Delete buttons. Recurring weekly breaks show a 'Recurring' badge instead — edit those in Profile." },
                 { title: "Grid view — pet photos", text: "If you've uploaded a pet photo, it appears in the first time slot of their appointment in grid view." },
+                { title: "Grid view — busy time slots scroll sideways", text: "If more appointments overlap than fit on screen, Grid view scrolls horizontally instead of squeezing everything down — swipe sideways to see the rest. The time column stays pinned on the left so you don't lose your place.", tone: "tip" },
                 { title: "Auto-refresh", text: "Adding, editing, or deleting time blocks instantly refreshes the month grid — no manual reload needed.", tone: "tip" },
               ]} />
             </div>
@@ -823,14 +824,20 @@ export default function Help() {
               <Callout type="info" title="Each pet still uses its own capacity slot.">
                 A Small + Large multi-pet booking uses 3 capacity units (1 + 2), same as if you booked them separately. The benefit is you create it in one action instead of two.
               </Callout>
+              <Callout type="tip" title="Pet times are staggered automatically, not stacked.">
+                If you book two dogs with 1-hour services starting at 11:00, the first dog gets 11:00–12:00 and the second gets 12:00–1:00 — the appointment shows as one combined 11:00–1:00 block instead of two overlapping 1-hour slots.
+              </Callout>
               <div className="rounded-xl border bg-gray-50 p-4">
                 <p className="font-semibold text-gray-900 mb-2">How they display</p>
                 <ul className="space-y-1">
-                  <li><strong>List view:</strong> Shows "Buddy & Max" with a blue Multi badge and the combined total.</li>
-                  <li><strong>Grid view:</strong> Primary pet shows "Buddy +1" to indicate a grouped appointment.</li>
+                  <li><strong>List view:</strong> Shows "Buddy & Max" with a blue Multi badge, the combined time span and total duration, and a small line under the client name for each pet's own time slice (e.g. "Buddy · 11:00–12:00").</li>
+                  <li><strong>Grid view:</strong> Primary pet shows "Buddy +1" to indicate a grouped appointment. Tap it to open Buddy's appointment — a "🐾 Booked together with" section at the top shows the other pet(s), and tapping one jumps straight to their appointment.</li>
                   <li><strong>SMS reminder:</strong> One message listing all pets — "Buddy & Max have a grooming appointment tomorrow at 10:00."</li>
                 </ul>
               </div>
+              <Callout type="tip" title="Check-in, check-out, and payment apply to the whole group at once.">
+                Tapping Check In, Check Out, or a quick-pay button on a multi-pet card applies it to every pet in that booking — you don't need to repeat it per pet, and every pet's amount rolls into Revenue once paid.
+              </Callout>
             </div>
           </Section>
 
@@ -1069,7 +1076,8 @@ export default function Help() {
                 <p className="font-semibold text-gray-900">Revenue page</p>
                 <BulletList items={[
                   { title: "Quick filters", text: "This Week, This Month, Last Month, This Year, All Time — or pick a custom date range." },
-                  { title: "Stats", text: "Total revenue, appointment count, average per appointment, and unpaid count." },
+                  { title: "Stats", text: "Total revenue, appointment count, average per appointment, finished (checked-out) count, total time booked, and unpaid count." },
+                  { title: "% change badges", text: "Revenue, Appointments, Finished, and Time Booked each show a green ↑ or red ↓ badge comparing the current period to an equal-length window right before it — e.g. this month-so-far vs. the same number of trailing days last month.", tone: "tip" },
                   { title: "SMS usage", text: "Two stat cards show texts sent this month and texts sent all time — useful for tracking your Telnyx usage across reminders, confirmations, and replies.", tone: "tip" },
                   { title: "Monthly trend", text: "A horizontal bar chart showing the last 6 months of paid revenue." },
                   { title: "Revenue by service", text: "See which services earn the most." },
@@ -1091,7 +1099,7 @@ export default function Help() {
           <Section id="onboarding" title="🎓 Onboarding Tour" subtitle="A guided walkthrough that runs automatically when you first log in.">
             <BulletList items={[
               { title: "When it runs", text: "The tour starts automatically 800ms after your first visit to the Schedule page. It never runs again after you complete or skip it." },
-              { title: "What it covers", text: "Date navigation, view modes (List/Grid/Month), adding appointments, the Clients page, Profile setup, and your booking link — 8 steps total." },
+              { title: "What it covers", text: "Date navigation, view modes (List/Grid/Month), adding appointments, the menu (Clients & Profile), and your booking link — 7 steps total." },
               { title: "Skip anytime", text: "Tap Skip tour on any step to dismiss. Your progress is saved so you won't see it again." },
               { title: "Replay the tour", text: "If you want to see it again, contact support and we can reset it for your account.", tone: "tip" },
               { title: "Mobile friendly", text: "On mobile, the tour bubble anchors to the bottom of the screen so it doesn't cover the highlighted element." },

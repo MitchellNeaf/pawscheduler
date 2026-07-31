@@ -192,6 +192,17 @@ function getEndTime(start, durationMin) {
   return `${eh % 12 || 12}:${String(em).padStart(2, "0")} ${ampm}`;
 }
 
+/** Add minutes to a 24hr "HH:MM" time string, returning "HH:MM". Used to stagger
+ *  sequential pets within a multi-pet appointment group. */
+function addMinutesTo24h(start, minutes) {
+  const [h, m] = (start || "00:00").split(":").map(Number);
+  const total = h * 60 + m + (minutes || 0);
+  const wrapped = ((total % 1440) + 1440) % 1440; // clamp within a 24hr day
+  const eh = Math.floor(wrapped / 60);
+  const em = wrapped % 60;
+  return `${String(eh).padStart(2, "0")}:${String(em).padStart(2, "0")}`;
+}
+
 /** Build bullet-list HTML for services (• item<br/>) */
 function buildServicesHtml(services) {
   const arr = Array.isArray(services)
@@ -729,6 +740,10 @@ function AppointmentModal({
   serviceOptions,
   addonOptions = [],
   feeOptions = [],
+  intakeQuestions = [],
+  // Sibling appointments in the same multi-pet group (edit mode only)
+  groupSiblings = [],
+  onOpenSibling,
 }) {
   if (!open) return null;
   if (isEdit && !appt) return null;
@@ -792,6 +807,30 @@ function AppointmentModal({
             <div className="text-xs text-gray-500">{clientName}</div>
           </div>
 
+          {/* Booked together with — other pets in this multi-pet group */}
+          {isEdit && groupSiblings.length > 0 && (
+            <div className="p-2.5 bg-violet-50 border border-violet-200 rounded-lg text-xs text-violet-800">
+              <div className="font-bold mb-1.5">🐾 Booked together with</div>
+              <div className="space-y-1">
+                {groupSiblings.map((sib) => {
+                  const sibStart = (sib.time || "00:00").slice(0, 5);
+                  const sibEnd = getEndTime(sibStart, sib.duration_min || 15);
+                  return (
+                    <button
+                      key={sib.id}
+                      type="button"
+                      onClick={() => onOpenSibling && onOpenSibling(sib)}
+                      className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-white border border-violet-200 hover:bg-violet-100 transition text-left"
+                    >
+                      <span className="font-semibold text-violet-900">{sib.pets?.name || "Pet"}</span>
+                      <span className="text-violet-600">{fmt12Hour(sibStart)}–{sibEnd}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Pet notes — shown prominently if set */}
           {(isEdit ? appt.pets?.notes : pet.notes) && (
             <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800 leading-relaxed">
@@ -807,6 +846,28 @@ function AppointmentModal({
               {isEdit ? appt.pets?.clients?.notes : pet.clients?.notes}
             </div>
           )}
+
+          {/* Intake answers — shown if the client has any on file */}
+          {(() => {
+            const answers = isEdit ? appt.pets?.clients?.custom_intake_answers : pet.clients?.custom_intake_answers;
+            if (!answers || Object.keys(answers).length === 0) return null;
+            return (
+              <div className="p-2.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-700 leading-relaxed space-y-1.5">
+                <div className="font-bold text-gray-800">📝 Intake answers</div>
+                {Object.entries(answers).map(([qId, answer]) => {
+                  const question = intakeQuestions.find((q) => q.id === qId);
+                  return (
+                    <div key={qId}>
+                      <span className="text-gray-500">{question?.label || qId.replace(/_/g, " ")}: </span>
+                      <span className="text-gray-800">
+                        {Array.isArray(answer) ? answer.join(", ") : String(answer || "—")}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Rabies status */}
           {!rabies ? (
@@ -1692,7 +1753,7 @@ export default function Schedule() {
       ] = await Promise.all([
         supabase
           .from("groomers")
-          .select("max_parallel, service_pricing, plan_tier, booking_requires_approval, custom_services, subscription_status")
+          .select("max_parallel, service_pricing, plan_tier, booking_requires_approval, custom_services, subscription_status, custom_intake_questions")
           .eq("id", user.id)
           .maybeSingle(),
         supabase
@@ -1724,7 +1785,8 @@ export default function Schedule() {
                 street,
                 city,
                 state,
-                zip
+                zip,
+                custom_intake_answers
               )
             )
 
@@ -2104,21 +2166,28 @@ export default function Schedule() {
       ? crypto.randomUUID()
       : null;
 
-    const insertRows = newPets.map(({ pet, form }) => ({
-      groomer_id:           user.id,
-      pet_id:               pet.id,
-      date:                 newForm.date,
-      time:                 newForm.time,
-      duration_min:         form.duration_min || 30,
-      services:             form.services,
-      notes:                newForm.notes,
-      slot_weight:          pet.slot_weight || 1,
-      size_category:        pet.size_category || 1,
-      reminder_enabled:     planTier !== "free" && newForm.reminder_enabled,
-      reminder_sent:        false,
-      amount:               form.amount ?? null,
-      appointment_group_id: groupId,
-    }));
+    let cursorTime = newForm.time;
+    const insertRows = newPets.map(({ pet, form }) => {
+      const durMin = form.duration_min || 30;
+      const row = {
+        groomer_id:           user.id,
+        pet_id:               pet.id,
+        date:                 newForm.date,
+        time:                 cursorTime,
+        duration_min:         durMin,
+        services:             form.services,
+        notes:                newForm.notes,
+        slot_weight:          pet.slot_weight || 1,
+        size_category:        pet.size_category || 1,
+        reminder_enabled:     planTier !== "free" && newForm.reminder_enabled,
+        reminder_sent:        false,
+        amount:               form.amount ?? null,
+        appointment_group_id: groupId,
+      };
+      // Only stagger when it's actually a multi-pet group — solo appointments keep newForm.time as-is
+      if (groupId) cursorTime = addMinutesTo24h(cursorTime, durMin);
+      return row;
+    });
 
     const { data: savedAppts, error } = await supabase
       .from("appointments")
@@ -2568,8 +2637,24 @@ export default function Schedule() {
 
       {/* ── DAY-AT-A-GLANCE SUMMARY BAR ── */}
       {appointments.length > 0 && (() => {
-        const totalAppts    = appointments.length;
-        const confirmed     = appointments.filter(a => a.confirmed).length;
+        // Group by appointment_group_id so a multi-pet booking counts as one appointment,
+        // not one per pet — matches how the list below groups them visually.
+        const seenIds = new Set();
+        const dayGroups = [];
+        for (const a of appointments) {
+          if (seenIds.has(a.id)) continue;
+          seenIds.add(a.id);
+          if (a.appointment_group_id) {
+            const siblings = appointments.filter(x => x.appointment_group_id === a.appointment_group_id);
+            siblings.forEach(s => seenIds.add(s.id));
+            dayGroups.push(siblings);
+          } else {
+            dayGroups.push([a]);
+          }
+        }
+
+        const totalAppts    = dayGroups.length;
+        const confirmed     = dayGroups.filter(g => g.every(a => a.confirmed)).length;
         const totalRevenue  = appointments.reduce((s, a) => s + (a.amount || 0), 0);
         const hasWarnings   = appointments.some(a => {
           const r = getRabiesRecord(a.shot_records || []);
@@ -2695,7 +2780,6 @@ export default function Schedule() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full border rounded px-3 py-2 text-sm"
-              data-tour="tour-add-appointment"
             />
 
             <div className="text-sm text-gray-600">
@@ -2747,11 +2831,18 @@ export default function Schedule() {
               <div
                 className="grid border rounded text-xs"
                 style={{
-                  gridTemplateColumns: `60px repeat(${capacity}, minmax(0, 1fr))`,
+                  // Each capacity column keeps a real minimum width instead of shrinking
+                  // to fit — once there are more appointments than fit on screen, the
+                  // overflow-x-auto wrapper above lets you scroll sideways to see them,
+                  // instead of every column getting squished down to fit one screen.
+                  gridTemplateColumns: `60px repeat(${capacity}, minmax(150px, 1fr))`,
                 }}
               >
                 {/* Header Row */}
-                <div className="border-b bg-gray-100 px-3 py-2 font-semibold text-gray-700 text-sm shadow-sm">
+                <div
+                  className="border-b bg-gray-100 px-3 py-2 font-semibold text-gray-700 text-sm shadow-sm"
+                  style={{ position: "sticky", left: 0, zIndex: 2 }}
+                >
                   Time
                 </div>
 
@@ -2771,8 +2862,11 @@ export default function Schedule() {
 
                   return (
                     <React.Fragment key={slot}>
-                      {/* TIME COLUMN */}
-                      <div className="border-t px-1 py-1 text-gray-700 font-medium text-[10px] leading-tight whitespace-nowrap">
+                      {/* TIME COLUMN — pinned so it stays visible while scrolling sideways */}
+                      <div
+                        className="border-t px-1 py-1 text-gray-700 font-medium text-[10px] leading-tight whitespace-nowrap bg-white"
+                        style={{ position: "sticky", left: 0, zIndex: 1 }}
+                      >
                         {fmt12Hour(slot)}
                       </div>
 
@@ -3043,9 +3137,19 @@ export default function Schedule() {
           {groupedAppointments.map((group) => {
             const appt = group[0]; // primary appointment for shared fields
             const isMulti = group.length > 1;
-            const start = (appt.time || "00:00").slice(0, 5);
+            // Group time span: earliest pet's start to the latest pet's end.
+            // Multi-pet appointments are staggered sequentially (not stacked at the same time),
+            // so this reflects the real total block, e.g. 11:00–1:00 for two back-to-back 1hr dogs.
+            const start = group.reduce((earliest, a) => {
+              const t = (a.time || "00:00").slice(0, 5);
+              return t < earliest ? t : earliest;
+            }, (group[0].time || "00:00").slice(0, 5));
             const startDisplay = fmt12Hour(start);
-            const end = getEndTime(start, Math.max(...group.map(a => a.duration_min || 15)));
+            const groupEndMinutes = Math.max(...group.map(a => {
+              const [h, m] = (a.time || "00:00").slice(0, 5).split(":").map(Number);
+              return h * 60 + m + (a.duration_min || 15);
+            }));
+            const end = getEndTime("00:00", groupEndMinutes);
             const size = sizeBadge(appt.size_category || appt.pets?.size_category || 1);
             const displayName = groupPetNames(group);
             const totalAmount = groupTotal(group);
@@ -3098,8 +3202,9 @@ export default function Schedule() {
                         {/* Approve */}
                         <button
                           onClick={async () => {
-                            await supabase.from("appointments").update({ confirmed: true, waitlist: false }).eq("id", appt.id);
-                            setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, confirmed: true, waitlist: false } : a));
+                            const groupIds = group.map(a => a.id);
+                            await supabase.from("appointments").update({ confirmed: true, waitlist: false }).in("id", groupIds);
+                            setAppointments(prev => prev.map(a => groupIds.includes(a.id) ? { ...a, confirmed: true, waitlist: false } : a));
                             const clientEmail = appt.pets?.clients?.email;
                             if (clientEmail) {
                               fetch("/.netlify/functions/sendEmail", {
@@ -3131,8 +3236,9 @@ export default function Schedule() {
                         {!appt.waitlist && (
                           <button
                             onClick={async () => {
-                              await supabase.from("appointments").update({ waitlist: true }).eq("id", appt.id);
-                              setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, waitlist: true } : a));
+                              const groupIds = group.map(a => a.id);
+                              await supabase.from("appointments").update({ waitlist: true }).in("id", groupIds);
+                              setAppointments(prev => prev.map(a => groupIds.includes(a.id) ? { ...a, waitlist: true } : a));
                               const clientEmail = appt.pets?.clients?.email;
                               if (clientEmail) {
                                 fetch("/.netlify/functions/sendEmail", {
@@ -3189,8 +3295,9 @@ export default function Schedule() {
                                     })
                                   }).catch(() => {});
                                 }
-                                await supabase.from("appointments").delete().eq("id", appt.id);
-                                setAppointments(prev => prev.filter(a => a.id !== appt.id));
+                                const groupIds = group.map(a => a.id);
+                                await supabase.from("appointments").delete().in("id", groupIds);
+                                setAppointments(prev => prev.filter(a => !groupIds.includes(a.id)));
                               },
                             });
                           }}
@@ -3221,7 +3328,7 @@ export default function Schedule() {
                     </div>
 
                     <div className="text-sm text-gray-500 text-right">
-                      {appt.duration_min} min
+                      {isMulti ? group.reduce((s, a) => s + (a.duration_min || 0), 0) : appt.duration_min} min
                       {totalAmount > 0 && (
                         <div className="font-semibold text-gray-800">
                           ${totalAmount.toFixed(2)}
@@ -3252,6 +3359,24 @@ export default function Schedule() {
                         <div className="text-sm text-gray-700">
                           {appt.pets?.clients?.full_name || "Client"}
                         </div>
+
+                        {/* Per-pet segments — shows each pet's own slice of the combined time block */}
+                        {isMulti && (
+                          <div className="mt-1 space-y-0.5">
+                            {group.map((a) => {
+                              const segStart = (a.time || "00:00").slice(0, 5);
+                              const segEnd = getEndTime(segStart, a.duration_min || 15);
+                              return (
+                                <div key={a.id} className="text-xs text-gray-600 flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-300 flex-shrink-0" />
+                                  <span className="font-medium text-gray-700">{a.pets?.name}</span>
+                                  <span className="text-gray-400">·</span>
+                                  <span>{fmt12Hour(segStart)}–{segEnd}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
 
                         {appt.pets?.tags?.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
@@ -3437,8 +3562,9 @@ export default function Schedule() {
                       <button
                         onClick={async () => {
                           const value = appt.checked_in_at ? null : new Date().toISOString();
-                          await supabase.from("appointments").update({ checked_in_at: value }).eq("id", appt.id);
-                          setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, checked_in_at: value } : a));
+                          const groupIds = group.map(a => a.id);
+                          await supabase.from("appointments").update({ checked_in_at: value }).in("id", groupIds);
+                          setAppointments(prev => prev.map(a => groupIds.includes(a.id) ? { ...a, checked_in_at: value } : a));
                         }}
                         className={`flex-1 py-1.5 rounded-xl text-xs font-semibold border transition
                           ${appt.checked_in_at
@@ -3462,8 +3588,9 @@ export default function Schedule() {
                             const [h, m] = e.target.value.split(":").map(Number);
                             const base = new Date(appt.checked_in_at);
                             base.setHours(h, m, 0, 0);
-                            await supabase.from("appointments").update({ checked_in_at: base.toISOString() }).eq("id", appt.id);
-                            setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, checked_in_at: base.toISOString() } : a));
+                            const groupIds = group.map(a => a.id);
+                            await supabase.from("appointments").update({ checked_in_at: base.toISOString() }).in("id", groupIds);
+                            setAppointments(prev => prev.map(a => groupIds.includes(a.id) ? { ...a, checked_in_at: base.toISOString() } : a));
                           }}
                           className="border rounded-lg px-1 py-1 text-xs w-20 text-center"
                           title="Edit check-in time"
@@ -3475,8 +3602,9 @@ export default function Schedule() {
                         <button
                           onClick={async () => {
                             const value = appt.checked_out_at ? null : new Date().toISOString();
-                            await supabase.from("appointments").update({ checked_out_at: value }).eq("id", appt.id);
-                            setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, checked_out_at: value } : a));
+                            const groupIds = group.map(a => a.id);
+                            await supabase.from("appointments").update({ checked_out_at: value }).in("id", groupIds);
+                            setAppointments(prev => prev.map(a => groupIds.includes(a.id) ? { ...a, checked_out_at: value } : a));
                           }}
                           className={`flex-1 py-1.5 rounded-xl text-xs font-semibold border transition
                             ${appt.checked_out_at
@@ -3501,8 +3629,9 @@ export default function Schedule() {
                             const [h, m] = e.target.value.split(":").map(Number);
                             const base = new Date(appt.checked_out_at);
                             base.setHours(h, m, 0, 0);
-                            await supabase.from("appointments").update({ checked_out_at: base.toISOString() }).eq("id", appt.id);
-                            setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, checked_out_at: base.toISOString() } : a));
+                            const groupIds = group.map(a => a.id);
+                            await supabase.from("appointments").update({ checked_out_at: base.toISOString() }).in("id", groupIds);
+                            setAppointments(prev => prev.map(a => groupIds.includes(a.id) ? { ...a, checked_out_at: base.toISOString() } : a));
                           }}
                           className="border rounded-lg px-1 py-1 text-xs w-20 text-center"
                           title="Edit check-out time"
@@ -3517,19 +3646,22 @@ export default function Schedule() {
                       )}
                     </div>
 
-                    {/* Quick payment buttons — appear after checkout if not yet paid */}
-                    {appt.checked_out_at && !appt.paid && (
+                    {/* Quick payment buttons — appear after checkout if not yet paid.
+                        For multi-pet groups, gated/applied on ALL pets in the group so
+                        paying once marks every pet paid and moves them all to Revenue. */}
+                    {group.every(a => a.checked_out_at) && !group.every(a => a.paid) && (
                       <div className="flex gap-2 mt-2 flex-wrap">
                         {["cash", "card", "venmo", "cashapp", "zelle", "check"].map(method => (
                           <button
                             key={method}
                             onClick={async () => {
+                              const groupIds = group.map(a => a.id);
                               await supabase.from("appointments").update({
                                 paid: true,
                                 payment_method: method,
-                              }).eq("id", appt.id);
+                              }).in("id", groupIds);
                               setAppointments(prev => prev.map(a =>
-                                a.id === appt.id ? { ...a, paid: true, payment_method: method } : a
+                                groupIds.includes(a.id) ? { ...a, paid: true, payment_method: method } : a
                               ));
                             }}
                             className="px-3 py-1.5 rounded-xl text-xs font-semibold border border-[var(--border-med)] bg-[var(--surface)] text-[var(--text-2)] hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700 transition capitalize"
@@ -3539,9 +3671,10 @@ export default function Schedule() {
                         ))}
                       </div>
                     )}
-                    {appt.checked_out_at && appt.paid && (
+                    {group.every(a => a.checked_out_at) && group.every(a => a.paid) && (
                       <div className="mt-2 text-xs text-emerald-700 font-semibold">
                         ✅ Paid{appt.payment_method ? ` via ${appt.payment_method === "cashapp" ? "Cash App" : appt.payment_method.charAt(0).toUpperCase() + appt.payment_method.slice(1)}` : ""}
+                        {isMulti && <span className="text-[var(--text-3)] font-normal"> · all pets</span>}
                       </div>
                     )}
                   </div>
@@ -3549,6 +3682,17 @@ export default function Schedule() {
               </div>
             );
           })}
+
+          {/* Floating add-appointment button — List view had no add entry point before;
+              reuses the same openSlot → pick-pet → new-appointment flow Month view uses. */}
+          <button
+            onClick={() => openSlot("09:00")}
+            data-tour="tour-add-appointment"
+            aria-label="Add appointment"
+            className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-emerald-600 text-white text-2xl font-bold shadow-lg hover:bg-emerald-700 active:bg-emerald-800 transition flex items-center justify-center z-30"
+          >
+            +
+          </button>
         </div>
       )}
 
@@ -3673,6 +3817,15 @@ export default function Schedule() {
         serviceOptions={serviceOptions}
         addonOptions={addonOptions}
         feeOptions={feeOptions}
+        intakeQuestions={groomer?.custom_intake_questions || []}
+        groupSiblings={
+          editAppt?.appointment_group_id
+            ? appointments.filter(
+                a => a.appointment_group_id === editAppt.appointment_group_id && a.id !== editAppt.id
+              )
+            : []
+        }
+        onOpenSibling={handleOpenEditModal}
         form={editForm}
         setForm={setEditForm}
         onSave={handleSaveEdit}

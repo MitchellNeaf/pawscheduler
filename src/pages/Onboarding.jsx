@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
 import { useNavigate } from "react-router-dom";
+import ConfirmModal from "../components/ConfirmModal";
 
 export default function Onboarding() {
   const [businessName, setBusinessName] = useState("");
@@ -9,6 +10,7 @@ export default function Onboarding() {
   const [slugAvailable, setSlugAvailable] = useState(null);
   const [checkingProfile, setCheckingProfile] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [confirmConfig, setConfirmConfig] = useState(null);
 
   const navigate = useNavigate();
 
@@ -101,7 +103,12 @@ export default function Onboarding() {
     e.preventDefault();
 
     if (slugAvailable === false) {
-      alert("This slug is already taken. Please choose another.");
+      setConfirmConfig({
+        title: "Slug already taken",
+        message: "This slug is already taken. Please choose another.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -112,8 +119,12 @@ export default function Onboarding() {
     } = await supabase.auth.getUser();
 
     if (!user) {
-      alert("You are not logged in.");
-      navigate("/auth");
+      setConfirmConfig({
+        title: "Not logged in",
+        message: "You are not logged in.",
+        confirmLabel: "OK",
+        onConfirm: () => navigate("/auth"),
+      });
       return;
     }
 
@@ -159,7 +170,12 @@ export default function Onboarding() {
     localStorage.removeItem("pawscheduler_pilot");
 
     if (error) {
-      alert("Error creating groomer profile: " + error.message);
+      setConfirmConfig({
+        title: "Could not create profile",
+        message: error.message || "Something went wrong. Please try again.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
       setLoading(false);
       return;
     }
@@ -210,7 +226,7 @@ export default function Onboarding() {
             <p className="text-green-600 text-sm mt-1">
               ✔ Available! Your booking link will be:
               <br />
-              <span className="font-semibold">pawscheduler.com/book/{slug}</span>
+              <span className="font-semibold">app.pawscheduler.app/book/{slug}</span>
             </p>
           )}
 
@@ -227,6 +243,11 @@ export default function Onboarding() {
           {loading ? "Saving…" : "Save & Continue"}
         </button>
       </form>
+
+      <ConfirmModal
+        config={confirmConfig}
+        onClose={() => setConfirmConfig(null)}
+      />
     </main>
   );
 }

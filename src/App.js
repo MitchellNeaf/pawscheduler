@@ -263,7 +263,6 @@ async function createSampleData(groomerId) {
     time: "08:00",
     duration_min: 60,
     services: ["Full Groom"],
-    status: "scheduled",
     confirmed: false,
     no_show: false,
     paid: false,
@@ -359,7 +358,7 @@ function AppShell() {
   return (
     <>
       {!hideNav && (
-        <nav className="bg-white shadow-sm border-b border-gray-200 px-4 py-3">
+        <nav className="bg-white shadow-sm border-b border-gray-200 px-4 py-3" data-tour="tour-nav-menu">
           <div className="flex items-center justify-between gap-3">
             <div className="text-xl font-semibold shrink-0">
               <span className="text-emerald-600">Paw</span>Scheduler
@@ -371,11 +370,6 @@ function AppShell() {
                 <Link
                   key={item.to}
                   to={item.to}
-                  data-tour={
-                    item.to === "/clients" ? "tour-nav-clients" :
-                    item.to === "/profile" ? "tour-nav-profile" :
-                    undefined
-                  }
                 >
                   {item.label}
                 </Link>
@@ -418,11 +412,6 @@ function AppShell() {
                         key={item.to}
                         to={item.to}
                         className="block px-4 py-3 text-sm text-gray-800 hover:bg-emerald-50 hover:text-emerald-700"
-                        data-tour={
-                          item.to === "/clients" ? "tour-nav-clients" :
-                          item.to === "/profile" ? "tour-nav-profile" :
-                          undefined
-                        }
                       >
                         {item.label}
                       </Link>

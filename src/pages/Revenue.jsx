@@ -49,7 +49,7 @@ const PERIODS = [
 ];
 
 /* ── stat card ── */
-function StatCard({ label, value, sub, accent }) {
+function StatCard({ label, value, sub, accent, delta }) {
   return (
     <div className="card">
       <div className="card-body" style={{ padding: "16px 20px" }}>
@@ -57,9 +57,22 @@ function StatCard({ label, value, sub, accent }) {
           letterSpacing: ".07em", color: "var(--text-3)", marginBottom: 4 }}>
           {label}
         </div>
-        <div style={{ fontSize: "1.55rem", fontWeight: 800,
-          color: accent || "var(--text-1)", lineHeight: 1.1 }}>
-          {value}
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ fontSize: "1.55rem", fontWeight: 800,
+            color: accent || "var(--text-1)", lineHeight: 1.1 }}>
+            {value}
+          </div>
+          {delta != null && (
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: 2,
+              fontSize: "0.68rem", fontWeight: 700,
+              padding: "2px 6px", borderRadius: 99,
+              background: delta >= 0 ? "rgba(16,185,129,.12)" : "rgba(239,68,68,.12)",
+              color: delta >= 0 ? "#059669" : "#dc2626",
+            }}>
+              {delta >= 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(0)}%
+            </span>
+          )}
         </div>
         {sub && (
           <div style={{ fontSize: "0.73rem", color: "var(--text-3)", marginTop: 3 }}>{sub}</div>
@@ -67,6 +80,22 @@ function StatCard({ label, value, sub, accent }) {
       </div>
     </div>
   );
+}
+
+/* ── minutes → "Xh Ym" ── */
+function fmtDuration(totalMin) {
+  const mins = Math.round(totalMin || 0);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+/* ── % change vs. prior period; null when there's no meaningful baseline ── */
+function pctDelta(curr, prev) {
+  if (!prev) return null;
+  return ((curr - prev) / prev) * 100;
 }
 
 /* ── horizontal bar ── */
@@ -131,6 +160,7 @@ export default function Revenue() {
         .from("appointments")
         .select(`
           id, date, time, amount, tip, paid, no_show, services, payment_method,
+          duration_min, checked_out_at,
           pets ( name, clients ( full_name ) )
         `)
         .eq("groomer_id", user.id)
@@ -194,6 +224,47 @@ export default function Revenue() {
   const noShowLoss = useMemo(() =>
     appointments.filter((a) => a.no_show).reduce((s, a) => s + (a.amount || 0), 0),
   [appointments]);
+
+  // New stats — sourced from data already fetched, no new query needed
+  const finishedCount  = filtered.filter((a) => a.checked_out_at).length;
+  const timeBookedMin  = filtered.reduce((s, a) => s + (a.duration_min || 0), 0);
+
+  // Previous-period comparison window: same length immediately preceding the
+  // current range, so the stat cards can show a "vs last period" % change.
+  // Skipped for "All Time" (no bounded start) — there's no meaningful prior window.
+  const prevRange = useMemo(() => {
+    if (!startDate || !endDate) return null;
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const days = Math.round((end - start) / 86400000) + 1;
+    const prevEnd = new Date(start);
+    prevEnd.setDate(prevEnd.getDate() - 1);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate() - (days - 1));
+    return { start: prevStart, end: prevEnd };
+  }, [startDate, endDate]);
+
+  const prevFiltered = useMemo(() => {
+    if (!prevRange) return [];
+    return appointments.filter((a) => {
+      const d = new Date(a.date);
+      if (d < prevRange.start || d > prevRange.end) return false;
+      if (!includeUnpaid && !a.paid) return false;
+      if (paymentMethodFilter !== "all" && a.payment_method !== paymentMethodFilter) return false;
+      return true;
+    });
+  }, [appointments, prevRange, includeUnpaid, paymentMethodFilter]);
+
+  const prevPaidOnly       = useMemo(() => prevFiltered.filter((a) => a.paid), [prevFiltered]);
+  const prevRevenue        = prevPaidOnly.reduce((s, a) => s + (a.amount || 0), 0);
+  const prevApptCount      = prevFiltered.length;
+  const prevFinishedCount  = prevFiltered.filter((a) => a.checked_out_at).length;
+  const prevTimeBookedMin  = prevFiltered.reduce((s, a) => s + (a.duration_min || 0), 0);
+
+  const revenueDelta  = pctDelta(totalRevenue, prevRevenue);
+  const apptDelta     = pctDelta(apptCount, prevApptCount);
+  const finishedDelta = pctDelta(finishedCount, prevFinishedCount);
+  const timeBookedDelta = pctDelta(timeBookedMin, prevTimeBookedMin);
 
   const revenueByService = useMemo(() => {
     const map = {};
@@ -349,6 +420,7 @@ export default function Revenue() {
           value={`$${totalRevenue.toFixed(2)}`}
           sub={startDate ? `${startDate} → ${endDate || "today"}` : "All time"}
           accent="var(--brand)"
+          delta={revenueDelta}
         />
         {totalTips > 0 && (
           <StatCard
@@ -366,7 +438,9 @@ export default function Revenue() {
             accent="var(--brand)"
           />
         )}
-        <StatCard label="Appointments" value={apptCount} sub={`${paidOnly.length} paid`} />
+        <StatCard label="Appointments" value={apptCount} sub={`${paidOnly.length} paid`} delta={apptDelta} />
+        <StatCard label="Finished" value={finishedCount} sub="checked out" delta={finishedDelta} />
+        <StatCard label="Time Booked" value={fmtDuration(timeBookedMin)} sub="scheduled duration" delta={timeBookedDelta} />
         <StatCard label="Avg per Appt" value={`$${avgPerAppt.toFixed(2)}`} sub="paid only" />
         <StatCard
           label="Unpaid"

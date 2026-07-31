@@ -1026,6 +1026,37 @@ export default function Profile() {
       {/* ── SCHEDULE TAB ── */}
       {activeTab === "schedule" && (
         <div className="space-y-3">
+          <div className="bg-[var(--surface-2)] border border-[var(--border-med)] rounded-xl p-4 space-y-4">
+            <h3 className="text-sm font-semibold text-[var(--text-1)]">Booking Limits</h3>
+            <div>
+              <label className="block text-sm font-medium mb-1">Max Dogs at Same Time</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min="1"
+                  max="30"
+                  value={maxParallel}
+                  onChange={(e) => setMaxParallel(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}
+                  className="border border-[var(--border-med)] rounded p-2 w-28 bg-[var(--surface)] text-[var(--text-1)] text-center"
+                />
+                <span className="text-sm text-[var(--text-3)]">pets simultaneously (up to 30)</span>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Max Appointments Per Day</label>
+              <div className="flex items-center gap-3">
+                <select value={maxApptsPerDay ?? ""} onChange={(e) => setMaxApptsPerDay(e.target.value === "" ? null : Number(e.target.value))} className="border border-[var(--border-med)] rounded p-2 w-28 bg-[var(--surface)] text-[var(--text-1)]">
+                  <option value="">No limit</option>
+                  {[2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20].map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <span className="text-sm text-[var(--text-3)]">SMS bot won't book beyond this</span>
+              </div>
+            </div>
+            <button onClick={saveProfile} disabled={saving} className="btn-primary w-full">
+              {saving ? "Saving…" : "Save Limits"}
+            </button>
+          </div>
+
           <div>
             <h2 className="text-lg font-bold text-[var(--text-1)]">Working Hours</h2>
             <p className="text-sm text-[var(--text-3)] mt-0.5">
@@ -1916,37 +1947,6 @@ export default function Profile() {
               </a>
             </div>
           )}
-
-          <div className="bg-[var(--surface-2)] border border-[var(--border-med)] rounded-xl p-4 space-y-4 mb-5">
-            <h3 className="text-sm font-semibold text-[var(--text-1)]">Booking Limits</h3>
-            <div>
-              <label className="block text-sm font-medium mb-1">Max Dogs at Same Time</label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="number"
-                  min="1"
-                  max="30"
-                  value={maxParallel}
-                  onChange={(e) => setMaxParallel(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}
-                  className="border border-[var(--border-med)] rounded p-2 w-28 bg-[var(--surface)] text-[var(--text-1)] text-center"
-                />
-                <span className="text-sm text-[var(--text-3)]">pets simultaneously (up to 30)</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Max Appointments Per Day</label>
-              <div className="flex items-center gap-3">
-                <select value={maxApptsPerDay ?? ""} onChange={(e) => setMaxApptsPerDay(e.target.value === "" ? null : Number(e.target.value))} className="border border-[var(--border-med)] rounded p-2 w-28 bg-[var(--surface)] text-[var(--text-1)]">
-                  <option value="">No limit</option>
-                  {[2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20].map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
-                <span className="text-sm text-[var(--text-3)]">SMS bot won't book beyond this</span>
-              </div>
-            </div>
-            <button onClick={saveProfile} disabled={saving} className="btn-primary w-full">
-              {saving ? "Saving…" : "Save Limits"}
-            </button>
-          </div>
 
           <SmsBotSection userId={user?.id} />
         </div>
