@@ -12,6 +12,7 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMsg, setSuccessMsg] = useState("");
 
   // Pilot redirect
   useEffect(() => {
@@ -119,6 +120,13 @@ export default function AuthPage() {
             </div>
           )}
 
+          {successMsg && (
+            <div className="bg-emerald-50 border border-emerald-300 rounded-xl px-4 py-3 mb-4 flex items-start gap-2">
+              <span className="text-emerald-500 text-lg flex-shrink-0 leading-none mt-0.5">✓</span>
+              <p className="text-emerald-700 text-sm font-medium">{successMsg}</p>
+            </div>
+          )}
+
           <input
             type="email"
             placeholder="Email"
@@ -151,8 +159,11 @@ export default function AuthPage() {
                   redirectTo: `${window.location.origin}/reset-password`,
                 });
 
-              if (error) setError(error.message);
-              else alert("Password reset email sent.");
+              if (error) { setSuccessMsg(""); setError(error.message); }
+              else {
+                setError("");
+                setSuccessMsg("Password reset email sent.");
+              }
             }}
           >
             Forgot password?

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabase";
+import ConfirmModal from "../components/ConfirmModal";
 
 export default function Signup() {
   const navigate = useNavigate();
@@ -14,6 +15,7 @@ export default function Signup() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [confirmConfig, setConfirmConfig] = useState(null);
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -49,8 +51,12 @@ export default function Signup() {
       return;
     }
 
-    alert("📩 Check your email to confirm your account before logging in.");
-    navigate("/auth");
+    setConfirmConfig({
+      title: "Check your email",
+      message: "📩 Check your email to confirm your account before logging in.",
+      confirmLabel: "OK",
+      onConfirm: () => navigate("/auth"),
+    });
     setLoading(false);
   };
 
@@ -166,6 +172,11 @@ export default function Signup() {
           </p>
         </form>
       </div>
+
+      <ConfirmModal
+        config={confirmConfig}
+        onClose={() => setConfirmConfig(null)}
+      />
     </div>
   );
 }

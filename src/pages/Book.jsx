@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import ConfirmModal from "../components/ConfirmModal";
 import { useParams } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
 import DatePicker from "react-datepicker";
@@ -111,6 +112,7 @@ export default function BookPage() {
 
   const [groomer, setGroomer] = useState(null);
   const [groomerId, setGroomerId] = useState(null);
+  const [confirmConfig, setConfirmConfig] = useState(null);
   const [maxParallel, setMaxParallel] = useState(1);
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
   const [serviceOptions, setServiceOptions] = useState(SERVICE_OPTIONS); // array of { name, description? } or string
@@ -506,7 +508,12 @@ export default function BookPage() {
     setSubmitting(true);
 
     if (!selectedPetId) {
-      alert("Please select a pet.");
+      setConfirmConfig({
+        title: "Select a pet",
+        message: "Please select a pet.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
       setSubmitting(false);
       return;
     }
@@ -534,7 +541,14 @@ export default function BookPage() {
       },
     ]).select("id");
 
-    if (error) alert(error.message);
+    if (error) {
+      setConfirmConfig({
+        title: "Could not book appointment",
+        message: error.message || "Something went wrong. Please try again.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+    }
     else {
       // Fire groomer notification email (fire-and-forget)
       if (groomer?.email) {
@@ -615,50 +629,62 @@ export default function BookPage() {
   /* --------------------------------------------
      CANCEL APPOINTMENT
   -------------------------------------------- */
-  const handleCancel = async (apptId) => {
-    if (!window.confirm("Are you sure you want to cancel this appointment?")) return;
-    setCancelling(apptId);
+  const handleCancel = (apptId) => {
+    setConfirmConfig({
+      title: "Cancel this appointment?",
+      message: "Are you sure you want to cancel this appointment?",
+      confirmLabel: "Cancel Appointment",
+      danger: true,
+      onConfirm: async () => {
+        setCancelling(apptId);
 
-    // Grab the appt details before deleting so we can email the groomer
-    const appt = upcomingAppts.find((a) => a.id === apptId);
+        // Grab the appt details before deleting so we can email the groomer
+        const appt = upcomingAppts.find((a) => a.id === apptId);
 
-    const { error } = await anonSupabase
-      .from("appointments")
-      .delete()
-      .eq("id", apptId)
-      .eq("groomer_id", groomerId);
+        const { error } = await anonSupabase
+          .from("appointments")
+          .delete()
+          .eq("id", apptId)
+          .eq("groomer_id", groomerId);
 
-    if (error) {
-      alert("Could not cancel — please call us directly.");
-    } else {
-      setUpcomingAppts((prev) => prev.filter((a) => a.id !== apptId));
+        if (error) {
+          setConfirmConfig({
+            title: "Could not cancel",
+            message: "Please call us directly.",
+            confirmLabel: "OK",
+            onConfirm: () => {},
+          });
+        } else {
+          setUpcomingAppts((prev) => prev.filter((a) => a.id !== apptId));
 
-      // Notify the groomer (fire-and-forget)
-      if (groomer?.email && appt) {
-        fetch("/.netlify/functions/sendEmail", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: groomer.email,
-            subject: `Appointment cancelled — ${appt.pets?.name || "a pet"} on ${appt.date}`,
-            template: "groomer_cancellation",
-            data: {
-              pet_name: appt.pets?.name || "—",
-              client_name: client?.full_name || "—",
-              date: appt.date,
-              time: appt.time || "",
-              duration_min: appt.duration_min || "",
-              services: Array.isArray(appt.services)
-                ? appt.services.join(", ")
-                : appt.services || "—",
-              notes: "",
-            },
-          }),
-        }).catch(() => {});
-      }
-    }
+          // Notify the groomer (fire-and-forget)
+          if (groomer?.email && appt) {
+            fetch("/.netlify/functions/sendEmail", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                to: groomer.email,
+                subject: `Appointment cancelled — ${appt.pets?.name || "a pet"} on ${appt.date}`,
+                template: "groomer_cancellation",
+                data: {
+                  pet_name: appt.pets?.name || "—",
+                  client_name: client?.full_name || "—",
+                  date: appt.date,
+                  time: appt.time || "",
+                  duration_min: appt.duration_min || "",
+                  services: Array.isArray(appt.services)
+                    ? appt.services.join(", ")
+                    : appt.services || "—",
+                  notes: "",
+                },
+              }),
+            }).catch(() => {});
+          }
+        }
 
-    setCancelling(null);
+        setCancelling(null);
+      },
+    });
   };
 
   /* --------------------------------------------
@@ -1230,6 +1256,11 @@ export default function BookPage() {
       )}
 
       </div> {/* end booking section */}
+
+      <ConfirmModal
+        config={confirmConfig}
+        onClose={() => setConfirmConfig(null)}
+      />
     </main>
   );
 }
