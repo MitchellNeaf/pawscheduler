@@ -3233,6 +3233,7 @@ export default function Schedule() {
                                 {/* Client name — tappable, stops propagation */}
                                 <Link
                                   to={`/clients/${appt.pets?.clients?.id}`}
+                                  state={{ from: "schedule" }}
                                   onClick={(e) => e.stopPropagation()}
                                   className="block text-[10px] text-emerald-700 hover:underline truncate leading-tight mt-0.5"
                                 >
@@ -3616,13 +3617,23 @@ export default function Schedule() {
                         />
                       )}
                       <div className="min-w-0">
-                        <div className="font-semibold text-gray-900">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditModal(appt)}
+                          className="font-semibold text-gray-900 hover:text-emerald-700 hover:underline text-left"
+                        >
                           {displayName}{" "}
                           {isMulti && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">Multi</span>}
                           {!isMulti && <span className="text-xs text-gray-500">{size.label}</span>}
-                        </div>
-                        <div className="text-sm text-gray-700">
-                          {appt.pets?.clients?.full_name || "Client"}
+                        </button>
+                        <div className="text-sm">
+                          <Link
+                            to={`/clients/${appt.pets?.clients?.id}`}
+                            state={{ from: "schedule" }}
+                            className="text-emerald-700 hover:underline"
+                          >
+                            {appt.pets?.clients?.full_name || "Client"}
+                          </Link>
                         </div>
 
                         {appt.pets?.tags?.length > 0 && (

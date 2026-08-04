@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useLocation } from "react-router-dom";
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../supabase";
 import Loader from "../components/Loader";
@@ -527,6 +527,8 @@ function ShotModal({
 
 export default function ClientPets() {
   const { clientId } = useParams();
+  const location = useLocation();
+  const cameFromSchedule = location.state?.from === "schedule";
   const [client, setClient] = useState(null);
   const [upcomingAppts, setUpcomingAppts] = useState([]);
   const [pets, setPets] = useState([]);
@@ -942,7 +944,9 @@ export default function ClientPets() {
   return (
     <main>
       <div className="mb-2">
-        <Link to="/clients">&larr; Back to Clients</Link>
+        <Link to={cameFromSchedule ? "/schedule" : "/clients"}>
+          &larr; Back to {cameFromSchedule ? "Schedule" : "Clients"}
+        </Link>
       </div>
 
       <h1 className="mt-2 mb-4">{client.full_name}'s Pets</h1>
