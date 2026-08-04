@@ -80,6 +80,8 @@ exports.handler = async function(event) {
       fileName = "booking_waitlisted.html";
     } else if (template === "booking_request") {
       fileName = "booking_request.html";
+    } else if (template === "report_card") {
+      fileName = "report_card.html";
     } else {
       fileName = "confirmation.html";
     }

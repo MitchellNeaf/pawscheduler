@@ -329,9 +329,9 @@ function PetSelectModal({ open, onClose, slot, date, pets, loading, onPickPet })
 
                       {pet.tags?.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
-                          {pet.tags.map((tag) => (
+                          {pet.tags.map((tag, tagIdx) => (
                             <span
-                              key={tag}
+                              key={`${tag}-${tagIdx}`}
                               className="px-2 py-0.5 text-[10px] rounded bg-gray-100 text-gray-600"
                             >
                               {tag}
@@ -1191,6 +1191,214 @@ function addDays(date, days) {
   return d;
 }
 
+/* ---------------- Report Card Modal ---------------- */
+const MOOD_OPTIONS = [
+  { key: "happy",    emoji: "😁", label: "Happy" },
+  { key: "relaxed",  emoji: "😌", label: "Relaxed" },
+  { key: "cuddly",   emoji: "🥰", label: "Cuddly" },
+  { key: "sleepy",   emoji: "😴", label: "Sleepy" },
+  { key: "spicy",    emoji: "🌶️", label: "Spicy" },
+  { key: "restless", emoji: "🚀", label: "Restless" },
+  { key: "nervous",  emoji: "😬", label: "Nervous" },
+  { key: "brave",    emoji: "🦁", label: "Brave" },
+  { key: "excited",  emoji: "🎉", label: "Excited" },
+  { key: "cozy",     emoji: "🐻", label: "Cozy" },
+];
+
+function ReportCardModal({ open, appt, onClose, user }) {
+  const [beforeFile, setBeforeFile] = useState(null);
+  const [afterFile, setAfterFile] = useState(null);
+  const [beforePreview, setBeforePreview] = useState(null);
+  const [afterPreview, setAfterPreview] = useState(null);
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [notes, setNotes] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState("");
+
+  // Reset the form each time a new appointment is opened
+  useEffect(() => {
+    if (open) {
+      setBeforeFile(null); setAfterFile(null);
+      setBeforePreview(null); setAfterPreview(null);
+      setSelectedTags([]); setNotes("");
+      setSending(false); setSent(false); setSendError("");
+    }
+  }, [open, appt?.id]);
+
+  if (!open || !appt) return null;
+
+  const toggleTag = (key) => {
+    setSelectedTags((prev) => prev.includes(key) ? prev.filter((t) => t !== key) : [...prev, key]);
+  };
+
+  const uploadPhoto = async (file, label) => {
+    const path = `report-cards/${appt.id}/${label}-${Date.now()}.jpg`;
+    const { error: upErr } = await supabase.storage
+      .from("pet-photos")
+      .upload(path, file, { upsert: true, contentType: "image/jpeg" });
+    if (upErr) throw upErr;
+    const { data: pub } = supabase.storage.from("pet-photos").getPublicUrl(path);
+    return pub.publicUrl;
+  };
+
+  const handleSend = async () => {
+    setSending(true);
+    setSendError("");
+    try {
+      const [beforeUrl, afterUrl] = await Promise.all([
+        beforeFile ? uploadPhoto(beforeFile, "before") : Promise.resolve(null),
+        afterFile ? uploadPhoto(afterFile, "after") : Promise.resolve(null),
+      ]);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/.netlify/functions/sendReportCard", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          appointmentId: appt.id,
+          beforePhotoUrl: beforeUrl,
+          afterPhotoUrl: afterUrl,
+          moodTags: selectedTags,
+          notes,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) {
+        setSendError(json.error || "Something went wrong sending the report card.");
+      } else {
+        setSent(true);
+      }
+    } catch (err) {
+      setSendError(err.message || "Something went wrong.");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {sent ? (
+          <div className="text-center py-8">
+            <div className="text-5xl mb-3">🎉</div>
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Report card sent!</h2>
+            <p className="text-sm text-gray-500 mb-5">
+              {appt.pets?.clients?.full_name || "Your client"} will love it.
+            </p>
+            <button onClick={onClose} className="btn-primary w-full">Done</button>
+          </div>
+        ) : (
+          <>
+            <h2 className="text-lg font-bold text-gray-900 mb-1">📋 Report Card — {appt.pets?.name}</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Share how the groom went with {appt.pets?.clients?.full_name || "your client"}.
+            </p>
+
+            {/* Before / After photos */}
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">Before</label>
+                <label className="block aspect-square rounded-xl border-2 border-dashed border-gray-300 overflow-hidden cursor-pointer relative bg-gray-50">
+                  {beforePreview ? (
+                    <img src={beforePreview} alt="Before" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-2xl">📷</div>
+                  )}
+                  <input
+                    type="file" accept="image/*" className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) { setBeforeFile(f); setBeforePreview(URL.createObjectURL(f)); }
+                    }}
+                  />
+                </label>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 mb-1">After</label>
+                <label className="block aspect-square rounded-xl border-2 border-dashed border-gray-300 overflow-hidden cursor-pointer relative bg-gray-50">
+                  {afterPreview ? (
+                    <img src={afterPreview} alt="After" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-2xl">📷</div>
+                  )}
+                  <input
+                    type="file" accept="image/*" className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) { setAfterFile(f); setAfterPreview(URL.createObjectURL(f)); }
+                    }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Mood tags */}
+            <label className="block text-xs font-semibold text-gray-600 mb-2">
+              How was {appt.pets?.name} today?
+            </label>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {MOOD_OPTIONS.map((opt) => (
+                <button
+                  key={opt.key}
+                  type="button"
+                  onClick={() => toggleTag(opt.key)}
+                  className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition
+                    ${selectedTags.includes(opt.key)
+                      ? "bg-emerald-100 border-emerald-300 text-emerald-700"
+                      : "bg-white border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                >
+                  {opt.emoji} {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Notes */}
+            <label className="block text-xs font-semibold text-gray-600 mb-1">Notes (optional)</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder="e.g. Such a good boy today! Loved the blueberry facial..."
+              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-2"
+            />
+
+            {sendError && (
+              <p className="text-sm text-red-600 font-medium bg-red-50 rounded-xl px-3 py-2 mb-3">
+                {sendError}
+              </p>
+            )}
+
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={onClose}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-semibold text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSend}
+                disabled={sending}
+                className="flex-1 btn-primary disabled:opacity-50"
+              >
+                {sending ? "Sending…" : "Send Report Card"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 function RebookWeekModal({ open, appt, onClose, onPickDate }) {
   const [weekStart, setWeekStart] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
@@ -1609,6 +1817,7 @@ export default function Schedule() {
   );
   const [monthOffset, setMonthOffset] = useState(0);
   const [dayActionDate, setDayActionDate] = useState(null);
+  const [reportCardAppt, setReportCardAppt] = useState(null);
 
   const [petModalOpen, setPetModalOpen] = useState(false);
   const [modalSlot, setModalSlot] = useState(null);
@@ -3418,9 +3627,9 @@ export default function Schedule() {
 
                         {appt.pets?.tags?.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-1">
-                            {appt.pets.tags.map((tag) => (
+                            {appt.pets.tags.map((tag, tagIdx) => (
                               <span
-                                key={tag}
+                                key={`${tag}-${tagIdx}`}
                                 className="px-2 py-0.5 text-[11px] rounded bg-gray-100 text-gray-600"
                               >
                                 {tag}
@@ -3718,6 +3927,14 @@ export default function Schedule() {
                         {isMulti && <span className="text-[var(--text-3)] font-normal"> · all pets</span>}
                       </div>
                     )}
+                    {group.every(a => a.checked_out_at) && (planTier === "growth" || planTier === "pro") && (
+                      <button
+                        onClick={() => setReportCardAppt(appt)}
+                        className="mt-2 w-full py-2 rounded-xl text-xs font-semibold border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
+                      >
+                        📋 Report Card
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3828,6 +4045,13 @@ export default function Schedule() {
         pets={pets}
         loading={loadingPets}
         onPickPet={handlePickPet}
+      />
+
+      <ReportCardModal
+        open={!!reportCardAppt}
+        appt={reportCardAppt}
+        onClose={() => setReportCardAppt(null)}
+        user={user}
       />
 
       <MultiPetAppointmentModal

@@ -29,6 +29,7 @@ import Profile from "./pages/Profile";
 import Upgrade from "./pages/Upgrade";
 import Help from "./pages/Help";
 import Waiver from "./pages/Waiver";
+import ReportCard from "./pages/ReportCard";
 import Intake from "./pages/Intake";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancelled from "./pages/PaymentCancelled";
@@ -432,6 +433,7 @@ function AppShell() {
     location.pathname.startsWith("/waiver/") ||
     location.pathname.startsWith("/intake/") ||
     location.pathname.startsWith("/confirm/") ||
+    location.pathname.startsWith("/report/") ||
     location.pathname === "/payment-success" ||
     location.pathname === "/payment-cancelled" ||
     location.pathname === "/auth" ||
@@ -444,6 +446,7 @@ function AppShell() {
     location.pathname.startsWith("/waiver/") ||
     location.pathname.startsWith("/intake/") ||
     location.pathname.startsWith("/confirm/") ||
+    location.pathname.startsWith("/report/") ||
     location.pathname === "/payment-success" ||
     location.pathname === "/payment-cancelled" ||
     location.pathname === "/auth" ||
@@ -590,6 +593,7 @@ function AppShell() {
         <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/book/:slug" element={<Book />} />
         <Route path="/waiver/:slug" element={<Waiver />} />
+        <Route path="/report/:token" element={<ReportCard />} />
         <Route path="/intake/:slug" element={<Intake />} />
         <Route path="/confirm/:token" element={<ConfirmPage />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />

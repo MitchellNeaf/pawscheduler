@@ -723,7 +723,7 @@ export default function ClientPets() {
     if (!user) return;
 
     const finalTags = otherTag
-      ? [...form.tags.filter((t) => t !== "Other"), otherTag]
+      ? [...new Set([...form.tags.filter((t) => t !== "Other"), otherTag])]
       : form.tags;
 
     // Upload primary photo if a new one was selected
@@ -735,7 +735,12 @@ export default function ClientPets() {
         .upload(path, photoFile, { upsert: true, contentType: "image/jpeg" });
       if (uploadErr) {
         console.error("Pet photo upload failed:", uploadErr.message);
-        alert("Photo upload failed: " + uploadErr.message + "\nThe pet will be saved without the photo.");
+        setConfirmConfig({
+          title: "Photo upload failed",
+          message: uploadErr.message + " — the pet will be saved without the photo.",
+          confirmLabel: "OK",
+          onConfirm: () => {},
+        });
       } else {
         const { data: pub } = supabase.storage.from("pet-photos").getPublicUrl(path);
         photoUrl = pub.publicUrl + "?v=" + Date.now();
@@ -1150,7 +1155,12 @@ export default function ClientPets() {
                     setClientPhotoFile(null);
                     setClientPhotoPreview(null);
                   } else {
-                    alert("Client photo upload failed: " + upErr.message);
+                    setConfirmConfig({
+                      title: "Photo upload failed",
+                      message: upErr.message,
+                      confirmLabel: "OK",
+                      onConfirm: () => {},
+                    });
                   }
                 }
 

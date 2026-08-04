@@ -29,6 +29,7 @@ const SECTIONS = [
   { id: "vaccines",      label: "Vaccine Tracking",         icon: "💉" },
   { id: "checkin",       label: "Check In / Check Out",     icon: "🟦" },
   { id: "payment-flow",  label: "Taking Payment",           icon: "💵" },
+  { id: "reportcards",   label: "Report Cards",             icon: "📋", badge: "Growth+" },
   { id: "noshow",        label: "No-Shows & Confirmed",     icon: "📌" },
   { id: "revenue",       label: "Revenue & Unpaid",         icon: "💰" },
   { id: "onboarding",    label: "Onboarding Tour",          icon: "🎓" },
@@ -1056,7 +1057,35 @@ export default function Help() {
             </div>
           </Section>
 
-          {/* ── NO-SHOWS & CONFIRMED ── */}
+          {/* ── REPORT CARDS ── */}
+          <Section id="reportcards" title="📋 Report Cards" subtitle="Send clients a cute before/after photo, mood tags, and a note about how the groom went. Growth and Pro only.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">How to send one</p>
+                <ol className="list-decimal ml-5 space-y-1.5">
+                  <li>Tap <strong>Check Out</strong> on the appointment card</li>
+                  <li>Tap <strong>📋 Report Card</strong> — appears right below the checkout buttons</li>
+                  <li>Upload a before photo and/or an after photo (both optional)</li>
+                  <li>Tap any mood tags that fit — Happy, Relaxed, Cuddly, Sleepy, Spicy, Restless, Nervous, Brave, Excited, Cozy</li>
+                  <li>Add an optional note about how the groom went</li>
+                  <li>Tap <strong>Send Report Card</strong> — the client gets a text and/or email with a link to view it</li>
+                </ol>
+              </div>
+              <Callout type="info" title="One report card per appointment.">
+                Sending again from the same appointment updates the existing report card (new photos, tags, or notes) rather than creating a duplicate — the client's link stays the same.
+              </Callout>
+              <Callout type="warn" title="Multi-pet bookings only get one report card right now.">
+                For a two-dog appointment, the Report Card button currently fills out a card for the first pet in the group only — there's no way yet to send separate cards per pet in the same booking.
+              </Callout>
+              <BulletList items={[
+                { title: "Growth and Pro only", text: "The Report Card button only appears on these two plans. On Free or Basic, it's hidden entirely — and the server rejects the request even if it's somehow triggered another way." },
+                { title: "No login needed for clients", text: "The report card link opens a public page — no account or app download required, same as the waiver and intake form links." },
+                { title: "Requires checkout first", text: "The button only appears once the appointment has been checked out — there's no way to send a report card for an appointment still in progress." },
+              ]} />
+            </div>
+          </Section>
+
+
           <Section id="noshow" title="📌 No-Shows & Confirmed" subtitle="Track appointment status at a glance — one-tap toggles directly on each card.">
             <div className="space-y-4 text-sm text-gray-700">
               <BulletList items={[

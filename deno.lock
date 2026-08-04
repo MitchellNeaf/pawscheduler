@@ -13,6 +13,7 @@
       "dependencies": [
         "npm:@anthropic-ai/sdk@0.78",
         "npm:@headlessui/react@^1.7.15",
+        "npm:@sentry/react@^10.53.1",
         "npm:@supabase/supabase-js@^2.50.3",
         "npm:autoprefixer@^10.4.14",
         "npm:date-fns@^4.1.0",
