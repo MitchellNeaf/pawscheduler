@@ -697,47 +697,6 @@ export default function BookPage() {
   if (!groomerId)
     return <main className="p-4 text-center">Loading booking page…</main>;
 
-  // Booking is disabled — show a friendly closed message
-  if (groomer?.booking_enabled === false) {
-    const theme = groomer?.brand_color || "forest";
-    const grads = {
-      forest:   "linear-gradient(135deg, #059669 0%, #10b981 100%)",
-      ocean:    "linear-gradient(135deg, #0369a1 0%, #0ea5e9 100%)",
-      lavender: "linear-gradient(135deg, #6d28d9 0%, #a78bfa 100%)",
-      rose:     "linear-gradient(135deg, #be185d 0%, #f472b6 100%)",
-      sunrise:  "linear-gradient(135deg, #ea580c 0%, #fbbf24 100%)",
-      slate:    "linear-gradient(135deg, #1e293b 0%, #475569 100%)",
-      blush:    "linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)",
-      mint:     "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)",
-    };
-    return (
-      <main className="min-h-screen" style={{ background: grads[theme] || grads.forest }}>
-        <div className="flex flex-col items-center justify-center min-h-screen p-6">
-          <div className="bg-white rounded-3xl shadow-xl p-8 max-w-sm w-full text-center space-y-4">
-            {groomer?.logo_url && (
-              <img src={groomer.logo_url} alt={groomer.full_name}
-                className="w-16 h-16 rounded-full object-cover mx-auto ring-2 ring-gray-100" />
-            )}
-            <div className="text-5xl">🐾</div>
-            <h1 className="text-xl font-bold text-gray-900">{groomer?.full_name}</h1>
-            <p className="text-gray-600 text-sm">
-              We're not accepting new bookings online at the moment.
-            </p>
-            <p className="text-gray-400 text-xs">
-              Please contact us directly to schedule your appointment.
-            </p>
-            {groomer?.business_phone && (
-              <a href={`tel:${groomer.business_phone}`}
-                className="inline-block mt-2 px-5 py-2.5 rounded-xl bg-gray-900 text-white font-semibold text-sm hover:bg-gray-700 transition">
-                📞 Call Us
-              </a>
-            )}
-          </div>
-        </div>
-      </main>
-    );
-  }
-
   const isFullVacation =
     vacationBlocks.some((v) => v.type === "full") && form.date;
 
@@ -930,13 +889,20 @@ export default function BookPage() {
             </div>
           )}
 
-          <button
-            onClick={() => { setSubmitted(null); setView("book"); }}
-            style={{ padding: "14px 16px", borderRadius: 12, border: "2px solid #10b981",
-              background: "#10b981", color: "white", fontWeight: 700,
-              fontSize: "1rem", cursor: "pointer", textAlign: "left" }}>
-            📅 Book an Appointment
-          </button>
+          {groomer?.booking_enabled === false ? (
+            <div style={{ padding: "14px 16px", borderRadius: 12, border: "2px solid #e5e7eb",
+              background: "#f9fafb", color: "#6b7280", fontSize: "0.88rem", lineHeight: 1.5 }}>
+              📅 Online booking is currently unavailable — please contact {groomer?.full_name || "us"} directly to book a new appointment. You can still view or cancel your upcoming appointments below.
+            </div>
+          ) : (
+            <button
+              onClick={() => { setSubmitted(null); setView("book"); }}
+              style={{ padding: "14px 16px", borderRadius: 12, border: "2px solid #10b981",
+                background: "#10b981", color: "white", fontWeight: 700,
+                fontSize: "1rem", cursor: "pointer", textAlign: "left" }}>
+              📅 Book an Appointment
+            </button>
+          )}
 
           <button
             onClick={() => setView("cancel")}
@@ -956,7 +922,7 @@ export default function BookPage() {
       )}
 
       {/* ── BOOK VIEW ── */}
-      {view === "book" && client && (
+      {view === "book" && client && groomer?.booking_enabled !== false && (
         <div>
           <button onClick={() => setView("home")}
             style={{ marginBottom: 16, fontSize: "0.82rem", color: "#10b981",
