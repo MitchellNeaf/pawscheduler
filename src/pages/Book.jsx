@@ -836,13 +836,13 @@ export default function BookPage() {
             <input
               name="name" placeholder="First name"
               value={clientForm.name} onChange={handleChange}
-              style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "0.9rem" }}
+              style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "1rem" }}
               required
             />
             <input
               name="last4" placeholder="Last 4 digits of phone"
               value={clientForm.last4} onChange={handleChange}
-              style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "0.9rem" }}
+              style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "1rem" }}
               maxLength={4} inputMode="numeric" required
             />
             {error && <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{error}</p>}
@@ -1047,6 +1047,25 @@ export default function BookPage() {
             <div>
               <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#374151",
                 display: "block", marginBottom: 4 }}>Date</label>
+              <style>{`
+                .react-datepicker__portal {
+                  background-color: rgba(0, 0, 0, 0.5);
+                }
+                .react-datepicker__portal .react-datepicker {
+                  font-size: 1.1rem;
+                  transform: scale(1);
+                }
+                .react-datepicker__portal .react-datepicker__day,
+                .react-datepicker__portal .react-datepicker__day-name {
+                  width: 2.4rem;
+                  line-height: 2.4rem;
+                  margin: 0.2rem;
+                }
+                .react-datepicker__portal .react-datepicker__current-month,
+                .react-datepicker__portal .react-datepicker-time__header {
+                  font-size: 1.15rem;
+                }
+              `}</style>
               <DatePicker
                 selected={form.date ? parseDBDate(form.date) : null}
                 onChange={(d) => {
@@ -1057,6 +1076,8 @@ export default function BookPage() {
                 dateFormat="MMM d, yyyy"
                 className="border rounded px-2 py-1 w-full"
                 placeholderText="Pick a date"
+                withPortal
+                portalId="datepicker-portal"
                 filterDate={(d) => {
                   if (!workingWeekdays.length) return true;
                   const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
