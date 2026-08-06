@@ -1778,7 +1778,7 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
                   return (
                     <div key={a.id} className={`text-[9px] font-medium rounded px-1 py-0.5 mb-0.5 truncate leading-tight
                       ${a.no_show ? "bg-gray-100 text-gray-500" : a.confirmed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-                      {fmt12Hour(a.time)} {clientFirst ? `${clientFirst} · ` : ""}{a.pets?.name || "—"}
+                      {clientFirst || a.pets?.name || "—"}
                     </div>
                   );
                 })}
