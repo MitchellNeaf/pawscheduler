@@ -1674,6 +1674,7 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
   const [monthAppts, setMonthAppts] = useState([]);
   const [loadingMonth, setLoadingMonth] = useState(false);
   const [vacationDays, setVacationDays] = useState([]);
+  const [chipMode, setChipMode] = useState("name"); // "name" | "time" — which shows on day chips
 
   const base = parseYMD(selectedDate);
   const displayMonth = new Date(base.getFullYear(), base.getMonth() + monthOffset, 1);
@@ -1735,6 +1736,25 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
           aria-label="Next month">›</button>
       </div>
 
+      <div className="flex items-center justify-center gap-1 px-1">
+        <div className="inline-flex rounded-full border border-[var(--border-med)] p-0.5 bg-[var(--surface)]">
+          <button
+            onClick={() => setChipMode("name")}
+            className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-colors
+              ${chipMode === "name" ? "bg-emerald-500 text-white" : "text-[var(--text-2)]"}`}
+          >
+            👤 Name
+          </button>
+          <button
+            onClick={() => setChipMode("time")}
+            className={`px-3 py-1 rounded-full text-[11px] font-semibold transition-colors
+              ${chipMode === "time" ? "bg-emerald-500 text-white" : "text-[var(--text-2)]"}`}
+          >
+            🕐 Time
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-7 text-center">
         {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d) => (
           <div key={d} className="text-[10px] font-bold text-[var(--text-3)] uppercase tracking-wide py-1">{d}</div>
@@ -1778,7 +1798,7 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
                   return (
                     <div key={a.id} className={`text-[9px] font-medium rounded px-1 py-0.5 mb-0.5 truncate leading-tight
                       ${a.no_show ? "bg-gray-100 text-gray-500" : a.confirmed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-                      {clientFirst || a.pets?.name || "—"}
+                      {chipMode === "name" ? (clientFirst || a.pets?.name || "—") : fmt12Hour(a.time)}
                     </div>
                   );
                 })}
