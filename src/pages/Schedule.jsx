@@ -1773,12 +1773,15 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
                     🚫 Blocked
                   </div>
                 )}
-                {dayAppts.slice(0, MAX_VISIBLE).map((a) => (
-                  <div key={a.id} className={`text-[9px] font-medium rounded px-1 py-0.5 mb-0.5 truncate leading-tight
-                    ${a.no_show ? "bg-gray-100 text-gray-500" : a.confirmed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
-                    {fmt12Hour(a.time)} {a.pets?.name || "—"}
-                  </div>
-                ))}
+                {dayAppts.slice(0, MAX_VISIBLE).map((a) => {
+                  const clientFirst = a.pets?.clients?.full_name?.split(" ")[0];
+                  return (
+                    <div key={a.id} className={`text-[9px] font-medium rounded px-1 py-0.5 mb-0.5 truncate leading-tight
+                      ${a.no_show ? "bg-gray-100 text-gray-500" : a.confirmed ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>
+                      {fmt12Hour(a.time)} {clientFirst ? `${clientFirst} · ` : ""}{a.pets?.name || "—"}
+                    </div>
+                  );
+                })}
                 {dayAppts.length > MAX_VISIBLE && (
                   <div className="text-[9px] text-[var(--text-3)] font-semibold px-1">+{dayAppts.length - MAX_VISIBLE} more</div>
                 )}
