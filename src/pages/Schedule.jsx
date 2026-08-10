@@ -1,8 +1,9 @@
 // src/pages/Schedule.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../supabase";
 import { Link } from "react-router-dom";
 import Loader from "../components/Loader";
+import OnboardingTour from "../components/OnboardingTour";
 import ConfirmModal from "../components/ConfirmModal";
 import DarkModeToggle from "../components/DarkModeToggle";
 import DatePicker from "react-datepicker";
@@ -463,7 +464,11 @@ function MultiPetAppointmentModal({
             </label>
             <label className="flex flex-col gap-1">
               <span className="font-medium text-gray-700">Time</span>
-              {workingRange?.length > 0 ? (
+              {form.isFlexible ? (
+                <div className="border rounded px-2 py-1 text-gray-400 bg-gray-50 text-xs flex items-center">
+                  No set time
+                </div>
+              ) : workingRange?.length > 0 ? (
                 <select value={form.time}
                   onChange={(e) => setForm((p) => ({ ...p, time: e.target.value }))}
                   className="border rounded px-2 py-1">
@@ -481,6 +486,21 @@ function MultiPetAppointmentModal({
               )}
             </label>
           </div>
+
+          {/* Flexible timing toggle — no committed time, shown as a badge on Schedule instead */}
+          <label className="flex items-center gap-2 text-xs text-gray-600 -mt-1">
+            <input
+              type="checkbox"
+              checked={!!form.isFlexible}
+              onChange={(e) => setForm((p) => ({
+                ...p,
+                isFlexible: e.target.checked,
+                time: e.target.checked ? "" : p.time,
+                recurring: e.target.checked ? false : p.recurring,
+              }))}
+            />
+            🔄 Flexible timing — no exact time, I'll fit it in during the day
+          </label>
 
           {/* Per-pet sections */}
           {newPets.map(({ pet, form: petForm }, idx) => {
@@ -878,7 +898,11 @@ function AppointmentModal({
             </label>
             <label className="flex flex-col gap-1">
               <span className="font-medium text-gray-700">Time</span>
-              {workingRange && workingRange.length > 0 ? (
+              {form.isFlexible ? (
+                <div className="border rounded px-2 py-1 text-gray-400 bg-gray-50 text-xs flex items-center">
+                  No set time
+                </div>
+              ) : workingRange && workingRange.length > 0 ? (
                 <select
                   value={form.time}
                   onChange={handleChange("time")}
@@ -910,6 +934,19 @@ function AppointmentModal({
               )}
             </label>
           </div>
+
+          <label className="flex items-center gap-2 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={!!form.isFlexible}
+              onChange={(e) => setForm((p) => ({
+                ...p,
+                isFlexible: e.target.checked,
+                time: e.target.checked ? "" : p.time,
+              }))}
+            />
+            🔄 Flexible timing — no exact time, I'll fit it in during the day
+          </label>
 
           {/* Duration */}
           <label className="flex flex-col gap-1 text-sm">
@@ -1821,7 +1858,564 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
   );
 }
 
-/* ---------------- Main Schedule Component ---------------- */
+/* ---------------- Map View ---------------- */
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+// Must match GROWTH_MONTHLY_LIMIT in netlify/functions/optimizeRoute.js —
+// used here only to display the count before the button's ever pressed;
+// the real enforcement always happens server-side.
+const ROUTE_GROWTH_MONTHLY_LIMIT = 5;
+
+/* ─── Map view tour — first time someone opens Map ──────────────────────── */
+const MAP_TOUR_STEPS = [
+  {
+    id: "map-welcome",
+    emoji: "🗺",
+    title: "Your Client Map",
+    body: "See where your clients are, plan efficient days, and get a smart route order — all built for mobile groomers. Quick tour of what's here.",
+    target: null,
+    placement: "center",
+    cta: "Show me →",
+  },
+  {
+    id: "tour-map-day-filter",
+    emoji: "📅",
+    title: "Day Filter",
+    body: "Tap a day to see which clients are in that day's service area — clients scheduled elsewhere dim out so you can focus on today's zone.",
+    target: "tour-map-day-filter",
+    placement: "bottom",
+    cta: "Got it →",
+  },
+  {
+    id: "tour-map-legend",
+    emoji: "🎨",
+    title: "Color-Coded Zones",
+    body: "Each color is one of your Service Areas (set up in Profile → Areas). Client pins on the map match these colors.",
+    target: "tour-map-legend",
+    placement: "bottom",
+    cta: "Makes sense →",
+  },
+  {
+    id: "tour-map-route-toggle",
+    emoji: "🧭",
+    title: "Optimize My Route",
+    body: "Tap here to open route planning for the day you're viewing. It figures out a smart order to visit your stops based on real drive times.",
+    target: "tour-map-route-toggle",
+    placement: "top",
+    cta: "Next →",
+  },
+  {
+    id: "tour-map-start-point",
+    emoji: "📍",
+    title: "Pick a Starting Point",
+    body: "Start from your saved Home Base (set one in Profile), your current location, or type a one-off address for the day.",
+    target: "tour-map-start-point",
+    placement: "top",
+    cta: "Next →",
+  },
+  {
+    id: "map-done",
+    emoji: "🎉",
+    title: "That's the Map!",
+    body: "Once you optimize a route, each stop gets a free \"Directions\" button that opens real turn-by-turn in Google Maps, and your progress saves automatically — leave and come back anytime.",
+    target: null,
+    placement: "center",
+    cta: "Got it",
+    isFinal: true,
+  },
+];
+
+
+function MapView({ userId, setViewMode, selectedDate }) {
+  const [loading, setLoading] = useState(true);
+  const [scriptLoaded, setScriptLoaded] = useState(!!window.google?.maps);
+  const [clients, setClients] = useState([]);
+  const [serviceAreas, setServiceAreas] = useState([]);
+  const [selectedDay, setSelectedDay] = useState(new Date().getDay());
+  const mapRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const markersRef = useRef([]);
+
+  // Route optimization state
+  const [businessLocation, setBusinessLocation] = useState(null); // { lat, lng }
+  const [routeUsage, setRouteUsage] = useState(null); // { used, limit } — limit null means unlimited (Pro)
+  const [showMapTour, setShowMapTour] = useState(false);
+  const [routePanelOpen, setRoutePanelOpen] = useState(false);
+  const [startMode, setStartMode] = useState("home"); // "home" | "gps" | "custom"
+  const [customAddress, setCustomAddress] = useState("");
+  const [resolvingAddress, setResolvingAddress] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+  const [routeResult, setRouteResult] = useState(null);
+  const [currentStopIndex, setCurrentStopIndex] = useState(0);
+  const [advancingStop, setAdvancingStop] = useState(false);
+  const [routeError, setRouteError] = useState("");
+
+  // Load Google Maps JS API once
+  useEffect(() => {
+    if (window.google?.maps) { setScriptLoaded(true); return; }
+    const existing = document.getElementById("gmaps-script");
+    if (existing) {
+      existing.addEventListener("load", () => setScriptLoaded(true));
+      return;
+    }
+    const key = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+    if (!key) { setScriptLoaded(false); return; }
+    const script = document.createElement("script");
+    script.id = "gmaps-script";
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}`;
+    script.async = true;
+    script.onload = () => setScriptLoaded(true);
+    document.head.appendChild(script);
+  }, []);
+
+  // Load clients + service areas + business location + route usage
+  useEffect(() => {
+    if (!userId) return;
+    setLoading(true);
+    Promise.all([
+      supabase.from("clients")
+        .select("id, full_name, lat, lng, service_area_id")
+        .eq("groomer_id", userId)
+        .not("lat", "is", null),
+      supabase.from("service_areas")
+        .select("id, name, color, days_of_week")
+        .eq("groomer_id", userId),
+      supabase.from("groomers")
+        .select("business_lat, business_lng, plan_tier, route_optimizations_this_month, route_optimizations_reset_at, has_seen_map_tour")
+        .eq("id", userId)
+        .single(),
+    ]).then(([{ data: c }, { data: a }, { data: g }]) => {
+      setClients(c || []);
+      setServiceAreas(a || []);
+      if (g?.business_lat && g?.business_lng) {
+        setBusinessLocation({ lat: g.business_lat, lng: g.business_lng });
+      }
+      if (g?.plan_tier === "pro") {
+        setRouteUsage({ used: g.route_optimizations_this_month || 0, limit: null });
+      } else if (g?.plan_tier === "growth") {
+        // If we've rolled into a new month since the last reset, show 0 used —
+        // the actual DB reset only happens on the next real optimize call, but
+        // the displayed count should still reflect the new month has started.
+        const resetAt = g.route_optimizations_reset_at ? new Date(g.route_optimizations_reset_at) : null;
+        const now = new Date();
+        const monthRolled = !resetAt || now.getFullYear() !== resetAt.getFullYear() || now.getMonth() !== resetAt.getMonth();
+        setRouteUsage({ used: monthRolled ? 0 : (g.route_optimizations_this_month || 0), limit: ROUTE_GROWTH_MONTHLY_LIMIT });
+      }
+      if (g && !g.has_seen_map_tour) {
+        // Pre-open the route panel so the "starting point" tour step has a
+        // real target to spotlight, rather than trying to time it later.
+        setRoutePanelOpen(true);
+        setTimeout(() => setShowMapTour(true), 500);
+      }
+      setLoading(false);
+    });
+  }, [userId]);
+
+  // Load a previously-saved route plan for this date, if one exists —
+  // this is what makes progress persist across visits instead of
+  // requiring a fresh (and costly) re-optimize every time.
+  useEffect(() => {
+    if (!userId || !selectedDate) return;
+    supabase
+      .from("route_plans")
+      .select("stops, current_stop_index, total_distance_miles, total_duration_minutes")
+      .eq("groomer_id", userId)
+      .eq("date", selectedDate)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setRouteResult({
+            stops: data.stops || [],
+            totalDistanceMiles: data.total_distance_miles,
+            totalDurationMinutes: data.total_duration_minutes,
+          });
+          setCurrentStopIndex(data.current_stop_index || 0);
+          setRoutePanelOpen(true);
+        } else {
+          setRouteResult(null);
+          setCurrentStopIndex(0);
+        }
+      });
+  }, [userId, selectedDate]);
+
+  const todaysAreaIds = serviceAreas
+    .filter((a) => (a.days_of_week || []).includes(selectedDay))
+    .map((a) => a.id);
+
+  // Render/update the map once script + data are ready
+  useEffect(() => {
+    if (!scriptLoaded || loading || !mapRef.current || !window.google?.maps) return;
+
+    const withCoords = clients.filter((c) => c.lat && c.lng);
+
+    if (!mapInstanceRef.current) {
+      mapInstanceRef.current = new window.google.maps.Map(mapRef.current, {
+        zoom: 11,
+        center: withCoords.length
+          ? { lat: withCoords[0].lat, lng: withCoords[0].lng }
+          : { lat: 39.8283, lng: -98.5795 }, // center of US fallback
+      });
+    }
+
+    // Clear old markers
+    markersRef.current.forEach((m) => m.setMap(null));
+    markersRef.current = [];
+
+    if (withCoords.length === 0) return;
+
+    const bounds = new window.google.maps.LatLngBounds();
+    withCoords.forEach((c) => {
+      const area = serviceAreas.find((a) => a.id === c.service_area_id);
+      const isToday = c.service_area_id && todaysAreaIds.includes(c.service_area_id);
+      const marker = new window.google.maps.Marker({
+        position: { lat: c.lat, lng: c.lng },
+        map: mapInstanceRef.current,
+        title: c.full_name,
+        opacity: c.service_area_id && !isToday ? 0.35 : 1,
+        icon: {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: area?.color || "#6b7280",
+          fillOpacity: 1,
+          strokeColor: "#ffffff",
+          strokeWeight: 2,
+        },
+      });
+
+      const info = new window.google.maps.InfoWindow({
+        content: `<div style="font-size:13px;font-weight:600;">${c.full_name}</div><div style="font-size:11px;color:#6b7280;">${area?.name || "No area assigned"}</div>`,
+      });
+      marker.addListener("click", () => info.open(mapInstanceRef.current, marker));
+
+      markersRef.current.push(marker);
+      bounds.extend({ lat: c.lat, lng: c.lng });
+    });
+
+    mapInstanceRef.current.fitBounds(bounds);
+  }, [scriptLoaded, loading, clients, serviceAreas, todaysAreaIds]);
+
+  const key = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+
+  const BackButton = () => (
+    <button
+      onClick={() => setViewMode("list")}
+      className="flex items-center gap-1.5 text-sm font-semibold text-emerald-700 hover:underline"
+    >
+      ← Back to Schedule
+    </button>
+  );
+
+  if (!key) {
+    return (
+      <div className="space-y-3">
+        <BackButton />
+        <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-6 text-center space-y-2">
+          <div className="text-3xl">🗺</div>
+          <h3 className="font-bold text-[var(--text-1)]">Map isn't set up yet</h3>
+          <p className="text-sm text-[var(--text-2)]">
+            Add REACT_APP_GOOGLE_MAPS_API_KEY to your environment variables to enable the map view.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const withCoordsCount = clients.filter((c) => c.lat && c.lng).length;
+
+  return (
+    <div className="space-y-3">
+      <BackButton />
+
+      {/* Day filter */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1" data-tour="tour-map-day-filter">
+        {WEEKDAY_LABELS.map((label, idx) => (
+          <button
+            key={idx}
+            onClick={() => setSelectedDay(idx)}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex-shrink-0 transition
+              ${selectedDay === idx
+                ? "bg-emerald-500 border-emerald-500 text-white"
+                : "bg-white border-gray-200 text-gray-600"
+              }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Legend */}
+      {serviceAreas.length > 0 && (
+        <div className="flex flex-wrap gap-2" data-tour="tour-map-legend">
+          {serviceAreas.map((a) => (
+            <span
+              key={a.id}
+              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-[11px] font-semibold border
+                ${todaysAreaIds.includes(a.id) ? "border-gray-300" : "border-gray-100 opacity-40"}`}
+            >
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: a.color }} />
+              {a.name}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {withCoordsCount === 0 && !loading && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+          No clients have a location set yet — open a client's page and tap "📍 Set Location" to add them to the map.
+        </div>
+      )}
+
+      {/* ── Route optimization ── */}
+      <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-3">
+        <button
+          onClick={() => { setRoutePanelOpen((o) => !o); setRouteResult(null); setRouteError(""); }}
+          className="w-full flex items-center justify-between text-sm font-bold text-[var(--text-1)]"
+          data-tour="tour-map-route-toggle"
+        >
+          <span>🧭 Optimize My Route — {selectedDate}</span>
+          <span className="text-[var(--text-3)]">{routePanelOpen ? "▲" : "▼"}</span>
+        </button>
+
+        {/* Usage banner — always visible, not tucked into the header, so it's
+            impossible to miss how many optimizations are left this month. */}
+        {routeUsage?.limit != null && (() => {
+          const remaining = routeUsage.limit - routeUsage.used;
+          const atLimit = remaining <= 0;
+          return (
+            <div
+              className={`mt-2 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold
+                ${atLimit ? "bg-red-100 text-red-700" : remaining <= 1 ? "bg-amber-100 text-amber-700" : "bg-blue-50 text-blue-700"}`}
+            >
+              <span>{atLimit ? "🚫" : "🎟️"}</span>
+              <span>
+                {atLimit
+                  ? `0 route optimizations left this month`
+                  : `${remaining} route optimization${remaining === 1 ? "" : "s"} left this month`}
+              </span>
+            </div>
+          );
+        })()}
+
+        {routePanelOpen && (
+          <div className="mt-3 space-y-3">
+            {routeUsage?.limit != null && routeUsage.used >= routeUsage.limit && (
+              <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                You've used all {routeUsage.limit} free route optimizations this month. Resets next month, or <a href="/upgrade" className="font-bold underline">upgrade to Pro</a> for unlimited.
+              </p>
+            )}
+            {/* Starting point picker */}
+            <div data-tour="tour-map-start-point">
+              <label className="block text-xs font-semibold text-[var(--text-2)] mb-1.5">Starting from</label>
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {businessLocation && (
+                  <button
+                    onClick={() => setStartMode("home")}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition
+                      ${startMode === "home" ? "bg-emerald-500 border-emerald-500 text-white" : "bg-white border-gray-200 text-gray-600"}`}
+                  >
+                    🏠 Home Base
+                  </button>
+                )}
+                <button
+                  onClick={() => setStartMode("gps")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition
+                    ${startMode === "gps" ? "bg-emerald-500 border-emerald-500 text-white" : "bg-white border-gray-200 text-gray-600"}`}
+                >
+                  📍 My Current Location
+                </button>
+                <button
+                  onClick={() => setStartMode("custom")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition
+                    ${startMode === "custom" ? "bg-emerald-500 border-emerald-500 text-white" : "bg-white border-gray-200 text-gray-600"}`}
+                >
+                  ✍️ Type an Address
+                </button>
+              </div>
+
+              {!businessLocation && startMode === "home" && (
+                <p className="text-xs text-amber-700 mb-2">
+                  No Home Base set yet — add one in Profile → Profile tab, or pick another option below.
+                </p>
+              )}
+
+              {startMode === "custom" && (
+                <input
+                  type="text"
+                  value={customAddress}
+                  onChange={(e) => setCustomAddress(e.target.value)}
+                  placeholder="Enter a starting address"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm"
+                />
+              )}
+            </div>
+
+            {routeError && (
+              <p className="text-sm text-red-600 font-medium bg-red-50 rounded-lg px-3 py-2">{routeError}</p>
+            )}
+
+            <button
+              onClick={async () => {
+                setOptimizing(true);
+                setRouteError("");
+                setRouteResult(null);
+                try {
+                  const { data: { session } } = await supabase.auth.getSession();
+                  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` };
+
+                  let origin = null;
+
+                  if (startMode === "home") {
+                    if (!businessLocation) { setRouteError("No Home Base set yet."); setOptimizing(false); return; }
+                    origin = businessLocation;
+                  } else if (startMode === "gps") {
+                    origin = await new Promise((resolve, reject) => {
+                      if (!navigator.geolocation) { reject(new Error("Location isn't available on this device.")); return; }
+                      navigator.geolocation.getCurrentPosition(
+                        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                        () => reject(new Error("Couldn't get your location — check location permissions.")),
+                        { enableHighAccuracy: true, timeout: 10000 }
+                      );
+                    });
+                  } else if (startMode === "custom") {
+                    if (!customAddress.trim()) { setRouteError("Enter a starting address first."); setOptimizing(false); return; }
+                    setResolvingAddress(true);
+                    const geoRes = await fetch("/.netlify/functions/geocodeAddress", {
+                      method: "POST", headers, body: JSON.stringify({ address: customAddress.trim() }),
+                    });
+                    const geoJson = await geoRes.json();
+                    setResolvingAddress(false);
+                    if (!geoRes.ok || geoJson.error) throw new Error(geoJson.error || "Could not find that address.");
+                    origin = { lat: geoJson.lat, lng: geoJson.lng };
+                  }
+
+                  const res = await fetch("/.netlify/functions/optimizeRoute", {
+                    method: "POST", headers, body: JSON.stringify({ date: selectedDate, origin }),
+                  });
+                  const json = await res.json();
+                  if (json.usage) setRouteUsage(json.usage);
+                  if (!res.ok || json.error) {
+                    const err = new Error(json.error || "Something went wrong.");
+                    err.usage = json.usage;
+                    throw err;
+                  }
+                  setRouteResult(json);
+                  setCurrentStopIndex(0);
+                } catch (err) {
+                  setRouteError(err.message || "Something went wrong.");
+                } finally {
+                  setOptimizing(false);
+                }
+              }}
+              disabled={optimizing || resolvingAddress || (routeUsage?.limit != null && routeUsage.used >= routeUsage.limit)}
+              className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50"
+            >
+              {resolvingAddress ? "Finding address…" : optimizing ? "Optimizing…" : "Optimize Route"}
+            </button>
+
+            {/* Results */}
+            {routeResult && (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-[var(--text-2)] px-1">
+                  {routeResult.totalDistanceMiles} mi total · ~{routeResult.totalDurationMinutes} min driving
+                </div>
+
+                {routeResult.stops.map((stop, idx) => {
+                  const isDone = idx < currentStopIndex;
+                  const isCurrent = idx === currentStopIndex;
+                  const mapsUrl = stop.lat && stop.lng
+                    ? `https://www.google.com/maps/dir/?api=1&destination=${stop.lat},${stop.lng}&travelmode=driving`
+                    : null;
+
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex items-center gap-3 rounded-xl px-3 py-2 transition
+                        ${isCurrent ? "bg-emerald-50 border-2 border-emerald-400" : isDone ? "bg-gray-50 opacity-50" : "bg-gray-50"}`}
+                    >
+                      <div className={`w-6 h-6 rounded-full text-white text-xs font-bold flex items-center justify-center flex-shrink-0
+                        ${isDone ? "bg-gray-400" : "bg-emerald-500"}`}>
+                        {isDone ? "✓" : idx + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className={`text-sm font-semibold text-[var(--text-1)] truncate ${isDone ? "line-through" : ""}`}>
+                          {stop.clientName}
+                          {stop.petNames?.length > 0 && <span className="text-[var(--text-3)] font-normal"> · {stop.petNames.join(", ")}</span>}
+                        </div>
+                        {stop.legDurationMinutes != null && (
+                          <div className="text-xs text-[var(--text-3)]">
+                            {stop.legDistanceMiles} mi · {stop.legDurationMinutes} min from previous stop
+                          </div>
+                        )}
+                      </div>
+                      {mapsUrl && (
+                        <a
+                          href={mapsUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex-shrink-0 text-xs font-bold text-emerald-700 bg-white border border-emerald-200 rounded-lg px-2.5 py-1.5 hover:bg-emerald-50"
+                        >
+                          🧭 Directions
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {currentStopIndex < routeResult.stops.length && (
+                  <button
+                    disabled={advancingStop}
+                    onClick={async () => {
+                      setAdvancingStop(true);
+                      const newIndex = currentStopIndex + 1;
+                      setCurrentStopIndex(newIndex);
+                      await supabase
+                        .from("route_plans")
+                        .update({ current_stop_index: newIndex, updated_at: new Date().toISOString() })
+                        .eq("groomer_id", userId)
+                        .eq("date", selectedDate);
+                      setAdvancingStop(false);
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50"
+                  >
+                    {advancingStop ? "Saving…" : `✅ Arrived — Next Stop`}
+                  </button>
+                )}
+
+                {currentStopIndex >= routeResult.stops.length && (
+                  <p className="text-center text-sm font-semibold text-emerald-700 py-2">
+                    🎉 All stops complete for today!
+                  </p>
+                )}
+
+                {routeResult.skipped?.length > 0 && (
+                  <p className="text-xs text-amber-700 px-1">
+                    Skipped (no location set): {routeResult.skipped.map((s) => s.name).join(", ")}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div
+        ref={mapRef}
+        className="w-full rounded-2xl border border-[var(--border-med)] overflow-hidden"
+        style={{ height: "60vh", minHeight: 360 }}
+      />
+
+      {showMapTour && (
+        <OnboardingTour
+          userId={userId}
+          steps={MAP_TOUR_STEPS}
+          completionField="has_seen_map_tour"
+          onComplete={() => setShowMapTour(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+
 export default function Schedule() {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1947,7 +2541,7 @@ export default function Schedule() {
         .from("appointments")
         .select(`
           id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
-          services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id,
+          services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id, is_flexible,
           checked_in_at, checked_out_at, payment_method,
           pets (
             id, name, tags, client_id, photo_url, size_category,
@@ -2005,7 +2599,7 @@ export default function Schedule() {
           .from("appointments")
           .select(`
             id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
-            services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id,
+            services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id, is_flexible,
             checked_in_at, checked_out_at, payment_method,
             pets (
               id, name, tags, notes, client_id, photo_url, size_category,
@@ -2349,10 +2943,10 @@ export default function Schedule() {
   /* Save new appointment(s) — supports multiple pets with shared group_id */
   const handleSaveNew = async () => {
     if (!user || !newPets.length) return;
-    if (!newForm.date || !newForm.time) {
+    if (!newForm.date || (!newForm.time && !newForm.isFlexible)) {
       setConfirmConfig({
         title: "Missing info",
-        message: "Date and time are required before saving.",
+        message: "Date is required, and either a time or Flexible timing must be set.",
         confirmLabel: "OK",
         onConfirm: () => {},
       });
@@ -2416,7 +3010,8 @@ export default function Schedule() {
       groomer_id:           user.id,
       pet_id:               pet.id,
       date:                 newForm.date,
-      time:                 newForm.time,
+      time:                 newForm.isFlexible ? null : newForm.time,
+      is_flexible:          !!newForm.isFlexible,
       duration_min:         form.duration_min || 30,
       services:             form.services,
       notes:                newForm.notes,
@@ -2434,7 +3029,7 @@ export default function Schedule() {
       .select(`
         id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled,
-        appointment_group_id,
+        appointment_group_id, is_flexible,
         pets (
           id, name, tags, client_id, photo_url, size_category,
           clients ( id, full_name, phone, email )
@@ -2461,9 +3056,12 @@ export default function Schedule() {
     const withShots = await attachShotRecords(savedAppts || []);
 
     setAppointments((prev) =>
-      [...prev, ...withShots].sort((a, b) =>
-        (a.time || "").localeCompare(b.time || "")
-      )
+      [...prev, ...withShots].sort((a, b) => {
+        if (!a.time && !b.time) return 0;
+        if (!a.time) return 1;  // nulls last
+        if (!b.time) return -1;
+        return a.time.localeCompare(b.time);
+      })
     );
 
     setSavingNew(false);
@@ -2497,7 +3095,8 @@ export default function Schedule() {
 
     setEditForm({
       date: appt.date,
-      time: (appt.time || "00:00").slice(0, 5),
+      time: (appt.time || "").slice(0, 5),
+      isFlexible: !!appt.is_flexible,
       duration_min: appt.duration_min || 30,
       services: servicesArray,
       notes: appt.notes || "",
@@ -2514,10 +3113,10 @@ export default function Schedule() {
   /* Save Edit */
   const handleSaveEdit = async () => {
     if (!user || !editAppt) return;
-    if (!editForm.date || !editForm.time) {
+    if (!editForm.date || (!editForm.time && !editForm.isFlexible)) {
       setConfirmConfig({
         title: "Missing info",
-        message: "Date and time are required before saving.",
+        message: "Date is required, and either a time or Flexible timing must be set.",
         confirmLabel: "OK",
         onConfirm: () => {},
       });
@@ -2530,7 +3129,8 @@ export default function Schedule() {
       .from("appointments")
       .update({
         date: editForm.date,
-        time: editForm.time,
+        time: editForm.isFlexible ? null : editForm.time,
+        is_flexible: !!editForm.isFlexible,
         duration_min: editForm.duration_min || 30,
         services: editForm.services,
         notes: editForm.notes,
@@ -2548,7 +3148,7 @@ export default function Schedule() {
       .select(`
         id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled, appointment_group_id,
-        payment_method, checked_in_at, checked_out_at, source,
+        payment_method, checked_in_at, checked_out_at, source, is_flexible,
         pets ( id, name, tags, client_id, photo_url, size_category, clients ( id, full_name, phone, email ) )
       `)
       .single();
@@ -3029,12 +3629,25 @@ export default function Schedule() {
               onClick={() => { setViewMode("month"); setMonthOffset(0); }}
               style={{
                 padding: "6px 14px", fontSize: 13, fontWeight: 700,
-                borderRadius: "0 999px 999px 0", border: "1px solid", borderLeft: "none",
+                borderRadius: (planTier === "growth" || planTier === "pro") ? "0" : "0 999px 999px 0",
+                border: "1px solid", borderLeft: "none",
                 borderColor: viewMode === "month" ? "#059669" : "#d1d5db",
                 backgroundColor: viewMode === "month" ? "#059669" : "#ffffff",
                 color: viewMode === "month" ? "#ffffff" : "#6b7280", cursor: "pointer",
               }}
             >📅 Month</button>
+            {(planTier === "growth" || planTier === "pro") && (
+              <button
+                onClick={() => setViewMode("map")}
+                style={{
+                  padding: "6px 14px", fontSize: 13, fontWeight: 700,
+                  borderRadius: "0 999px 999px 0", border: "1px solid", borderLeft: "none",
+                  borderColor: viewMode === "map" ? "#059669" : "#d1d5db",
+                  backgroundColor: viewMode === "map" ? "#059669" : "#ffffff",
+                  color: viewMode === "map" ? "#ffffff" : "#6b7280", cursor: "pointer",
+                }}
+              >🗺 Map</button>
+            )}
           </div>
 
           <div className="flex-1 flex flex-col gap-3">
@@ -3353,6 +3966,14 @@ export default function Schedule() {
         </div>
       )}
 
+      {viewMode === "map" && user && (
+        <div className="card mb-6">
+          <div className="card-body">
+            <MapView userId={user.id} setViewMode={setViewMode} selectedDate={selectedDate} />
+          </div>
+        </div>
+      )}
+
       {/* LIST VIEW */}
       {viewMode === "list" && (
         <div className="grid gap-4">
@@ -3432,6 +4053,7 @@ export default function Schedule() {
           {groupedAppointments.map((group) => {
             const appt = group[0]; // primary appointment for shared fields
             const isMulti = group.length > 1;
+            const isFlexible = !!appt.is_flexible;
             // Every pet in the group shares the same start time — the combined block
             // is that shared start plus the SUM of every pet's duration (e.g. two 1hr
             // dogs starting at 11:00 = one 11:00–1:00 block), not each pet's individual time.
@@ -3608,7 +4230,13 @@ export default function Schedule() {
                         })()}
                       </div>
                       <div className="text-lg font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
-                        {startDisplay} – {end}
+                        {isFlexible ? (
+                          <span className="inline-flex items-center gap-1 text-sm font-bold text-violet-700 bg-violet-100 px-2.5 py-1 rounded-full">
+                            🔄 Flexible
+                          </span>
+                        ) : (
+                          <>{startDisplay} – {end}</>
+                        )}
                         <span>{size.icon}</span>
                         {vaccineIcon && (
                           <span className="text-xl">{vaccineIcon}</span>

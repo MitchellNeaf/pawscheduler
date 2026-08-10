@@ -3,6 +3,7 @@ import { supabase } from "../supabase";
 import Loader from "../components/Loader";
 import ConfirmModal from "../components/ConfirmModal";
 import VacationSection from "../components/VacationSection";
+import ServiceAreasSection from "../components/ServiceAreasSection";
 import { SERVICE_OPTIONS, DEFAULT_PRICING } from "../utils/grooming";
 
 
@@ -46,6 +47,9 @@ export default function Profile() {
 
   const [fullName, setFullName] = useState("");
   const [bio, setBio] = useState("");
+  const [businessAddress, setBusinessAddress] = useState("");
+  const [businessLat, setBusinessLat] = useState(null);
+  const [geocodingBusiness, setGeocodingBusiness] = useState(false);
   const [slug, setSlug] = useState("");
   const [copyMsg, setCopyMsg] = useState("");
   const [logoUrl, setLogoUrl] = useState(null);
@@ -101,6 +105,8 @@ export default function Profile() {
         setBookingEnabled(data.booking_enabled !== false); // default true if null
         setFullName(data.full_name || "");
         setBio(data.bio || "");
+        setBusinessAddress(data.business_address || "");
+        setBusinessLat(data.business_lat || null);
         setSlug(data.slug || "");
         setLogoUrl(data.logo_url || null);
         setMaxParallel(data.max_parallel ?? 1);
@@ -282,6 +288,7 @@ export default function Profile() {
       .update({
         full_name: fullName,
         bio: bio.trim() || null,
+        business_address: businessAddress.trim() || null,
         slug: cleanSlug,
         max_parallel: maxParallel,
         max_appts_per_day: maxApptsPerDay || null,
@@ -460,6 +467,7 @@ export default function Profile() {
     { id: "profile",   emoji: "👤", label: "Profile"  },
     { id: "booking",   emoji: "🎨", label: "Booking Page" },
     { id: "schedule",  emoji: "🗓", label: "Schedule" },
+    { id: "areas",     emoji: "🗺", label: (planTier === "growth" || planTier === "pro") ? "Areas" : "Areas 🔒" },
     { id: "pricing",   emoji: "💲", label: "Pricing"  },
     { id: "reminders", emoji: "🔔", label: (planTier === "basic" || planTier === "growth" || planTier === "pro") ? "Reminders" : "Reminders 🔒" },
     { id: "intake",    emoji: "📋", label: (planTier === "growth" || planTier === "pro") ? "Intake" : "Intake 🔒" },
@@ -568,6 +576,56 @@ export default function Profile() {
             />
             <p className="text-xs text-gray-400 mt-1">Shown publicly on your booking page below your name.</p>
           </div>
+
+          {(planTier === "growth" || planTier === "pro") && (
+            <div>
+              <label className="block text-sm font-medium mb-1">Business / Home Base Address</label>
+              <p className="text-xs text-gray-400 mb-1.5">Used as your default starting point for route optimization on the Map view. Not shown publicly.</p>
+              <input
+                value={businessAddress}
+                onChange={(e) => setBusinessAddress(e.target.value)}
+                placeholder="123 Main St, Springfield, IL 62701"
+                className="border rounded w-full p-2 text-sm"
+              />
+              <div className="flex items-center gap-2 mt-2">
+                <button
+                  type="button"
+                  className="btn-secondary text-xs disabled:opacity-50"
+                  disabled={geocodingBusiness || !businessAddress.trim()}
+                  onClick={async () => {
+                    setGeocodingBusiness(true);
+                    try {
+                      // Save the address first so the geocode function has the latest value
+                      await supabase.from("groomers").update({ business_address: businessAddress.trim() || null }).eq("id", user.id);
+                      const { data: { session } } = await supabase.auth.getSession();
+                      const res = await fetch("/.netlify/functions/geocodeBusinessAddress", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+                      });
+                      const json = await res.json();
+                      if (!res.ok || json.error) {
+                        setConfirmConfig({
+                          title: "Could not locate address",
+                          message: json.error || "Something went wrong.",
+                          confirmLabel: "OK",
+                          onConfirm: () => {},
+                        });
+                      } else {
+                        setBusinessLat(json.lat);
+                      }
+                    } finally {
+                      setGeocodingBusiness(false);
+                    }
+                  }}
+                >
+                  {geocodingBusiness ? "Locating…" : businessLat ? "📍 Update Location" : "📍 Set as Home Base"}
+                </button>
+                {businessLat && (
+                  <span className="text-xs text-emerald-600 font-semibold">✓ Location set</span>
+                )}
+              </div>
+            </div>
+          )}
 
                     {/* Booking Approval */}
           <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-2">
@@ -1289,6 +1347,24 @@ export default function Profile() {
         </div>
       )}
 
+      {/* ── AREAS TAB ── */}
+      {activeTab === "areas" && (
+        <div className="space-y-4">
+          {(planTier !== "growth" && planTier !== "pro") ? (
+            <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-6 text-center space-y-3">
+              <div className="text-3xl">🗺</div>
+              <h3 className="font-bold text-[var(--text-1)]">Service Areas require Growth or higher</h3>
+              <p className="text-sm text-[var(--text-2)]">Upgrade to organize your clients by zone and see them on a map, built for mobile groomers.</p>
+              <a href="/upgrade" className="inline-block px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
+                Upgrade to Growth — $49.99/mo →
+              </a>
+            </div>
+          ) : (
+            <ServiceAreasSection userId={user.id} />
+          )}
+        </div>
+      )}
+
       {/* ── PRICING TAB ── */}
       {activeTab === "pricing" && (
         <div className="space-y-4">
@@ -1933,22 +2009,6 @@ export default function Profile() {
             Let clients book, view, and cancel appointments by texting your scheduling number. Powered by AI — no app download required.
           </p>
 
-          {planTier !== "pro" && (
-            <div className="mb-6 rounded-2xl bg-violet-50 border border-violet-200 p-5 space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">🔒</span>
-                <div>
-                  <p className="font-bold text-violet-900">Pro Plan Required</p>
-                  <p className="text-sm text-violet-700">The AI SMS bot is available on the Pro plan ($79/mo or $799/yr).</p>
-                </div>
-              </div>
-              <a href="/upgrade"
-                className="block w-full py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold text-center hover:bg-violet-700 transition">
-                Upgrade to Pro →
-              </a>
-            </div>
-          )}
-
           <SmsBotSection userId={user?.id} />
         </div>
       )}
@@ -1967,6 +2027,7 @@ function SmsBotSection({ userId }) {
   const [botNumber, setBotNumber] = useState("");
   const [enabled, setEnabled] = useState(false);
   const [subStatus, setSubStatus] = useState(null);
+  const [planTier, setPlanTier] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
 
@@ -1974,13 +2035,14 @@ function SmsBotSection({ userId }) {
     if (!userId) return;
     supabase
       .from("groomers")
-      .select("sms_bot_enabled, sms_bot_number, subscription_status")
+      .select("sms_bot_enabled, sms_bot_number, subscription_status, plan_tier")
       .eq("id", userId)
       .single()
       .then(({ data }) => {
         setEnabled(data?.sms_bot_enabled || false);
         setBotNumber(data?.sms_bot_number || "");
         setSubStatus(data?.subscription_status || null);
+        setPlanTier(data?.plan_tier || null);
         setLoading(false);
       });
   }, [userId]);
@@ -2002,6 +2064,27 @@ function SmsBotSection({ userId }) {
   };
 
   if (loading) return <p className="text-sm text-[var(--text-3)]">Loading…</p>;
+
+  // STATE 0: Not on Pro — locked, upsell, regardless of subscription_status
+  if (planTier !== "pro") {
+    return (
+      <div className="rounded-xl border border-dashed border-violet-300 bg-violet-50 p-5 text-center">
+        <div className="text-2xl mb-2">💬</div>
+        <div className="font-semibold text-[var(--text-1)] mb-1">AI SMS Scheduler</div>
+        <p className="text-sm text-[var(--text-2)] mb-3">
+          The AI SMS bot is a Pro-plan feature. Upgrade to get your dedicated
+          scheduling number — clients text it to book, reschedule, or cancel anytime.
+        </p>
+        <a
+          href="/upgrade"
+          className="inline-flex items-center gap-2 text-sm bg-violet-600 text-white
+            px-4 py-2 rounded-full font-semibold hover:bg-violet-700 transition"
+        >
+          Upgrade to Pro →
+        </a>
+      </div>
+    );
+  }
 
   // STATE 1: Trial — locked, upsell to paid
   if (subStatus === "trial" || subStatus === null) {

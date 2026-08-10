@@ -57,23 +57,21 @@ function StatCard({ label, value, sub, accent, delta }) {
           letterSpacing: ".07em", color: "var(--text-3)", marginBottom: 4 }}>
           {label}
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{ fontSize: "1.55rem", fontWeight: 800,
-            color: accent || "var(--text-1)", lineHeight: 1.1 }}>
-            {value}
-          </div>
-          {delta != null && (
-            <span style={{
-              display: "inline-flex", alignItems: "center", gap: 2,
-              fontSize: "0.68rem", fontWeight: 700,
-              padding: "2px 6px", borderRadius: 99,
-              background: delta >= 0 ? "rgba(16,185,129,.12)" : "rgba(239,68,68,.12)",
-              color: delta >= 0 ? "#059669" : "#dc2626",
-            }}>
-              {delta >= 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(0)}%
-            </span>
-          )}
+        <div style={{ fontSize: "1.55rem", fontWeight: 800,
+          color: accent || "var(--text-1)", lineHeight: 1.1 }}>
+          {value}
         </div>
+        {delta != null && (
+          <span style={{
+            display: "inline-flex", alignItems: "center", gap: 2,
+            fontSize: "0.68rem", fontWeight: 700,
+            padding: "2px 6px", borderRadius: 99, marginTop: 4,
+            background: delta >= 0 ? "rgba(16,185,129,.12)" : "rgba(239,68,68,.12)",
+            color: delta >= 0 ? "#059669" : "#dc2626",
+          }}>
+            {delta >= 0 ? "↑" : "↓"} {Math.abs(delta).toFixed(0)}%
+          </span>
+        )}
         {sub && (
           <div style={{ fontSize: "0.73rem", color: "var(--text-3)", marginTop: 3 }}>{sub}</div>
         )}

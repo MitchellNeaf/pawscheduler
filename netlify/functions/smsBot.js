@@ -513,10 +513,10 @@ async function executeTool(name, input) {
         for (const c of clients) {
           const { data: groomer, error: gErr } = await supabase
             .from("groomers")
-            .select("id, full_name, email, sms_bot_enabled, time_zone, max_parallel")
+            .select("id, full_name, email, sms_bot_enabled, plan_tier, time_zone, max_parallel")
             .eq("id", c.groomer_id).single();
-          log.info(`Groomer for ${c.full_name}: sms_bot_enabled=${groomer?.sms_bot_enabled}`);
-          if (!gErr && groomer?.sms_bot_enabled === true) validMatches.push({ client: c, groomer });
+          log.info(`Groomer for ${c.full_name}: sms_bot_enabled=${groomer?.sms_bot_enabled}, plan_tier=${groomer?.plan_tier}`);
+          if (!gErr && groomer?.sms_bot_enabled === true && groomer?.plan_tier === "pro") validMatches.push({ client: c, groomer });
         }
 
         if (!validMatches.length) return { found: false, message: "No active bot groomer found for this client." };

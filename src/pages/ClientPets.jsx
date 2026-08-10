@@ -537,6 +537,8 @@ export default function ClientPets() {
   const [intakeQuestions, setIntakeQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingClient, setSavingClient] = useState(false);
+  const [serviceAreas, setServiceAreas] = useState([]);
+  const [geocoding, setGeocoding] = useState(false);
 
   // Vaccine form state
   const [addShotPet, setAddShotPet] = useState(null);
@@ -590,6 +592,8 @@ export default function ClientPets() {
             if (g?.plan_tier) setPlanTier(g.plan_tier);
             if (g?.custom_intake_questions) setIntakeQuestions(g.custom_intake_questions);
           });
+        supabase.from("service_areas").select("id, name, color").eq("groomer_id", u.id).order("created_at")
+          .then(({ data: areas }) => setServiceAreas(areas || []));
       }
     });
   }, []);
@@ -1077,6 +1081,29 @@ export default function ClientPets() {
             }
           />
 
+          {planTier === "growth" || planTier === "pro" ? (
+            <div>
+              <label className="block text-xs font-semibold text-gray-600 mb-1">Service Area</label>
+              <select
+                value={client.service_area_id || ""}
+                onChange={(e) =>
+                  setClient((prev) => ({ ...prev, service_area_id: e.target.value || null }))
+                }
+                className="border rounded px-2 py-1.5 w-full text-sm"
+              >
+                <option value="">No area assigned</option>
+                {serviceAreas.map((area) => (
+                  <option key={area.id} value={area.id}>{area.name}</option>
+                ))}
+              </select>
+              {serviceAreas.length === 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  No service areas set up yet — add some in Profile → Areas.
+                </p>
+              )}
+            </div>
+          ) : null}
+
           {/* Emergency Contact */}
           <div className="pt-2 border-t border-[var(--border-med)]">
             <div className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide mb-2">
@@ -1177,6 +1204,7 @@ export default function ClientPets() {
                     city: client.city || null,
                     state: client.state || null,
                     zip: client.zip || null,
+                    service_area_id: client.service_area_id || null,
                     emergency_contact_name:  client.emergency_contact_name || null,
                     emergency_contact_phone: client.emergency_contact_phone || null,
                     notes: client.notes || null,
@@ -1197,6 +1225,43 @@ export default function ClientPets() {
             >
               ➕ Add Pet
             </button>
+
+            {(planTier === "growth" || planTier === "pro") && client.street && client.city && (
+              <button
+                type="button"
+                className="btn-secondary text-sm disabled:opacity-50"
+                disabled={geocoding}
+                onClick={async () => {
+                  setGeocoding(true);
+                  try {
+                    const { data: { session } } = await supabase.auth.getSession();
+                    const res = await fetch("/.netlify/functions/geocodeClient", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${session?.access_token}`,
+                      },
+                      body: JSON.stringify({ clientId: client.id }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok || json.error) {
+                      setConfirmConfig({
+                        title: "Could not locate address",
+                        message: json.error || "Something went wrong.",
+                        confirmLabel: "OK",
+                        onConfirm: () => {},
+                      });
+                    } else {
+                      setClient((prev) => ({ ...prev, lat: json.lat, lng: json.lng }));
+                    }
+                  } finally {
+                    setGeocoding(false);
+                  }
+                }}
+              >
+                {geocoding ? "Locating…" : client.lat ? "📍 Update Location" : "📍 Set Location"}
+              </button>
+            )}
 
             {client.street && client.city && client.state && client.zip && (
               <a
@@ -1320,40 +1385,49 @@ export default function ClientPets() {
                 <div className="mt-4">
                   <div className="font-medium text-gray-800 mb-1">Shot Records</div>
 
-                  {pet.pet_shot_records?.length > 0 ? (
-                    <ul className="text-sm text-gray-700 space-y-1">
-                      {pet.pet_shot_records.map((rec) => (
-                        <li key={rec.id} className="flex items-center justify-between gap-2 pl-3">
-                          <span>
-                            <span className="text-gray-400 mr-1">•</span>
-                            <strong>{rec.shot_type}</strong> — expires {rec.date_expires}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteShotRecord(rec.id, pet.id)}
-                            className="flex-shrink-0 w-5 h-5 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600 text-xs flex items-center justify-center leading-none font-bold transition"
-                            title="Delete shot record"
-                          >
-                            ✕
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
+                  {planTier === "growth" || planTier === "pro" ? (
+                    <>
+                      {pet.pet_shot_records?.length > 0 ? (
+                        <ul className="text-sm text-gray-700 space-y-1">
+                          {pet.pet_shot_records.map((rec) => (
+                            <li key={rec.id} className="flex items-center justify-between gap-2 pl-3">
+                              <span>
+                                <span className="text-gray-400 mr-1">•</span>
+                                <strong>{rec.shot_type}</strong> — expires {rec.date_expires}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteShotRecord(rec.id, pet.id)}
+                                className="flex-shrink-0 w-5 h-5 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600 text-xs flex items-center justify-center leading-none font-bold transition"
+                                title="Delete shot record"
+                              >
+                                ✕
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <div className="text-sm text-gray-500 italic">
+                          No shot records yet.
+                        </div>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          setAddShotPet(pet);
+                          setShotModalOpen(true);
+                        }}
+                        className="btn-secondary text-sm mt-2"
+                      >
+                        + Add Shot Record
+                      </button>
+                    </>
                   ) : (
-                    <div className="text-sm text-gray-500 italic">
-                      No shot records yet.
+                    <div className="text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-200 rounded-lg px-3 py-2">
+                      🔒 Vaccine tracking requires Growth or higher.{" "}
+                      <a href="/upgrade" className="text-emerald-600 font-semibold">Upgrade →</a>
                     </div>
                   )}
-
-                  <button
-                    onClick={() => {
-                      setAddShotPet(pet);
-                      setShotModalOpen(true);
-                    }}
-                    className="btn-secondary text-sm mt-2"
-                  >
-                    + Add Shot Record
-                  </button>
                 </div>
 
                 {/* BUTTONS */}
