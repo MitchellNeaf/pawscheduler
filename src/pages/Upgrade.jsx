@@ -29,6 +29,7 @@ const PLANS = [
       "Grooming report cards",
       "Vaccine tracking & alerts",
       "Two-way SMS inbox",
+      "Client map & route optimization",
       "Client payments",
       "AI SMS booking bot",
     ],
@@ -60,6 +61,7 @@ const PLANS = [
       "Grooming waivers",
       "Grooming report cards",
       "Vaccine tracking & alerts",
+      "Client map & route optimization",
       "Client payments",
       "AI SMS booking bot",
     ],
@@ -81,6 +83,8 @@ const PLANS = [
       "Vaccine tracking & expiration alerts",
       "Multi-pet bookings",
       "Unpaid appointment tracking",
+      "🗺 Client map with service areas",
+      "🧭 Route optimization — 15 free per month",
     ],
     excluded: [
       "Client payments via Stripe",
@@ -95,6 +99,7 @@ const PLANS = [
     color:       "violet",
     features: [
       "Everything in Growth",
+      "🧭 Unlimited route optimization",
       "Client payments via Stripe",
       "AI SMS booking bot",
       "Dedicated scheduling phone number",

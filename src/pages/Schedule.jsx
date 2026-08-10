@@ -1863,7 +1863,7 @@ const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 // Must match GROWTH_MONTHLY_LIMIT in netlify/functions/optimizeRoute.js —
 // used here only to display the count before the button's ever pressed;
 // the real enforcement always happens server-side.
-const ROUTE_GROWTH_MONTHLY_LIMIT = 5;
+const ROUTE_GROWTH_MONTHLY_LIMIT = 15;
 
 /* ─── Map view tour — first time someone opens Map ──────────────────────── */
 const MAP_TOUR_STEPS = [
@@ -1924,6 +1924,65 @@ const MAP_TOUR_STEPS = [
   },
 ];
 
+
+/* ---------------- Map Teaser (Free/Basic) ---------------- */
+// Deliberately static — no real Google Maps call, no real client data shown.
+// Just enough to sell what Growth unlocks, at zero cost to render.
+function MapTeaser() {
+  const fakePins = [
+    { top: "22%", left: "18%", color: "#059669" },
+    { top: "38%", left: "62%", color: "#2563eb" },
+    { top: "58%", left: "30%", color: "#059669" },
+    { top: "68%", left: "72%", color: "#d97706" },
+    { top: "30%", left: "45%", color: "#2563eb" },
+    { top: "78%", left: "48%", color: "#059669" },
+  ];
+
+  return (
+    <div className="card mb-6">
+      <div className="card-body space-y-4">
+        <div
+          className="relative rounded-2xl overflow-hidden"
+          style={{
+            height: 260,
+            background: "linear-gradient(135deg, #e0f2e9 0%, #d7e9f7 50%, #e0f2e9 100%)",
+          }}
+        >
+          {fakePins.map((pin, i) => (
+            <div
+              key={i}
+              className="absolute w-4 h-4 rounded-full border-2 border-white shadow-md"
+              style={{ top: pin.top, left: pin.left, background: pin.color, filter: "blur(0.3px)" }}
+            />
+          ))}
+          <div className="absolute inset-0 flex items-center justify-center" style={{ backdropFilter: "blur(3px)", background: "rgba(255,255,255,0.35)" }}>
+            <div className="text-center px-6">
+              <div className="text-4xl mb-2">🔒</div>
+              <div className="font-bold text-gray-900">Client Map is a Growth feature</div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="font-bold text-gray-900 mb-2">See your whole week at a glance, geographically</h3>
+          <ul className="space-y-1.5 text-sm text-gray-600">
+            <li>🗺 Your clients on a map, color-coded by service area</li>
+            <li>🧭 Smart route order based on real drive times, not guesswork</li>
+            <li>📍 Free turn-by-turn directions to every stop</li>
+            <li>✅ Progress that saves automatically as you work through the day</li>
+          </ul>
+        </div>
+
+        <a
+          href="/upgrade"
+          className="block w-full text-center py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition"
+        >
+          Upgrade to Growth — $49.99/mo →
+        </a>
+      </div>
+    </div>
+  );
+}
 
 function MapView({ userId, setViewMode, selectedDate }) {
   const [loading, setLoading] = useState(true);
@@ -3636,7 +3695,7 @@ export default function Schedule() {
                 color: viewMode === "month" ? "#ffffff" : "#6b7280", cursor: "pointer",
               }}
             >📅 Month</button>
-            {(planTier === "growth" || planTier === "pro") && (
+            {(planTier === "growth" || planTier === "pro") ? (
               <button
                 onClick={() => setViewMode("map")}
                 style={{
@@ -3647,6 +3706,17 @@ export default function Schedule() {
                   color: viewMode === "map" ? "#ffffff" : "#6b7280", cursor: "pointer",
                 }}
               >🗺 Map</button>
+            ) : (
+              <button
+                onClick={() => setViewMode("map-teaser")}
+                style={{
+                  padding: "6px 14px", fontSize: 13, fontWeight: 700,
+                  borderRadius: "0 999px 999px 0", border: "1px solid", borderLeft: "none",
+                  borderColor: viewMode === "map-teaser" ? "#7c3aed" : "#d1d5db",
+                  backgroundColor: viewMode === "map-teaser" ? "#f5f3ff" : "#ffffff",
+                  color: viewMode === "map-teaser" ? "#6d28d9" : "#9ca3af", cursor: "pointer",
+                }}
+              >🗺 Map 🔒</button>
             )}
           </div>
 
@@ -3973,6 +4043,8 @@ export default function Schedule() {
           </div>
         </div>
       )}
+
+      {viewMode === "map-teaser" && <MapTeaser />}
 
       {/* LIST VIEW */}
       {viewMode === "list" && (

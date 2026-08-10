@@ -26,7 +26,7 @@ const supabase = createClient(
 );
 
 // Free route optimizations per month on Growth before it's blocked. Pro is unlimited.
-const GROWTH_MONTHLY_LIMIT = 5;
+const GROWTH_MONTHLY_LIMIT = 15;
 
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
