@@ -1,6 +1,6 @@
 // src/pages/Upgrade.jsx
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import { supabase } from "../supabase";
 
 const PLANS = [
@@ -176,6 +176,13 @@ export default function Upgrade() {
   return (
     <main className="min-h-screen bg-[var(--bg)] py-10 px-4">
       <div className="max-w-5xl mx-auto space-y-8">
+
+        <Link
+          to="/schedule"
+          className="inline-flex items-center gap-1.5 text-sm font-semibold text-[var(--text-2)] hover:text-emerald-700"
+        >
+          ← Back to Schedule
+        </Link>
 
         {showSuccess && (
           <div className="rounded-2xl bg-emerald-50 border border-emerald-200 px-6 py-4 text-center">

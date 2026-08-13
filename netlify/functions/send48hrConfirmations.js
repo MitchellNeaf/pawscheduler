@@ -121,6 +121,25 @@ exports.handler = async (event) => {
       // Skip if no client contact info
       if (!client?.email && !client?.phone) { skipped++; continue; }
 
+      // ── Atomically claim this appointment before sending anything —
+      // same fix as sendSmsReminders.js. The original query already
+      // filters to confirmation_sent_at IS NULL, but that's a read-time
+      // check only; without an atomic claim here, two overlapping runs
+      // (a slow cron tick still finishing, a manual trigger) could both
+      // read the same appointment as eligible before either writes back.
+      const { data: claimed } = await supabase
+        .from("appointments")
+        .update({ confirmation_sent_at: new Date().toISOString() })
+        .eq("id", appt.id)
+        .is("confirmation_sent_at", null)
+        .select("id")
+        .maybeSingle();
+
+      if (!claimed) {
+        console.log(`Skipping appt ${appt.id} — already claimed/sent (concurrent run)`);
+        skipped++; continue;
+      }
+
       const groomerName = groomer?.business_name || groomer?.full_name || "your groomer";
 
       // Format date nicely
@@ -160,14 +179,12 @@ exports.handler = async (event) => {
           if (res.ok) {
             sent++;
             console.log(`48hr SMS sent to ${client.phone} for appt ${appt.id}`);
-            await supabase.from("appointments")
-              .update({ confirmation_sent_at: new Date().toISOString() })
-              .eq("id", appt.id);
 
             let telnyxMsgId = null;
             try { telnyxMsgId = (await res.json())?.data?.id || null; } catch {}
             await supabase.from("sms_messages").insert({
               groomer_id: appt.groomer_id,
+              client_id: client.id,
               client_phone: client.phone,
               direction: "outbound",
               body: message,
@@ -177,10 +194,12 @@ exports.handler = async (event) => {
           } else {
             const body = await res.text();
             console.error(`Telnyx error for ${appt.id}:`, body);
+            await supabase.from("appointments").update({ confirmation_sent_at: null }).eq("id", appt.id);
             skipped++;
           }
         } catch (e) {
           console.error(`SMS send failed for ${appt.id}:`, e);
+          await supabase.from("appointments").update({ confirmation_sent_at: null }).eq("id", appt.id);
           skipped++;
         }
 
@@ -238,19 +257,21 @@ exports.handler = async (event) => {
           if (res.ok) {
             sent++;
             console.log(`48hr email sent to ${client.email} for appt ${appt.id}`);
-            await supabase.from("appointments")
-              .update({ confirmation_sent_at: new Date().toISOString() })
-              .eq("id", appt.id);
           } else {
             const body = await res.text();
             console.error(`MailerSend error for ${appt.id}:`, body);
+            await supabase.from("appointments").update({ confirmation_sent_at: null }).eq("id", appt.id);
             skipped++;
           }
         } catch (e) {
           console.error(`Email send failed for ${appt.id}:`, e);
+          await supabase.from("appointments").update({ confirmation_sent_at: null }).eq("id", appt.id);
           skipped++;
         }
       } else {
+        // Neither SMS nor email path was actually usable — roll back the
+        // claim so this doesn't get silently marked "sent" with nothing sent.
+        await supabase.from("appointments").update({ confirmation_sent_at: null }).eq("id", appt.id);
         skipped++;
       }
     }

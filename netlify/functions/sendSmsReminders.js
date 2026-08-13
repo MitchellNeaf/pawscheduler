@@ -127,7 +127,7 @@ exports.handler = async (event) => {
           .select(`
             id, date, time, duration_min, services, confirmed, confirm_token,
             sms_reminder_sent_at,
-            pets ( name, clients ( full_name, phone, sms_opt_in ) )
+            pets ( name, clients ( id, full_name, phone, sms_opt_in ) )
           `)
           .eq("groomer_id", groomer.id)
           .eq("date", targetDateStr)
@@ -152,23 +152,47 @@ exports.handler = async (event) => {
             skipped++; continue;
           }
 
-          // Check dedup
-          if (appt.sms_reminder_sent_at) {
-            const lastSent = new Date(appt.sms_reminder_sent_at);
-            const hoursSinceLastSent = (now - lastSent) / 3600000;
-            if (hoursSinceLastSent < hoursAhead - 1) {
-              console.log(`  Skipping appt ${appt.id} — already sent ${hoursSinceLastSent.toFixed(1)}hr ago`);
-              skipped++; continue;
-            }
+          // ── Atomically claim this send BEFORE building/sending anything.
+          // This is the fix for the actual bug: the old code checked
+          // sms_reminder_sent_at, then sent the SMS, then marked it sent —
+          // leaving a window where two overlapping runs (a slow cron tick
+          // still finishing, or a manual resend colliding with the
+          // scheduled one) could both read "not sent yet" and both send.
+          // Claiming first via a conditional UPDATE makes this atomic:
+          // only one concurrent run can ever win the claim for a given
+          // appointment, using the same time-based threshold the old
+          // dedup check used so a later, legitimately-due reminder for a
+          // shorter rule can still fire once enough time has passed.
+          const claimCutoff = new Date(now.getTime() - (hoursAhead - 1) * 3600000).toISOString();
+          const { data: claimed } = await supabase
+            .from("appointments")
+            .update({ sms_reminder_sent_at: now.toISOString() })
+            .eq("id", appt.id)
+            .or(`sms_reminder_sent_at.is.null,sms_reminder_sent_at.lt.${claimCutoff}`)
+            .select("id")
+            .maybeSingle();
+
+          if (!claimed) {
+            console.log(`  Skipping appt ${appt.id} — already claimed/sent (concurrent run or too recent)`);
+            skipped++; continue;
           }
 
-          console.log(`  ✓ Sending reminder for appt ${appt.id} (${appt.pets?.name}, ${appt.date} ${appt.time}) to ${client.phone}`);
+          console.log(`  ✓ Claimed appt ${appt.id} (${appt.pets?.name}, ${appt.date} ${appt.time}) for ${client.phone}`);
 
           // Build confirm link
           const token = await ensureConfirmToken(appt.id);
           const confirmLink = token
             ? `${process.env.URL || "https://app.pawscheduler.app"}/confirm/${token}`
             : "";
+
+          // Never send a confirmation reminder with a missing link — a
+          // broken, truncated message is worse than a delayed one. Undo
+          // the claim so a later run can retry once the token is available.
+          if (!confirmLink) {
+            console.error(`  No confirm token for appt ${appt.id} — rolling back claim, will retry next run`);
+            await supabase.from("appointments").update({ sms_reminder_sent_at: null }).eq("id", appt.id);
+            skipped++; continue;
+          }
 
           // Build token vars
           const firstName = (client.full_name || "").split(" ")[0];
@@ -206,21 +230,19 @@ exports.handler = async (event) => {
             if (!res.ok) {
               const err = await res.text();
               console.error(`SMS failed for appt ${appt.id}:`, err);
+              // Roll back the claim so this can be retried, rather than
+              // silently marking a failed send as sent forever.
+              await supabase.from("appointments").update({ sms_reminder_sent_at: null }).eq("id", appt.id);
               skipped++;
               continue;
             }
-
-            // Stamp sent time
-            await supabase
-              .from("appointments")
-              .update({ sms_reminder_sent_at: now.toISOString() })
-              .eq("id", appt.id);
 
             // Track sent message for usage reporting
             let telnyxMsgId = null;
             try { telnyxMsgId = (await res.json())?.data?.id || null; } catch {}
             await supabase.from("sms_messages").insert({
               groomer_id: groomer.id,
+              client_id: client.id,
               client_phone: client.phone,
               direction: "outbound",
               body,
@@ -232,6 +254,8 @@ exports.handler = async (event) => {
             sent++;
           } catch (smsErr) {
             console.error(`SMS failed for appt ${appt.id}:`, smsErr.message);
+            // Same rollback on unexpected network/exception failure.
+            await supabase.from("appointments").update({ sms_reminder_sent_at: null }).eq("id", appt.id);
             skipped++;
           }
         }

@@ -531,6 +531,7 @@ export default function ClientPets() {
   const cameFromSchedule = location.state?.from === "schedule";
   const [client, setClient] = useState(null);
   const [upcomingAppts, setUpcomingAppts] = useState([]);
+  const [noShowCount, setNoShowCount] = useState(0);
   const [pets, setPets] = useState([]);
   const [user, setUser] = useState(null);
   const [planTier, setPlanTier] = useState("free");
@@ -636,6 +637,15 @@ export default function ClientPets() {
           .order("time", { ascending: true })
           .limit(10);
         setUpcomingAppts(apptData || []);
+
+        // No-show count across this client's whole history — not just
+        // upcoming — so a repeat pattern is visible at a glance.
+        const { count } = await supabase
+          .from("appointments")
+          .select("id", { count: "exact", head: true })
+          .in("pet_id", petIds)
+          .eq("no_show", true);
+        setNoShowCount(count || 0);
       }
 
       setLoading(false);
@@ -1000,7 +1010,17 @@ export default function ClientPets() {
       {/* CLIENT INFO */}
       <div className="card mb-6">
         <div className="card-body space-y-3">
-          <h2 className="font-semibold text-lg">Client Info</h2>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h2 className="font-semibold text-lg">Client Info</h2>
+            {noShowCount > 0 && (
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold
+                  ${noShowCount >= 2 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}
+              >
+                🚫 {noShowCount} no-show{noShowCount === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
 
           {/* Client photo */}
           {(planTier === "basic" || planTier === "growth" || planTier === "pro") && (

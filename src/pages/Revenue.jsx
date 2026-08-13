@@ -223,6 +223,10 @@ export default function Revenue() {
     appointments.filter((a) => a.no_show).reduce((s, a) => s + (a.amount || 0), 0),
   [appointments]);
 
+  const noShowCount = useMemo(() =>
+    appointments.filter((a) => a.no_show).length,
+  [appointments]);
+
   // New stats — sourced from data already fetched, no new query needed
   const finishedCount  = filtered.filter((a) => a.checked_out_at).length;
   const timeBookedMin  = filtered.reduce((s, a) => s + (a.duration_min || 0), 0);
@@ -458,7 +462,7 @@ export default function Revenue() {
           background: "rgba(239,68,68,.07)", border: "1px solid rgba(239,68,68,.2)",
         }}>
           <span style={{ fontSize: "0.85rem", color: "#b91c1c", fontWeight: 600 }}>
-            🚫 No-show revenue loss
+            🚫 No-show revenue loss <span style={{ fontWeight: 500, opacity: 0.85 }}>({noShowCount} appt{noShowCount === 1 ? "" : "s"})</span>
           </span>
           <span style={{ fontSize: "1rem", fontWeight: 800, color: "#b91c1c" }}>
             ${noShowLoss.toFixed(2)}

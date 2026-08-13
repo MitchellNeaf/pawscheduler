@@ -467,9 +467,9 @@ export default function Profile() {
     { id: "profile",   emoji: "👤", label: "Profile"  },
     { id: "booking",   emoji: "🎨", label: "Booking Page" },
     { id: "schedule",  emoji: "🗓", label: "Schedule" },
-    { id: "areas",     emoji: "🗺", label: (planTier === "growth" || planTier === "pro") ? "Areas" : "Areas 🔒" },
-    { id: "pricing",   emoji: "💲", label: "Pricing"  },
+    { id: "pricing",   emoji: "✂️", label: "Services"  },
     { id: "reminders", emoji: "🔔", label: (planTier === "basic" || planTier === "growth" || planTier === "pro") ? "Reminders" : "Reminders 🔒" },
+    { id: "areas",     emoji: "🗺", label: (planTier === "growth" || planTier === "pro") ? "Areas" : "Areas 🔒" },
     { id: "intake",    emoji: "📋", label: (planTier === "growth" || planTier === "pro") ? "Intake" : "Intake 🔒" },
     { id: "payments",  emoji: "💳", label: planTier === "pro" ? "Payments" : "Payments 🔒" },
     { id: "smsbot",    emoji: "💬", label: planTier === "pro" ? "SMS Bot" : "SMS Bot 🔒" },
@@ -2352,7 +2352,7 @@ function SubscriptionStatus({ userId, onManageBilling }) {
     const loadStatus = async () => {
       const { data } = await supabase
         .from("groomers")
-        .select("subscription_status, cancel_at_period_end")
+        .select("subscription_status, cancel_at_period_end, plan_tier")
         .eq("id", userId)
         .single();
 
@@ -2366,30 +2366,45 @@ function SubscriptionStatus({ userId, onManageBilling }) {
   if (loading) return <p className="text-[var(--text-3)]">Loading subscription…</p>;
 
   const sub = status.subscription_status;
+  const isFree = status.plan_tier === "free" || !sub;
 
   return (
     <div className="p-4 bg-[var(--surface)] border border-[var(--border-med)] rounded-xl shadow-sm mt-6">
       <h3 className="text-lg font-semibold mb-2">Subscription</h3>
 
-      {sub === "active" && (
+      {isFree && (
+        <>
+          <div className="bg-gray-100 text-gray-600 px-3 py-2 rounded-md font-semibold inline-block mb-3">
+            You're on the Free plan
+          </div>
+          <p className="text-sm text-[var(--text-2)] mb-3">
+            Upgrade for unlimited appointments, SMS reminders, and more.
+          </p>
+          <a href="/upgrade" className="btn-primary w-full mt-1 text-center block">
+            See Plans & Upgrade →
+          </a>
+        </>
+      )}
+
+      {!isFree && sub === "active" && (
         <div className="bg-emerald-50 text-emerald-700 px-3 py-2 rounded-md font-semibold inline-block mb-3">
           ✔ Active Subscription
         </div>
       )}
 
-      {sub === "active" && (
+      {!isFree && sub === "active" && (
         <button onClick={onManageBilling} className="btn-primary w-full mt-3">
           Manage Billing
         </button>
       )}
 
-      {sub === "trial" && (
+      {!isFree && sub === "trial" && (
         <a href="/upgrade" className="btn-primary w-full mt-3 text-center block">
           Upgrade Now
         </a>
       )}
 
-      {sub === "expired" && (
+      {!isFree && sub === "expired" && (
         <a href="/upgrade" className="btn-primary w-full mt-3 text-center block">
           Renew Subscription
         </a>

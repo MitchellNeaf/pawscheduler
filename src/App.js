@@ -230,6 +230,23 @@ function ProtectedRoute({ children }) {
         return;
       }
 
+      // Record activity once per browser session (not on every page load) —
+      // a better signal of real usage than login alone, since Supabase
+      // sessions persist for weeks and someone can be actively using the
+      // app daily without the login form ever firing again.
+      const activeSessionKey = `ps_active_${groomer.id}`;
+      if (!sessionStorage.getItem(activeSessionKey)) {
+        supabase.from("groomers").update({ last_active_at: new Date().toISOString() }).eq("id", groomer.id)
+          .then(({ error }) => {
+            if (error) {
+              console.error("last_active_at update failed:", error.message);
+            } else {
+              // Only lock out retries for this session once the write actually succeeded
+              sessionStorage.setItem(activeSessionKey, "1");
+            }
+          });
+      }
+
       // Show onboarding tour for new groomers who haven't seen it
       if (groomer && !groomer.onboarding_complete && location.pathname === "/schedule") {
         // Small delay so the schedule page renders first

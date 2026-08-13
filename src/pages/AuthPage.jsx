@@ -71,6 +71,11 @@ export default function AuthPage() {
       .eq("id", user.id)
       .maybeSingle();
 
+    if (existing) {
+      // Fire-and-forget — don't block navigation on this
+      supabase.from("groomers").update({ last_login_at: new Date().toISOString() }).eq("id", user.id);
+    }
+
     navigate(existing ? "/" : "/onboarding");
     setLoading(false);
   };
