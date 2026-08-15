@@ -379,6 +379,44 @@ function MultiPetAppointmentModal({
   addonOptions = [],
   feeOptions = [],
 }) {
+  // On-demand no-show lookup — unlike the day-scoped noShowCounts on the
+  // main Schedule page, a client being newly added here may not already
+  // have an appointment today, so this fetches fresh for whichever
+  // clients are actually selected into this new booking.
+  const [noShowLookup, setNoShowLookup] = useState({});
+
+  useEffect(() => {
+    const clientIds = [...new Set(
+      (newPets || []).map((entry) => entry.pet?.client_id).filter(Boolean)
+    )];
+    if (!clientIds.length) { setNoShowLookup({}); return; }
+
+    (async () => {
+      const { data: allPets } = await supabase
+        .from("pets")
+        .select("id, client_id")
+        .in("client_id", clientIds);
+
+      const petToClient = {};
+      (allPets || []).forEach((p) => { petToClient[p.id] = p.client_id; });
+      const allPetIds = (allPets || []).map((p) => p.id);
+      if (!allPetIds.length) { setNoShowLookup({}); return; }
+
+      const { data: noShowAppts } = await supabase
+        .from("appointments")
+        .select("pet_id")
+        .eq("no_show", true)
+        .in("pet_id", allPetIds);
+
+      const counts = {};
+      (noShowAppts || []).forEach((a) => {
+        const cid = petToClient[a.pet_id];
+        if (cid) counts[cid] = (counts[cid] || 0) + 1;
+      });
+      setNoShowLookup(counts);
+    })();
+  }, [newPets]);
+
   if (!open || !newPets.length) return null;
 
   const updatePetForm = (petId, field, value) => {
@@ -525,6 +563,14 @@ function MultiPetAppointmentModal({
                 </div>
 
                 <div className="p-3 space-y-3">
+                  {/* No-show warning */}
+                  {noShowLookup[pet.client_id] > 0 && (
+                    <div className={`p-2 text-xs rounded font-semibold
+                      ${noShowLookup[pet.client_id] >= 2 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>
+                      🚫 {pet.clients?.full_name || "This client"} has {noShowLookup[pet.client_id]} previous no-show{noShowLookup[pet.client_id] === 1 ? "" : "s"} on record.
+                    </div>
+                  )}
+
                   {/* Vaccine warning */}
                   {!rabies ? (
                     <div className="p-2 bg-yellow-100 text-yellow-800 text-xs rounded">⚠️ No rabies record on file</div>
@@ -753,6 +799,7 @@ function AppointmentModal({
   // Sibling appointments in the same multi-pet group (edit mode only)
   groupSiblings = [],
   onOpenSibling,
+  noShowCounts = {},
 }) {
   if (!open) return null;
   if (isEdit && !appt) return null;
@@ -761,6 +808,8 @@ function AppointmentModal({
   const subject     = isEdit ? appt : pet;
   const petName     = isEdit ? appt.pets?.name        : pet.name;
   const clientName  = isEdit ? appt.pets?.clients?.full_name : pet.clients?.full_name;
+  const clientId    = isEdit ? appt.pets?.client_id : pet.client_id;
+  const noShowCount = noShowCounts[clientId] || 0;
   const sizeCategory = isEdit
     ? (appt?.size_category || appt?.pets?.size_category || 1)
     : (pet?.size_category || 1);
@@ -815,6 +864,13 @@ function AppointmentModal({
             <div className="font-semibold">{petName}</div>
             <div className="text-xs text-gray-500">{clientName}</div>
           </div>
+
+          {noShowCount > 0 && (
+            <div className={`p-2.5 rounded-lg text-xs font-semibold border
+              ${noShowCount >= 2 ? "bg-red-50 border-red-200 text-red-700" : "bg-amber-50 border-amber-200 text-amber-700"}`}>
+              🚫 {clientName || "This client"} has {noShowCount} previous no-show{noShowCount === 1 ? "" : "s"} on record.
+            </div>
+          )}
 
           {/* Booked together with — other pets in this multi-pet group */}
           {isEdit && groupSiblings.length > 0 && (
@@ -2477,6 +2533,7 @@ function MapView({ userId, setViewMode, selectedDate }) {
 
 export default function Schedule() {
   const [appointments, setAppointments] = useState([]);
+  const [noShowCounts, setNoShowCounts] = useState({}); // { client_id: count }
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [user, setUser] = useState(null);
@@ -2543,17 +2600,42 @@ export default function Schedule() {
   const [groomer, setGroomer] = useState(null);
 
   // Load ALL pending booking requests across all future dates
+  // Compute no-show counts for whichever clients are on today's schedule —
+  // watches appointments directly so it works regardless of which load
+  // path (initial, tab-refocus, save, etc.) actually populated it.
   useEffect(() => {
-    if (!user) return;
-    supabase
-      .from("appointments")
-      .select("id, date, time, waitlist, pets(name, clients(full_name))")
-      .eq("groomer_id", user.id)
-      .eq("source", "booking_page")
-      .eq("confirmed", false)
-      .gte("date", new Date().toISOString().slice(0, 10))
-      .order("date", { ascending: true })
-      .then(({ data }) => setAllPendingRequests(data || []));
+    if (!user || !appointments.length) { setNoShowCounts({}); return; }
+
+    const clientIds = [...new Set(
+      appointments.map((a) => a.pets?.client_id).filter(Boolean)
+    )];
+    if (!clientIds.length) { setNoShowCounts({}); return; }
+
+    (async () => {
+      const { data: allPets } = await supabase
+        .from("pets")
+        .select("id, client_id")
+        .in("client_id", clientIds);
+
+      const petToClient = {};
+      (allPets || []).forEach((p) => { petToClient[p.id] = p.client_id; });
+      const allPetIds = (allPets || []).map((p) => p.id);
+      if (!allPetIds.length) { setNoShowCounts({}); return; }
+
+      const { data: noShowAppts } = await supabase
+        .from("appointments")
+        .select("pet_id")
+        .eq("groomer_id", user.id)
+        .eq("no_show", true)
+        .in("pet_id", allPetIds);
+
+      const counts = {};
+      (noShowAppts || []).forEach((a) => {
+        const cid = petToClient[a.pet_id];
+        if (cid) counts[cid] = (counts[cid] || 0) + 1;
+      });
+      setNoShowCounts(counts);
+    })();
   }, [user, appointments]);
 
   /* Load user */
@@ -3942,7 +4024,9 @@ export default function Schedule() {
                                   state={{ from: "schedule" }}
                                   onClick={(e) => e.stopPropagation()}
                                   className="block text-[10px] text-emerald-700 hover:underline truncate leading-tight mt-0.5"
+                                  title={noShowCounts[appt.pets?.client_id] > 0 ? `${noShowCounts[appt.pets.client_id]} previous no-show(s)` : undefined}
                                 >
+                                  {noShowCounts[appt.pets?.client_id] > 0 && "🚫 "}
                                   {appt.pets?.clients?.full_name || "Client"}
                                 </Link>
 
@@ -4349,7 +4433,7 @@ export default function Schedule() {
                           {isMulti && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">Multi</span>}
                           {!isMulti && <span className="text-xs text-gray-500">{size.label}</span>}
                         </button>
-                        <div className="text-sm">
+                        <div className="text-sm flex items-center gap-1.5 flex-wrap">
                           <Link
                             to={`/clients/${appt.pets?.clients?.id}`}
                             state={{ from: "schedule" }}
@@ -4357,6 +4441,15 @@ export default function Schedule() {
                           >
                             {appt.pets?.clients?.full_name || "Client"}
                           </Link>
+                          {noShowCounts[appt.pets?.client_id] > 0 && (
+                            <span
+                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold
+                                ${noShowCounts[appt.pets.client_id] >= 2 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}
+                              title={`${noShowCounts[appt.pets.client_id]} previous no-show${noShowCounts[appt.pets.client_id] === 1 ? "" : "s"}`}
+                            >
+                              🚫 {noShowCounts[appt.pets.client_id]}
+                            </span>
+                          )}
                         </div>
 
                         {appt.pets?.tags?.length > 0 && (
@@ -4835,6 +4928,7 @@ export default function Schedule() {
         pricing={pricing}
         workingRange={workingRange}
         breakSlots={breakSlots}
+        noShowCounts={noShowCounts}
       />
 
       <RebookWeekModal
