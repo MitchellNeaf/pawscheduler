@@ -2600,6 +2600,19 @@ export default function Schedule() {
   const [groomer, setGroomer] = useState(null);
 
   // Load ALL pending booking requests across all future dates
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("appointments")
+      .select("id, date, time, waitlist, pets(name, clients(full_name))")
+      .eq("groomer_id", user.id)
+      .eq("source", "booking_page")
+      .eq("confirmed", false)
+      .gte("date", new Date().toISOString().slice(0, 10))
+      .order("date", { ascending: true })
+      .then(({ data }) => setAllPendingRequests(data || []));
+  }, [user, appointments]);
+
   // Compute no-show counts for whichever clients are on today's schedule —
   // watches appointments directly so it works regardless of which load
   // path (initial, tab-refocus, save, etc.) actually populated it.
