@@ -390,15 +390,17 @@ export default function Profile() {
   // ---------------- BILLING PORTAL ----------------
   const handleManageBilling = async () => {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) return;
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) return;
 
     const resp = await fetch("/.netlify/functions/billingPortal", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
       body: JSON.stringify({
-        userId: user.id,
         returnUrl: window.location.origin + "/profile",
       }),
     });
@@ -408,7 +410,7 @@ export default function Profile() {
     else {
       setConfirmConfig({
         title: "Could not open billing",
-        message: "Please try again or contact support.",
+        message: json.error || "Please try again or contact support.",
         confirmLabel: "OK",
         onConfirm: () => {},
       });
