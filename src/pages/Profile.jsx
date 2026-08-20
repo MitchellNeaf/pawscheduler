@@ -297,7 +297,11 @@ export default function Profile() {
         booking_enabled: bookingEnabled,
         reminder_message_template: reminderTemplate.trim() || null,
         sms_confirmation_template: confirmationTemplate.trim() || null,
-        reminder_rules: reminderRules.length ? reminderRules : [48],
+        reminder_rules: (() => {
+          const cleaned = reminderRules
+            .map((h) => (h === "" || isNaN(Number(h)) ? 1 : Math.max(1, Math.min(168, Number(h)))));
+          return cleaned.length ? cleaned : [48];
+        })(),
         custom_services: customServices,
         brand_color: brandColor || "forest",
         waiver_text: waiverText.trim() || null,
@@ -783,8 +787,18 @@ export default function Profile() {
                       type="number" min={1} max={168}
                       value={hrs}
                       onChange={(e) => {
+                        const raw = e.target.value;
                         const updated = [...reminderRules];
-                        updated[i] = Number(e.target.value) || 1;
+                        // Allow empty while typing — don't snap to a fallback
+                        // number on every keystroke, or clearing the field to
+                        // type a new value gets a stray "1" prepended.
+                        updated[i] = raw === "" ? "" : Number(raw);
+                        setReminderRules(updated);
+                      }}
+                      onBlur={(e) => {
+                        const updated = [...reminderRules];
+                        const n = Number(e.target.value);
+                        updated[i] = (!e.target.value || isNaN(n) || n < 1) ? 1 : Math.min(n, 168);
                         setReminderRules(updated);
                       }}
                       className="w-20 border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm bg-[var(--bg)] text-[var(--text-1)] text-center"
@@ -1054,7 +1068,18 @@ export default function Profile() {
                 {reminderRules.map((hrs, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <input type="number" min={1} max={168} value={hrs}
-                      onChange={(e) => { const updated = [...reminderRules]; updated[i] = Number(e.target.value) || 1; setReminderRules(updated); }}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const updated = [...reminderRules];
+                        updated[i] = raw === "" ? "" : Number(raw);
+                        setReminderRules(updated);
+                      }}
+                      onBlur={(e) => {
+                        const updated = [...reminderRules];
+                        const n = Number(e.target.value);
+                        updated[i] = (!e.target.value || isNaN(n) || n < 1) ? 1 : Math.min(n, 168);
+                        setReminderRules(updated);
+                      }}
                       className="w-20 border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm bg-[var(--bg)] text-[var(--text-1)] text-center" />
                     <span className="text-sm text-[var(--text-2)]">hours before</span>
                     <button type="button" disabled={reminderRules.length <= 1}
