@@ -26,6 +26,7 @@ function formatMessageTime(ts) {
 export default function SmsInbox() {
   const [user, setUser] = useState(null);
   const [planTier, setPlanTier] = useState("free");
+  const [smsNumber, setSmsNumber] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [selectedPhone, setSelectedPhone] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -46,8 +47,11 @@ export default function SmsInbox() {
     supabase.auth.getUser().then(({ data: { user: u } }) => {
       if (!u) return;
       setUser(u);
-      supabase.from("groomers").select("plan_tier").eq("id", u.id).single()
-        .then(({ data: g }) => { if (g?.plan_tier) setPlanTier(g.plan_tier); });
+      supabase.from("groomers").select("plan_tier, sms_number").eq("id", u.id).single()
+        .then(({ data: g }) => {
+          if (g?.plan_tier) setPlanTier(g.plan_tier);
+          if (g?.sms_number) setSmsNumber(g.sms_number);
+        });
     });
   }, []);
 
@@ -251,7 +255,7 @@ export default function SmsInbox() {
 
         {/* Header */}
         <div className="px-4 pt-4 pb-3 border-b border-gray-200 bg-white">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center justify-between mb-1">
             <h1 className="text-lg font-bold text-[var(--text-1)]">
               Messages
               {totalUnread > 0 && (
@@ -261,6 +265,9 @@ export default function SmsInbox() {
               )}
             </h1>
           </div>
+          {smsNumber && (
+            <p className="text-xs text-[var(--text-3)] mb-2">📱 Texting from {smsNumber}</p>
+          )}
           <div className="flex gap-2">
             <input
               type="text"

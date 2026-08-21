@@ -91,6 +91,7 @@ export default function Profile() {
         if (data.reminder_message_template) setReminderTemplate(data.reminder_message_template || "");
         if (data.sms_confirmation_template) setConfirmationTemplate(data.sms_confirmation_template || "");
         if (data.reminder_rules) setReminderRules(data.reminder_rules);
+        if (data.sms_number) setSmsNumber(data.sms_number);
         if (data.custom_services) {
           setCustomServices(data.custom_services);
         } else {
@@ -379,6 +380,7 @@ export default function Profile() {
   const [reminderTemplate, setReminderTemplate] = useState("");
   const [confirmationTemplate, setConfirmationTemplate] = useState("");
   const [reminderRules, setReminderRules] = useState([48, 2]); // hours before appointment
+  const [smsNumber, setSmsNumber] = useState(null); // dedicated texting number, if assigned
   const [customServices, setCustomServices] = useState(null);
   const [customAddons, setCustomAddons] = useState([]);
   const [customFees, setCustomFees] = useState([]);
@@ -652,6 +654,16 @@ export default function Profile() {
           {/* ── SMS REMINDERS & CONFIRMATIONS — Basic+ ── */}
           {(planTier === "basic" || planTier === "growth" || planTier === "pro") ? (
           <>
+          {smsNumber && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3">
+              <span className="text-2xl">📱</span>
+              <div>
+                <div className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Your texting number</div>
+                <div className="text-lg font-bold text-emerald-900">{smsNumber}</div>
+                <p className="text-xs text-emerald-700 mt-0.5">Reminders and replies send from this number — safe to give to clients directly.</p>
+              </div>
+            </div>
+          )}
           {/* ── SECTION 1: 48hr Confirmation (fixed timing, editable message) ── */}
           <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
@@ -983,6 +995,16 @@ export default function Profile() {
         <div className="space-y-4">
           {(planTier === "basic" || planTier === "growth" || planTier === "pro") ? (
           <>
+          {smsNumber && (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3">
+              <span className="text-2xl">📱</span>
+              <div>
+                <div className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Your texting number</div>
+                <div className="text-lg font-bold text-emerald-900">{smsNumber}</div>
+                <p className="text-xs text-emerald-700 mt-0.5">Reminders and replies send from this number — safe to give to clients directly.</p>
+              </div>
+            </div>
+          )}
           <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div>

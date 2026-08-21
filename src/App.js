@@ -12,6 +12,7 @@ import {
 } from "react-router-dom";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
+import ConfirmModal from "./components/ConfirmModal";
 
 import ResetPassword from "./pages/ResetPassword";
 import Signup from "./pages/Signup";
@@ -28,6 +29,7 @@ import SmsInbox from "./pages/SmsInbox";
 import Profile from "./pages/Profile";
 import Upgrade from "./pages/Upgrade";
 import Help from "./pages/Help";
+import Support from "./pages/Support";
 import Waiver from "./pages/Waiver";
 import ReportCard from "./pages/ReportCard";
 import Intake from "./pages/Intake";
@@ -185,6 +187,7 @@ function ProtectedRoute({ children }) {
   const [searchParams] = useSearchParams();
 
   const [user, setUser] = useState(null);
+  const [announcement, setAnnouncement] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showTour, setShowTour] = useState(false);
   const [showProfileTour, setShowProfileTour] = useState(false);
@@ -228,6 +231,12 @@ function ProtectedRoute({ children }) {
         }
         setLoading(false);
         return;
+      }
+
+      // One-off announcement popup — reusable for any future message to
+      // a specific customer, set/reset directly via Supabase when needed.
+      if (groomer.announcement_message && !groomer.announcement_dismissed) {
+        setAnnouncement(groomer.announcement_message);
       }
 
       // Record activity once per browser session (not on every page load) —
@@ -343,6 +352,33 @@ function ProtectedRoute({ children }) {
         <div className="bg-yellow-100 text-yellow-800 text-center py-2 font-semibold">
           ✨ You're on the Free plan — upgrade anytime to unlock reminders, intake forms, waivers, payments and more. <a href="/upgrade" style={{color:"#065f46",fontWeight:700}}>See plans →</a>
         </div>
+      )}
+      {announcement && (
+        <ConfirmModal
+          config={{
+            title: "📣 A note from PawScheduler",
+            message: announcement,
+            confirmLabel: "Got it",
+            onConfirm: () => {
+              setAnnouncement(null);
+              if (user?.id) {
+                supabase.from("groomers").update({ announcement_dismissed: true }).eq("id", user.id)
+                  .then(({ error }) => {
+                    if (error) console.error("announcement_dismissed update failed:", error.message);
+                  });
+              }
+            },
+          }}
+          onClose={() => {
+            setAnnouncement(null);
+            if (user?.id) {
+              supabase.from("groomers").update({ announcement_dismissed: true }).eq("id", user.id)
+                .then(({ error }) => {
+                  if (error) console.error("announcement_dismissed update failed:", error.message);
+                });
+            }
+          }}
+        />
       )}
       {children}
     </>
@@ -486,7 +522,8 @@ function AppShell() {
       { to: "/unpaid", label: "Unpaid" },
       { to: "/revenue", label: "Revenue" },
       { to: "/profile", label: "Profile" },
-      { to: "/help", label: "Help" }
+      { to: "/help", label: "Help" },
+      { to: "/support", label: "Support" }
     ],
     []
   );
@@ -694,6 +731,14 @@ function AppShell() {
           element={
             <ProtectedRoute>
               <Help />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/support"
+          element={
+            <ProtectedRoute>
+              <Support />
             </ProtectedRoute>
           }
         />
