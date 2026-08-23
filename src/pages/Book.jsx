@@ -822,6 +822,36 @@ export default function BookPage() {
         );
       })()}
 
+      {/* ── BOOKING CLOSED — shown immediately, no login required ── */}
+      {groomer?.booking_enabled === false && (
+        <div style={{ padding: "0 16px 4px" }}>
+          <div style={{ padding: "16px", borderRadius: 12, border: "2px solid #e5e7eb",
+            background: "#f9fafb", color: "#374151", fontSize: "0.9rem", lineHeight: 1.5 }}>
+            <div>
+              {groomer?.booking_closed_message?.trim()
+                ? groomer.booking_closed_message
+                : `📅 We're not accepting online bookings right now, but we'd still love to hear from you! Reach out to ${groomer?.full_name || "us"} directly to grab a spot or get added to the waitlist.`}
+            </div>
+            {(groomer?.business_phone || groomer?.sms_number) && (
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                {groomer?.business_phone && (
+                  <a href={`tel:${groomer.business_phone}`}
+                    style={{ flex: 1, textAlign: "center", padding: "10px 12px", borderRadius: 10,
+                      background: "#10b981", color: "white", fontWeight: 700, fontSize: "0.85rem", textDecoration: "none" }}>
+                    📞 Call
+                  </a>
+                )}
+                <a href={`sms:${groomer.sms_number || groomer.business_phone}`}
+                  style={{ flex: 1, textAlign: "center", padding: "10px 12px", borderRadius: 10,
+                    border: "2px solid #10b981", color: "#10b981", fontWeight: 700, fontSize: "0.85rem", textDecoration: "none" }}>
+                  💬 Text
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── BOOKING SECTION ── */}
       <div style={{ padding: "16px 16px 0" }}>
 
@@ -889,36 +919,7 @@ export default function BookPage() {
             </div>
           )}
 
-          {groomer?.booking_enabled === false ? (
-            <div style={{ padding: "16px", borderRadius: 12, border: "2px solid #e5e7eb",
-              background: "#f9fafb", color: "#374151", fontSize: "0.9rem", lineHeight: 1.5 }}>
-              <div>
-                {groomer?.booking_closed_message?.trim()
-                  ? groomer.booking_closed_message
-                  : `📅 We're not accepting online bookings right now, but we'd still love to hear from you! Reach out to ${groomer?.full_name || "us"} directly to grab a spot or get added to the waitlist.`}
-              </div>
-              {(groomer?.business_phone || groomer?.sms_number) && (
-                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                  {groomer?.business_phone && (
-                    <a href={`tel:${groomer.business_phone}`}
-                      style={{ flex: 1, textAlign: "center", padding: "10px 12px", borderRadius: 10,
-                        background: "#10b981", color: "white", fontWeight: 700, fontSize: "0.85rem", textDecoration: "none" }}>
-                      📞 Call
-                    </a>
-                  )}
-                  {/* Text prefers the dedicated number — replies land in the
-                      groomer's PawScheduler inbox instead of their personal
-                      phone, same as every other client conversation. Falls
-                      back to business_phone if they don't have one yet. */}
-                  <a href={`sms:${groomer.sms_number || groomer.business_phone}`}
-                    style={{ flex: 1, textAlign: "center", padding: "10px 12px", borderRadius: 10,
-                      border: "2px solid #10b981", color: "#10b981", fontWeight: 700, fontSize: "0.85rem", textDecoration: "none" }}>
-                    💬 Text
-                  </a>
-                </div>
-              )}
-            </div>
-          ) : (
+          {groomer?.booking_enabled === false ? null : (
             <button
               onClick={() => { setSubmitted(null); setView("book"); }}
               style={{ padding: "14px 16px", borderRadius: 12, border: "2px solid #10b981",
