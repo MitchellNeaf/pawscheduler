@@ -29,6 +29,19 @@ function getPlanTier(priceId) {
   return "basic";
 }
 
+// Stripe moved current_period_end off the top-level Subscription object and
+// onto each subscription item (to support multiple differently-billed items
+// per subscription). Check the new location first, fall back to the old one
+// so this keeps working regardless of exactly which API version shape is
+// actually in effect on this account — unverified against a real recent
+// event at the time this was written, so defensive on purpose.
+function getCurrentPeriodEnd(subscription) {
+  const fromItem = subscription.items?.data?.[0]?.current_period_end;
+  const fromTop = subscription.current_period_end;
+  const raw = fromItem ?? fromTop;
+  return raw ? new Date(raw * 1000).toISOString() : null;
+}
+
 async function updateGroomerByBestMatch({ groomerId, customerId, email, updates }) {
   if (groomerId) {
     const { data, error } = await supabase
@@ -111,9 +124,7 @@ exports.handler = async (event) => {
       const priceId = subscription.items.data[0]?.price?.id;
       const planTier = session.metadata?.plan || getPlanTier(priceId);
 
-      const currentPeriodEnd = subscription.current_period_end
-        ? new Date(subscription.current_period_end * 1000).toISOString()
-        : null;
+      const currentPeriodEnd = getCurrentPeriodEnd(subscription);
 
       const groomer = await updateGroomerByBestMatch({
         groomerId,
@@ -171,9 +182,7 @@ exports.handler = async (event) => {
       const planTier = getPlanTier(priceId);
       const status = subscription.status === "active" ? "active" : "expired";
 
-      const currentPeriodEnd = subscription.current_period_end
-        ? new Date(subscription.current_period_end * 1000).toISOString()
-        : null;
+      const currentPeriodEnd = getCurrentPeriodEnd(subscription);
 
       const { error } = await supabase
         .from("groomers")

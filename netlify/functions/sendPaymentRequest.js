@@ -98,42 +98,56 @@ exports.handler = async (event) => {
 
   // Reuse existing session if present and not expired
   if (!paymentUrl) {
-    const session = await stripe.checkout.sessions.create(
-      {
-        mode: "payment",
-        payment_method_types: ["card"],
-        customer_email: client?.email || undefined,
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              unit_amount: Math.round(appt.amount * 100),
-              product_data: {
-                name: `${services} — ${petName}`,
-                description: `${groomerName} · ${appt.date}`,
+    try {
+      const session = await stripe.checkout.sessions.create(
+        {
+          mode: "payment",
+          payment_method_types: ["card"],
+          customer_email: client?.email || undefined,
+          line_items: [
+            {
+              price_data: {
+                currency: "usd",
+                unit_amount: Math.round(appt.amount * 100),
+                product_data: {
+                  name: `${services} — ${petName}`,
+                  description: `${groomerName} · ${appt.date}`,
+                },
               },
+              quantity: 1,
             },
-            quantity: 1,
+          ],
+          metadata: {
+            appointment_id: appt.id,
+            groomer_id:     user.id,
+            pet_name:       petName,
+            client_name:    client?.full_name || "",
           },
-        ],
-        metadata: {
-          appointment_id: appt.id,
-          groomer_id:     user.id,
-          pet_name:       petName,
-          client_name:    client?.full_name || "",
+          success_url: `${siteUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+          cancel_url:  `${siteUrl}/payment-cancelled`,
         },
-        success_url: `${siteUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url:  `${siteUrl}/payment-cancelled`,
-      },
-      { stripeAccount: groomer.stripe_account_id }
-    );
+        { stripeAccount: groomer.stripe_account_id }
+      );
 
-    paymentUrl = session.url;
+      paymentUrl = session.url;
 
-    await supabase
-      .from("appointments")
-      .update({ payment_url: session.url, payment_session_id: session.id })
-      .eq("id", appt.id);
+      const { error: saveErr } = await supabase
+        .from("appointments")
+        .update({ payment_url: session.url, payment_session_id: session.id })
+        .eq("id", appt.id);
+
+      if (saveErr) {
+        console.error("sendPaymentRequest: session created but failed to save payment_url:", saveErr.message);
+        // Not fatal — we still have paymentUrl in memory for this request,
+        // just won't be able to reuse it next time without regenerating.
+      }
+    } catch (err) {
+      console.error("sendPaymentRequest: Stripe checkout session creation failed:", err.message);
+      return {
+        statusCode: 502,
+        body: JSON.stringify({ error: err.message || "Could not create a payment link. Please try again." }),
+      };
+    }
   }
 
   const results = { smsSent: false, emailSent: false };

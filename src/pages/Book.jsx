@@ -160,7 +160,7 @@ export default function BookPage() {
     (async () => {
       const { data, error: gErr } = await anonSupabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, booking_enabled, bio, business_address, business_phone, brand_color")
+        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, booking_enabled, booking_closed_message, bio, business_address, business_phone, brand_color")
         .eq("slug", slug)
         .single();
 
@@ -890,9 +890,27 @@ export default function BookPage() {
           )}
 
           {groomer?.booking_enabled === false ? (
-            <div style={{ padding: "14px 16px", borderRadius: 12, border: "2px solid #e5e7eb",
-              background: "#f9fafb", color: "#6b7280", fontSize: "0.88rem", lineHeight: 1.5 }}>
-              📅 Online booking is currently unavailable — please contact {groomer?.full_name || "us"} directly to book a new appointment. You can still view or cancel your upcoming appointments below.
+            <div style={{ padding: "16px", borderRadius: 12, border: "2px solid #e5e7eb",
+              background: "#f9fafb", color: "#374151", fontSize: "0.9rem", lineHeight: 1.5 }}>
+              <div>
+                {groomer?.booking_closed_message?.trim()
+                  ? groomer.booking_closed_message
+                  : `📅 We're not accepting online bookings right now, but we'd still love to hear from you! Reach out to ${groomer?.full_name || "us"} directly to grab a spot or get added to the waitlist.`}
+              </div>
+              {groomer?.business_phone && (
+                <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                  <a href={`tel:${groomer.business_phone}`}
+                    style={{ flex: 1, textAlign: "center", padding: "10px 12px", borderRadius: 10,
+                      background: "#10b981", color: "white", fontWeight: 700, fontSize: "0.85rem", textDecoration: "none" }}>
+                    📞 Call
+                  </a>
+                  <a href={`sms:${groomer.business_phone}`}
+                    style={{ flex: 1, textAlign: "center", padding: "10px 12px", borderRadius: 10,
+                      border: "2px solid #10b981", color: "#10b981", fontWeight: 700, fontSize: "0.85rem", textDecoration: "none" }}>
+                    💬 Text
+                  </a>
+                </div>
+              )}
             </div>
           ) : (
             <button

@@ -2551,6 +2551,8 @@ export default function Schedule() {
   const [monthOffset, setMonthOffset] = useState(0);
   const [dayActionDate, setDayActionDate] = useState(null);
   const [reportCardAppt, setReportCardAppt] = useState(null);
+  const [requestingPaymentId, setRequestingPaymentId] = useState(null);
+  const [paymentLinkModal, setPaymentLinkModal] = useState(null); // { url, petName }
 
   const [petModalOpen, setPetModalOpen] = useState(false);
   const [modalSlot, setModalSlot] = useState(null);
@@ -4761,6 +4763,43 @@ export default function Schedule() {
                         ))}
                       </div>
                     )}
+                    {group.every(a => a.checked_out_at) && !group.every(a => a.paid) && planTier === "pro" && !isMulti && (
+                      <button
+                        disabled={requestingPaymentId === appt.id}
+                        onClick={async () => {
+                          setRequestingPaymentId(appt.id);
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            const res = await fetch("/.netlify/functions/sendPaymentRequest", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
+                              body: JSON.stringify({ appointmentId: appt.id }),
+                            });
+                            const json = await res.json();
+                            if (!res.ok || json.error) {
+                              setConfirmConfig({
+                                title: "Could not send payment request",
+                                message: json.error || "Something went wrong.",
+                                confirmLabel: "OK",
+                                onConfirm: () => {},
+                              });
+                            } else {
+                              setPaymentLinkModal({
+                                url: json.paymentUrl,
+                                petName: appt.pets?.name,
+                                smsSent: json.smsSent,
+                                emailSent: json.emailSent,
+                              });
+                            }
+                          } finally {
+                            setRequestingPaymentId(null);
+                          }
+                        }}
+                        className="mt-2 w-full py-2 rounded-xl text-xs font-semibold border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 transition disabled:opacity-50"
+                      >
+                        {requestingPaymentId === appt.id ? "Sending…" : "💳 Request Payment"}
+                      </button>
+                    )}
                     {group.every(a => a.checked_out_at) && group.every(a => a.paid) && (
                       <div className="mt-2 text-xs text-emerald-700 font-semibold">
                         ✅ Paid{appt.payment_method ? ` via ${appt.payment_method === "cashapp" ? "Cash App" : appt.payment_method.charAt(0).toUpperCase() + appt.payment_method.slice(1)}` : ""}
@@ -4893,6 +4932,54 @@ export default function Schedule() {
         onClose={() => setReportCardAppt(null)}
         user={user}
       />
+
+      {paymentLinkModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={() => setPaymentLinkModal(null)}>
+          <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-5" onClick={(e) => e.stopPropagation()}>
+            {(paymentLinkModal.smsSent || paymentLinkModal.emailSent) ? (
+              <>
+                <h2 className="text-lg font-bold text-gray-900 mb-1">💳 Payment Request Sent</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  For {paymentLinkModal.petName || "this appointment"} — sent via{" "}
+                  {[paymentLinkModal.smsSent && "text", paymentLinkModal.emailSent && "email"].filter(Boolean).join(" and ")}.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-bold text-gray-900 mb-1">💳 Payment Link Ready</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  For {paymentLinkModal.petName || "this appointment"} — this client has no phone or email on file, so nothing was sent automatically. Copy the link below and share it yourself.
+                </p>
+              </>
+            )}
+            <div className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-gray-700 break-all mb-4">
+              {paymentLinkModal.url}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPaymentLinkModal(null)}
+                className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 font-semibold text-sm"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(paymentLinkModal.url);
+                  setConfirmConfig({
+                    title: "Copied!",
+                    message: "Payment link copied to your clipboard.",
+                    confirmLabel: "OK",
+                    onConfirm: () => {},
+                  });
+                }}
+                className="flex-1 py-3 rounded-xl bg-violet-600 text-white font-bold text-sm"
+              >
+                Copy Link
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <MultiPetAppointmentModal
         open={newModalOpen}

@@ -48,46 +48,66 @@ exports.handler = async (event) => {
 
   const siteUrl = process.env.URL || "https://app.pawscheduler.app";
 
-  let accountId = groomer.stripe_account_id;
+  try {
+    let accountId = groomer.stripe_account_id;
 
-  // ── Create account if needed ────────────────────────────
-  if (!accountId) {
-    const account = await stripe.accounts.create({
-      type: "express",
-      email: groomer.email,
-      capabilities: {
-        card_payments: { requested: true },
-        transfers:     { requested: true },
-      },
-      business_profile: {
-        mcc:                 "7299", // Personal services
-        product_description: "Pet grooming services",
-      },
-      metadata: {
-        groomer_id:   groomer.id,
-        groomer_name: groomer.full_name || "",
-      },
+    // ── Create account if needed ────────────────────────────
+    if (!accountId) {
+      const account = await stripe.accounts.create({
+        type: "express",
+        email: groomer.email,
+        capabilities: {
+          card_payments: { requested: true },
+          transfers:     { requested: true },
+        },
+        business_profile: {
+          mcc:                 "7299", // Personal services
+          product_description: "Pet grooming services",
+        },
+        metadata: {
+          groomer_id:   groomer.id,
+          groomer_name: groomer.full_name || "",
+        },
+      });
+
+      accountId = account.id;
+
+      // Save to DB
+      const { error: saveErr } = await supabase
+        .from("groomers")
+        .update({ stripe_account_id: accountId })
+        .eq("id", groomer.id);
+
+      if (saveErr) {
+        // Stripe account was created but we couldn't record it — if we
+        // silently continue, the next "Connect Stripe" click would see no
+        // stripe_account_id and create a SECOND, orphaned account. Fail
+        // loudly instead so this gets noticed and fixed manually.
+        console.error("createConnectAccount: Stripe account created but DB save failed:", saveErr.message, "orphaned account:", accountId);
+        return {
+          statusCode: 500,
+          body: JSON.stringify({ error: "Your Stripe account was created but we couldn't save it. Please contact support before trying again." }),
+        };
+      }
+    }
+
+    // ── Generate onboarding link ────────────────────────────
+    const accountLink = await stripe.accountLinks.create({
+      account:     accountId,
+      refresh_url: `${siteUrl}/profile?stripe=refresh`,
+      return_url:  `${siteUrl}/profile?stripe=success`,
+      type:        "account_onboarding",
     });
 
-    accountId = account.id;
-
-    // Save to DB
-    await supabase
-      .from("groomers")
-      .update({ stripe_account_id: accountId })
-      .eq("id", groomer.id);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ url: accountLink.url }),
+    };
+  } catch (err) {
+    console.error("createConnectAccount error:", err.message);
+    return {
+      statusCode: 502,
+      body: JSON.stringify({ error: err.message || "Stripe Connect setup failed. Please try again or contact support." }),
+    };
   }
-
-  // ── Generate onboarding link ────────────────────────────
-  const accountLink = await stripe.accountLinks.create({
-    account:     accountId,
-    refresh_url: `${siteUrl}/profile?stripe=refresh`,
-    return_url:  `${siteUrl}/profile?stripe=success`,
-    type:        "account_onboarding",
-  });
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ url: accountLink.url }),
-  };
 };

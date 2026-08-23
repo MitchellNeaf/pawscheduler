@@ -42,51 +42,62 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: `Webhook Error: ${err.message}` };
   }
 
-  // ── account.updated ─────────────────────────────────────
-  // Fires when a connected account completes onboarding
-  if (stripeEvent.type === "account.updated") {
-    const account = stripeEvent.data.object;
+  try {
+    // ── account.updated ─────────────────────────────────────
+    // Fires when a connected account completes onboarding
+    if (stripeEvent.type === "account.updated") {
+      const account = stripeEvent.data.object;
 
-    if (account.charges_enabled) {
-      const { error } = await supabase
-        .from("groomers")
-        .update({ stripe_onboarding_complete: true })
-        .eq("stripe_account_id", account.id);
+      if (account.charges_enabled) {
+        const { error } = await supabase
+          .from("groomers")
+          .update({ stripe_onboarding_complete: true })
+          .eq("stripe_account_id", account.id);
 
-      if (error) {
-        console.error("Failed to mark onboarding complete:", error);
-      } else {
-        console.log("Stripe onboarding complete for account:", account.id);
+        if (error) {
+          console.error("Failed to mark onboarding complete:", error);
+        } else {
+          console.log("Stripe onboarding complete for account:", account.id);
+        }
       }
     }
-  }
 
-  // ── checkout.session.completed ───────────────────────────
-  // Fires when a client successfully pays
-  if (stripeEvent.type === "checkout.session.completed") {
-    const session = stripeEvent.data.object;
+    // ── checkout.session.completed ───────────────────────────
+    // Fires when a client successfully pays
+    if (stripeEvent.type === "checkout.session.completed") {
+      const session = stripeEvent.data.object;
 
-    // Session completed on a connected account — get appointment_id from metadata
-    const appointmentId = session.metadata?.appointment_id;
-    const groomerId     = session.metadata?.groomer_id;
+      // Session completed on a connected account — get appointment_id from metadata
+      const appointmentId = session.metadata?.appointment_id;
+      const groomerId     = session.metadata?.groomer_id;
 
-    if (appointmentId && groomerId) {
-      const { error } = await supabase
-        .from("appointments")
-        .update({
-          paid:            true,
-          payment_url:     null, // clear so link can't be reused
-        })
-        .eq("id", appointmentId)
-        .eq("groomer_id", groomerId);
+      if (appointmentId && groomerId) {
+        const { error } = await supabase
+          .from("appointments")
+          .update({
+            paid:            true,
+            payment_url:     null, // clear so link can't be reused
+          })
+          .eq("id", appointmentId)
+          .eq("groomer_id", groomerId);
 
-      if (error) {
-        console.error("Failed to mark appointment paid:", error);
+        if (error) {
+          console.error("Failed to mark appointment paid:", error);
+        } else {
+          console.log("Appointment marked paid:", appointmentId);
+        }
       } else {
-        console.log("Appointment marked paid:", appointmentId);
+        console.error("checkout.session.completed missing appointment_id/groomer_id metadata:", session.id);
       }
     }
-  }
 
-  return { statusCode: 200, body: JSON.stringify({ received: true }) };
+    return { statusCode: 200, body: JSON.stringify({ received: true }) };
+  } catch (err) {
+    console.error("stripeConnectWebhook processing error:", err);
+    // Still return 200 for a genuinely unexpected error rather than 500 —
+    // returning 500 makes Stripe retry the same event repeatedly, which
+    // won't help if the failure is a code bug rather than a transient one.
+    // The error is logged either way for investigation.
+    return { statusCode: 200, body: JSON.stringify({ received: true, error: "logged" }) };
+  }
 };

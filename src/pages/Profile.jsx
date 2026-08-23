@@ -104,6 +104,7 @@ export default function Profile() {
         }
         setBookingRequiresApproval(data.booking_requires_approval || false);
         setBookingEnabled(data.booking_enabled !== false); // default true if null
+        setBookingClosedMessage(data.booking_closed_message || "");
         setFullName(data.full_name || "");
         setBio(data.bio || "");
         setBusinessAddress(data.business_address || "");
@@ -386,6 +387,8 @@ export default function Profile() {
   const [customFees, setCustomFees] = useState([]);
   const [bookingRequiresApproval, setBookingRequiresApproval] = useState(false);
   const [bookingEnabled, setBookingEnabled] = useState(true);
+  const [bookingClosedMessage, setBookingClosedMessage] = useState("");
+  const [savingClosedMessage, setSavingClosedMessage] = useState(false);
   const [stripeError, setStripeError] = useState("");
   const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
   const [customIntakeQuestions, setCustomIntakeQuestions] = useState(null);
@@ -931,6 +934,40 @@ export default function Profile() {
               </button>
             </div>
           </div>
+
+          {!bookingEnabled && (
+            <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-2">
+              <h3 className="font-bold text-sm text-[var(--text-1)]">What clients see instead</h3>
+              <p className="text-xs text-[var(--text-3)]">
+                Leave this blank to use our default message below, or write your own — good for saying you're
+                booked out a few weeks, on vacation, or just point them to a waitlist. Your business phone
+                number (set in your Profile info) automatically shows as tappable Call/Text buttons underneath
+                whatever message displays.
+              </p>
+              <textarea
+                value={bookingClosedMessage}
+                onChange={(e) => setBookingClosedMessage(e.target.value)}
+                rows={3}
+                placeholder={`📅 We're not accepting online bookings right now, but we'd still love to hear from you! Reach out to ${fullName || "us"} directly to grab a spot or get added to the waitlist.`}
+                className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2.5 text-sm bg-[var(--bg)] text-[var(--text-1)] resize-none"
+              />
+              <button
+                type="button"
+                disabled={savingClosedMessage}
+                onClick={async () => {
+                  setSavingClosedMessage(true);
+                  await supabase
+                    .from("groomers")
+                    .update({ booking_closed_message: bookingClosedMessage.trim() || null })
+                    .eq("id", user.id);
+                  setSavingClosedMessage(false);
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50"
+              >
+                {savingClosedMessage ? "Saving…" : "Save Message"}
+              </button>
+            </div>
+          )}
 
           <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4">
             <h3 className="font-bold text-[var(--text-1)] text-sm mb-1">Your Booking Page</h3>
