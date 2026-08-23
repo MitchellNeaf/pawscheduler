@@ -160,7 +160,7 @@ export default function BookPage() {
     (async () => {
       const { data, error: gErr } = await anonSupabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, booking_enabled, booking_closed_message, bio, business_address, business_phone, brand_color")
+        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, booking_enabled, booking_closed_message, bio, business_address, business_phone, sms_number, brand_color")
         .eq("slug", slug)
         .single();
 
@@ -897,14 +897,20 @@ export default function BookPage() {
                   ? groomer.booking_closed_message
                   : `📅 We're not accepting online bookings right now, but we'd still love to hear from you! Reach out to ${groomer?.full_name || "us"} directly to grab a spot or get added to the waitlist.`}
               </div>
-              {groomer?.business_phone && (
+              {(groomer?.business_phone || groomer?.sms_number) && (
                 <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-                  <a href={`tel:${groomer.business_phone}`}
-                    style={{ flex: 1, textAlign: "center", padding: "10px 12px", borderRadius: 10,
-                      background: "#10b981", color: "white", fontWeight: 700, fontSize: "0.85rem", textDecoration: "none" }}>
-                    📞 Call
-                  </a>
-                  <a href={`sms:${groomer.business_phone}`}
+                  {groomer?.business_phone && (
+                    <a href={`tel:${groomer.business_phone}`}
+                      style={{ flex: 1, textAlign: "center", padding: "10px 12px", borderRadius: 10,
+                        background: "#10b981", color: "white", fontWeight: 700, fontSize: "0.85rem", textDecoration: "none" }}>
+                      📞 Call
+                    </a>
+                  )}
+                  {/* Text prefers the dedicated number — replies land in the
+                      groomer's PawScheduler inbox instead of their personal
+                      phone, same as every other client conversation. Falls
+                      back to business_phone if they don't have one yet. */}
+                  <a href={`sms:${groomer.sms_number || groomer.business_phone}`}
                     style={{ flex: 1, textAlign: "center", padding: "10px 12px", borderRadius: 10,
                       border: "2px solid #10b981", color: "#10b981", fontWeight: 700, fontSize: "0.85rem", textDecoration: "none" }}>
                     💬 Text
