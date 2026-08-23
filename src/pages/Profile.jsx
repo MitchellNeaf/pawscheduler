@@ -48,6 +48,7 @@ export default function Profile() {
   const [fullName, setFullName] = useState("");
   const [bio, setBio] = useState("");
   const [businessAddress, setBusinessAddress] = useState("");
+  const [businessPhone, setBusinessPhone] = useState("");
   const [businessLat, setBusinessLat] = useState(null);
   const [geocodingBusiness, setGeocodingBusiness] = useState(false);
   const [slug, setSlug] = useState("");
@@ -108,6 +109,7 @@ export default function Profile() {
         setFullName(data.full_name || "");
         setBio(data.bio || "");
         setBusinessAddress(data.business_address || "");
+        setBusinessPhone(data.business_phone || "");
         setBusinessLat(data.business_lat || null);
         setSlug(data.slug || "");
         setLogoUrl(data.logo_url || null);
@@ -291,6 +293,7 @@ export default function Profile() {
         full_name: fullName,
         bio: bio.trim() || null,
         business_address: businessAddress.trim() || null,
+        business_phone: businessPhone.trim() || null,
         slug: cleanSlug,
         max_parallel: maxParallel,
         max_appts_per_day: maxApptsPerDay || null,
@@ -586,6 +589,20 @@ export default function Profile() {
               className="border rounded w-full p-2 text-sm resize-none"
             />
             <p className="text-xs text-gray-400 mt-1">Shown publicly on your booking page below your name.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Business Phone</label>
+            <p className="text-xs text-gray-400 mb-1.5">
+              Shown as a tappable Call/Text button to clients when online booking is turned off.
+            </p>
+            <input
+              type="tel"
+              value={businessPhone}
+              onChange={(e) => setBusinessPhone(e.target.value)}
+              placeholder="(555) 123-4567"
+              className="border rounded w-full p-2 text-sm"
+            />
           </div>
 
           {(planTier === "growth" || planTier === "pro") && (
