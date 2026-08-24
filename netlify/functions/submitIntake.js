@@ -109,6 +109,9 @@ exports.handler = async (event) => {
     emergency_contact_name:  emergencyData?.name?.trim() || null,
     emergency_contact_phone: emergencyData?.phone?.trim() || null,
     custom_intake_answers:   customAnswers && Object.keys(customAnswers).length ? customAnswers : null,
+    // Only set on TRUE — an unchecked box on a re-submission should never
+    // silently revoke consent someone already gave through another channel.
+    ...(clientData.sms_opt_in === true ? { sms_opt_in: true } : {}),
   };
 
   if (existingClients?.length > 0) {

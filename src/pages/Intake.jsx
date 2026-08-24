@@ -86,6 +86,7 @@ export default function IntakePage() {
   const [fullName, setFullName]   = useState("");
   const [phone, setPhone]         = useState("");
   const [email, setEmail]         = useState("");
+  const [smsOptIn, setSmsOptIn]   = useState(false); // must default false — consent must be affirmative
   const [street, setStreet]       = useState("");
   const [city, setCity]           = useState("");
   const [state, setState]         = useState("");
@@ -206,7 +207,7 @@ export default function IntakePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slug,
-          client: { full_name: fullName, phone, email, street, city, state, zip },
+          client: { full_name: fullName, phone, email, street, city, state, zip, sms_opt_in: smsOptIn },
           emergency: { name: emergName, phone: emergPhone },
           pets: pets.filter(p => p.name.trim()).map(p => ({
             ...p,
@@ -465,6 +466,23 @@ export default function IntakePage() {
                     value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
                 </div>
               </div>
+
+              <label className="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-[var(--border-med)] bg-[var(--surface-2)]">
+                <input
+                  type="checkbox"
+                  checked={smsOptIn}
+                  onChange={(e) => setSmsOptIn(e.target.checked)}
+                  className="mt-0.5 w-5 h-5 rounded accent-emerald-500 flex-shrink-0"
+                />
+                <span className="text-xs text-[var(--text-2)] leading-relaxed">
+                  I agree to receive text messages from <strong>{groomer?.full_name || "this business"}</strong> for
+                  appointment reminders and confirmations. Message frequency varies. Msg &amp; data rates may apply.
+                  Reply STOP to opt out, HELP for help. View our{" "}
+                  <a href="https://pawscheduler.app/privacy.html" target="_blank" rel="noreferrer" className="underline text-emerald-700">
+                    Privacy Policy
+                  </a>.
+                </span>
+              </label>
 
               <div>
                 <label className={labelCls}>Street address <span className="text-gray-400 font-normal">(optional)</span></label>
