@@ -38,12 +38,19 @@ exports.handler = async (event) => {
   // ── Load groomer ────────────────────────────────────────
   const { data: groomer } = await supabase
     .from("groomers")
-    .select("id, email, full_name, stripe_account_id")
+    .select("id, email, full_name, stripe_account_id, plan_tier")
     .eq("id", user.id)
     .single();
 
   if (!groomer) {
     return { statusCode: 404, body: JSON.stringify({ error: "Groomer not found" }) };
+  }
+
+  if (groomer.plan_tier !== "pro") {
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ error: "Client payments are a Pro feature. Upgrade your plan to use this." }),
+    };
   }
 
   const siteUrl = process.env.URL || "https://app.pawscheduler.app";

@@ -75,9 +75,16 @@ exports.handler = async (event) => {
   // ── Load groomer ────────────────────────────────────────
   const { data: groomer } = await supabase
     .from("groomers")
-    .select("stripe_account_id, stripe_onboarding_complete, full_name, business_name, email, logo_url, sms_number")
+    .select("stripe_account_id, stripe_onboarding_complete, full_name, business_name, email, logo_url, sms_number, plan_tier")
     .eq("id", user.id)
     .single();
+
+  if (groomer?.plan_tier !== "pro") {
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ error: "Client payments are a Pro feature. Upgrade your plan to use this." }),
+    };
+  }
 
   if (!groomer?.stripe_account_id || !groomer?.stripe_onboarding_complete) {
     return {

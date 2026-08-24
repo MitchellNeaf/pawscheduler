@@ -78,9 +78,16 @@ exports.handler = async (event) => {
   // ── Load groomer Stripe account ─────────────────────────
   const { data: groomer } = await supabase
     .from("groomers")
-    .select("stripe_account_id, stripe_onboarding_complete, full_name, business_name")
+    .select("stripe_account_id, stripe_onboarding_complete, full_name, business_name, plan_tier")
     .eq("id", user.id)
     .single();
+
+  if (groomer?.plan_tier !== "pro") {
+    return {
+      statusCode: 403,
+      body: JSON.stringify({ error: "Client payments are a Pro feature. Upgrade your plan to use this." }),
+    };
+  }
 
   if (!groomer?.stripe_account_id || !groomer?.stripe_onboarding_complete) {
     return {
@@ -100,48 +107,56 @@ exports.handler = async (event) => {
 
   const siteUrl = process.env.URL || "https://app.pawscheduler.app";
 
-  // ── Create Stripe Checkout session ──────────────────────
-  const session = await stripe.checkout.sessions.create(
-    {
-      mode: "payment",
-      payment_method_types: ["card"],
-      customer_email: clientEmail,
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            unit_amount: Math.round(appt.amount * 100), // cents
-            product_data: {
-              name: `${services} — ${petName}`,
-              description: `${groomerName} · ${appt.date}`,
+  try {
+    // ── Create Stripe Checkout session ──────────────────────
+    const session = await stripe.checkout.sessions.create(
+      {
+        mode: "payment",
+        payment_method_types: ["card"],
+        customer_email: clientEmail,
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              unit_amount: Math.round(appt.amount * 100), // cents
+              product_data: {
+                name: `${services} — ${petName}`,
+                description: `${groomerName} · ${appt.date}`,
+              },
             },
+            quantity: 1,
           },
-          quantity: 1,
+        ],
+        metadata: {
+          appointment_id: appt.id,
+          groomer_id:     user.id,
+          pet_name:       petName,
+          client_name:    clientName,
         },
-      ],
-      metadata: {
-        appointment_id: appt.id,
-        groomer_id:     user.id,
-        pet_name:       petName,
-        client_name:    clientName,
+        success_url: `${siteUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url:  `${siteUrl}/payment-cancelled`,
       },
-      success_url: `${siteUrl}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:  `${siteUrl}/payment-cancelled`,
-    },
-    {
-      // Route payment to groomer's connected account
-      stripeAccount: groomer.stripe_account_id,
-    }
-  );
+      {
+        // Route payment to groomer's connected account
+        stripeAccount: groomer.stripe_account_id,
+      }
+    );
 
-  // ── Save payment session URL to appointment ─────────────
-  await supabase
-    .from("appointments")
-    .update({ payment_url: session.url, payment_session_id: session.id })
-    .eq("id", appt.id);
+    // ── Save payment session URL to appointment ─────────────
+    await supabase
+      .from("appointments")
+      .update({ payment_url: session.url, payment_session_id: session.id })
+      .eq("id", appt.id);
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ url: session.url, sessionId: session.id }),
-  };
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ url: session.url, sessionId: session.id }),
+    };
+  } catch (err) {
+    console.error("createPaymentSession error:", err.message);
+    return {
+      statusCode: 502,
+      body: JSON.stringify({ error: err.message || "Could not create a payment link. Please try again." }),
+    };
+  }
 };
