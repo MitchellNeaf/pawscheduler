@@ -122,8 +122,10 @@ export default function Profile() {
         // Load custom intake questions; seed defaults if never set
         if (data.custom_intake_questions) {
           setCustomIntakeQuestions(data.custom_intake_questions);
+          setSavedIntakeQuestions(data.custom_intake_questions);
         } else {
           setCustomIntakeQuestions(DEFAULT_INTAKE_QUESTIONS);
+          setSavedIntakeQuestions(null); // nothing actually saved yet — defaults are just a starting point
         }
 
         // Load waiver text
@@ -395,6 +397,7 @@ export default function Profile() {
   const [stripeError, setStripeError] = useState("");
   const [planTier, setPlanTier] = useState("free"); // defaults to most restricted until loaded
   const [customIntakeQuestions, setCustomIntakeQuestions] = useState(null);
+  const [savedIntakeQuestions, setSavedIntakeQuestions] = useState(null); // last known DB state, for the unsaved-changes cue
   const [waiverText, setWaiverText] = useState("");
   const [brandColor, setBrandColor] = useState("forest");
   const [savingIntake, setSavingIntake] = useState(false);
@@ -1912,9 +1915,20 @@ export default function Profile() {
               <div>
                 <h2 className="text-lg font-bold text-[var(--text-1)] mb-1">Intake Form Questions</h2>
                 <p className="text-sm text-[var(--text-3)]">
-                  Customize the questions clients answer when filling out your intake form. Edit, remove, or add new questions. Changes apply immediately to your public intake page.
+                  Customize the questions clients answer when filling out your intake form. Edit, remove, or add new questions, then save to publish them to your public intake page.
                 </p>
               </div>
+
+              {JSON.stringify(customIntakeQuestions) !== JSON.stringify(savedIntakeQuestions) && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
+                  <span>⚠️</span>
+                  <span>
+                    {savedIntakeQuestions === null
+                      ? "These are unsaved starter questions — nothing is live on your intake form yet."
+                      : "You have unsaved changes — clients won't see these until you save."}
+                  </span>
+                </div>
+              )}
 
               {/* Question type legend */}
               <div className="flex flex-wrap gap-2 text-xs text-[var(--text-3)]">
@@ -2058,6 +2072,7 @@ export default function Profile() {
                     .eq("id", user.id);
                   setSavingIntake(false);
                   if (!error) {
+                    setSavedIntakeQuestions(customIntakeQuestions);
                     setConfirmConfig({ title: "Saved! ✓", message: "Your intake form questions have been updated.", confirmLabel: "OK", onConfirm: () => {} });
                   } else {
                     setConfirmConfig({ title: "Could not save", message: error.message || "Something went wrong.", confirmLabel: "OK", onConfirm: () => {} });
