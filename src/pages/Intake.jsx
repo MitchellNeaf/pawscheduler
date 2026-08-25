@@ -87,6 +87,7 @@ export default function IntakePage() {
   const [phone, setPhone]         = useState("");
   const [email, setEmail]         = useState("");
   const [smsOptIn, setSmsOptIn]   = useState(false); // must default false — consent must be affirmative
+  const [policyAgreed, setPolicyAgreed] = useState(false); // separate from SMS opt-in per Telnyx's current rule
   const [street, setStreet]       = useState("");
   const [city, setCity]           = useState("");
   const [state, setState]         = useState("");
@@ -189,6 +190,7 @@ export default function IntakePage() {
     if (!fullName.trim()) { setSubmitError("Please enter your full name."); return; }
     if (!phone.trim())    { setSubmitError("Please enter your phone number."); return; }
     if (!pets[0]?.name?.trim()) { setSubmitError("Please enter at least one pet's name."); return; }
+    if (!policyAgreed) { setSubmitError("Please agree to the Privacy Policy and Terms & Conditions to continue."); return; }
 
     // Validate required custom questions
     const questions = groomer?.custom_intake_questions || [];
@@ -477,9 +479,25 @@ export default function IntakePage() {
                 <span className="text-xs text-[var(--text-2)] leading-relaxed">
                   I agree to receive text messages from <strong>{groomer?.full_name || "this business"}</strong> for
                   appointment reminders and confirmations. Message frequency varies. Msg &amp; data rates may apply.
-                  Reply STOP to opt out, HELP for help. View our{" "}
+                  Consent is not a condition of purchase. Reply STOP to opt out, HELP for help.
+                </span>
+              </label>
+
+              <label className="flex items-start gap-3 cursor-pointer p-3 rounded-xl border border-[var(--border-med)] bg-[var(--surface-2)]">
+                <input
+                  type="checkbox"
+                  checked={policyAgreed}
+                  onChange={(e) => setPolicyAgreed(e.target.checked)}
+                  className="mt-0.5 w-5 h-5 rounded accent-emerald-500 flex-shrink-0"
+                />
+                <span className="text-xs text-[var(--text-2)] leading-relaxed">
+                  I have read and agree to PawScheduler's{" "}
                   <a href="https://pawscheduler.app/privacy.html" target="_blank" rel="noreferrer" className="underline text-emerald-700">
                     Privacy Policy
+                  </a>{" "}
+                  and{" "}
+                  <a href="https://pawscheduler.app/terms.html" target="_blank" rel="noreferrer" className="underline text-emerald-700">
+                    Terms &amp; Conditions
                   </a>.
                 </span>
               </label>
