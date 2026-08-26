@@ -872,6 +872,16 @@ function AppointmentModal({
             </div>
           )}
 
+          {(isEdit ? appt.pets?.tags : pet.tags)?.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {(isEdit ? appt.pets.tags : pet.tags).map((tag, i) => (
+                <span key={`${tag}-${i}`} className={`px-2.5 py-1 text-xs rounded-full ${tagClasses(tag)}`}>
+                  {HIGH_SEVERITY_TAGS.includes(tag) ? `⚠️ ${tag}` : tag}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Booked together with — other pets in this multi-pet group */}
           {isEdit && groupSiblings.length > 0 && (
             <div className="p-2.5 bg-violet-50 border border-violet-200 rounded-lg text-xs text-violet-800">
@@ -1916,6 +1926,20 @@ function MonthView({ userId, selectedDate, onDayClick, monthOffset, setMonthOffs
 
 /* ---------------- Map View ---------------- */
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// Behavioral tags aren't all equally urgent — Bites/Aggressive are real
+// safety concerns for whoever's handling the dog, Anxious is a handling
+// consideration, and the rest (Senior, Matting, Arthritis, Blind, Deaf,
+// Allergies) are informational care notes, not warnings. Color reflects that.
+const HIGH_SEVERITY_TAGS = ["Bites", "Aggressive"];
+const MED_SEVERITY_TAGS = ["Anxious"];
+function tagClasses(tag) {
+  if (HIGH_SEVERITY_TAGS.includes(tag)) return "bg-red-100 text-red-700 font-bold";
+  if (MED_SEVERITY_TAGS.includes(tag)) return "bg-amber-100 text-amber-700 font-semibold";
+  return "bg-gray-100 text-gray-600";
+}
+const hasHighSeverityTag = (tags) => (tags || []).some((t) => HIGH_SEVERITY_TAGS.includes(t));
+
 // Must match GROWTH_MONTHLY_LIMIT in netlify/functions/optimizeRoute.js —
 // used here only to display the count before the button's ever pressed;
 // the real enforcement always happens server-side.
@@ -4021,16 +4045,21 @@ export default function Schedule() {
                                   );
                                 })()}
 
-                                {/* Pet name + vaccine icon */}
+                                {/* Pet name + vaccine icon + behavioral warning */}
                                 <div className="flex items-center justify-between gap-1">
                                   <span className="font-semibold text-[11px] text-gray-900 truncate leading-tight">
                                     {appt.appointment_group_id
                                       ? groupPetNames(appointments.filter(a => a.appointment_group_id === appt.appointment_group_id))
                                       : appt.pets?.name || "Pet"}
                                   </span>
-                                  {vaccineIcon && (
-                                    <span className="text-[11px] flex-shrink-0">{vaccineIcon}</span>
-                                  )}
+                                  <span className="flex items-center gap-0.5 flex-shrink-0">
+                                    {hasHighSeverityTag(appt.pets?.tags) && (
+                                      <span className="text-[11px]" title={appt.pets.tags.filter(t => HIGH_SEVERITY_TAGS.includes(t)).join(", ")}>⚠️</span>
+                                    )}
+                                    {vaccineIcon && (
+                                      <span className="text-[11px]">{vaccineIcon}</span>
+                                    )}
+                                  </span>
                                 </div>
 
                                 {/* Client name — tappable, stops propagation */}
@@ -4251,10 +4280,16 @@ export default function Schedule() {
               ? group.map(a => `${a.pets?.name}: ${(Array.isArray(a.services) ? a.services : [a.services || ""]).join(", ")}`).join(" | ")
               : Array.isArray(appt.services) ? appt.services.join(", ") : appt.services || "";
 
+            const cardHasHighSeverityTag = isMulti
+              ? group.some((a) => hasHighSeverityTag(a.pets?.tags))
+              : hasHighSeverityTag(appt.pets?.tags);
+
             return (
               <div
                 key={isMulti ? appt.appointment_group_id : appt.id}
                 className={`card relative pt-2 transition-all ${
+                  cardHasHighSeverityTag ? "border-l-4 border-l-red-500" : ""
+                } ${
                   search.trim().length > 0 && matchesSearch(appt, search)
                     ? "search-match"
                     : search.trim().length > 0
@@ -4472,9 +4507,9 @@ export default function Schedule() {
                             {appt.pets.tags.map((tag, tagIdx) => (
                               <span
                                 key={`${tag}-${tagIdx}`}
-                                className="px-2 py-0.5 text-[11px] rounded bg-gray-100 text-gray-600"
+                                className={`px-2 py-0.5 text-[11px] rounded ${tagClasses(tag)}`}
                               >
-                                {tag}
+                                {HIGH_SEVERITY_TAGS.includes(tag) ? `⚠️ ${tag}` : tag}
                               </span>
                             ))}
                           </div>
