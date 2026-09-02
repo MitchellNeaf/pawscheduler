@@ -1051,6 +1051,15 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body || "{}"); }
   catch { return { statusCode: 400, body: "Invalid JSON" }; }
 
+  // Telnyx sends this webhook for every message event, not just new inbound
+  // texts — delivery receipts and status updates for the bot's OWN outbound
+  // messages come through here too. Without this check, the bot's own reply
+  // gets treated as a fresh inbound message and processed again, then fails
+  // trying to reply to itself (Telnyx rejects same-number send/receive).
+  if (body?.data?.event_type !== "message.received") {
+    return { statusCode: 200, body: "Ignored — not a new inbound message" };
+  }
+
   const fromPhone   = body?.data?.payload?.from?.phone_number;
   const incomingText = body?.data?.payload?.text?.trim();
 
