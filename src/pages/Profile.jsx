@@ -70,6 +70,7 @@ export default function Profile() {
 
   // ---------------- CONFIRM MODAL ----------------
   const [confirmConfig, setConfirmConfig] = useState(null);
+  const [billingLoading, setBillingLoading] = useState(false);
 
   // ---------------- LOAD USER ----------------
   useEffect(() => {
@@ -404,31 +405,47 @@ export default function Profile() {
 
   // ---------------- BILLING PORTAL ----------------
   const handleManageBilling = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    if (!session) return;
+    if (billingLoading) return; // guard against a double-tap firing this twice
+    setBillingLoading(true);
 
-    const resp = await fetch("/.netlify/functions/billingPortal", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        returnUrl: window.location.origin + "/profile",
-      }),
-    });
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
 
-    const json = await resp.json();
-    if (json.url) window.location.href = json.url;
-    else {
+      const resp = await fetch("/.netlify/functions/billingPortal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          returnUrl: window.location.origin + "/profile",
+        }),
+      });
+
+      const json = await resp.json();
+      if (json.url) {
+        window.location.href = json.url;
+        return; // page is navigating to Stripe — no need to update UI state further
+      } else {
+        setConfirmConfig({
+          title: "Could not open billing",
+          message: json.error || "Please try again or contact support.",
+          confirmLabel: "OK",
+          onConfirm: () => {},
+        });
+      }
+    } catch (err) {
       setConfirmConfig({
         title: "Could not open billing",
-        message: json.error || "Please try again or contact support.",
+        message: "Please check your connection and try again.",
         confirmLabel: "OK",
         onConfirm: () => {},
       });
+    } finally {
+      setBillingLoading(false);
     }
   };
 
@@ -520,7 +537,7 @@ export default function Profile() {
       <h1 className="text-2xl font-bold mb-3">Settings</h1>
 
       <TrialBanner userId={user?.id} />
-      <SubscriptionStatus userId={user?.id} onManageBilling={handleManageBilling} />
+      <SubscriptionStatus userId={user?.id} onManageBilling={handleManageBilling} billingLoading={billingLoading} />
 
       {/* TAB BAR */}
       <div className="relative mt-4 mb-6">
@@ -559,7 +576,7 @@ export default function Profile() {
         <div className="space-y-4">
 
           {/* ── Account Info Card ── */}
-          <AccountInfoCard userId={user?.id} planTier={planTier} onManageBilling={handleManageBilling} />
+          <AccountInfoCard userId={user?.id} planTier={planTier} onManageBilling={handleManageBilling} billingLoading={billingLoading} />
 
           <div className="flex flex-col items-center gap-3">
             {logoUrl ? (
@@ -2317,7 +2334,7 @@ function SmsBotSection({ userId }) {
 
 /* ---------------- TRIAL BANNER ---------------- */
 /* ---------------- ACCOUNT INFO CARD ---------------- */
-function AccountInfoCard({ userId, planTier, onManageBilling }) {
+function AccountInfoCard({ userId, planTier, onManageBilling, billingLoading }) {
   const [info, setInfo] = useState(null);
 
   useEffect(() => {
@@ -2397,9 +2414,9 @@ function AccountInfoCard({ userId, planTier, onManageBilling }) {
           {info.plan_tier === "free" ? "Upgrade Plan" : "Change Plan"}
         </a>
         {info.stripe_customer_id && info.subscription_status === "active" && (
-          <button onClick={onManageBilling}
-            className="flex-1 py-2 rounded-xl border border-[var(--border-med)] text-xs font-semibold text-[var(--text-2)] hover:bg-[var(--surface-2)] transition">
-            Manage Billing
+          <button onClick={onManageBilling} disabled={billingLoading}
+            className="flex-1 py-2 rounded-xl border border-[var(--border-med)] text-xs font-semibold text-[var(--text-2)] hover:bg-[var(--surface-2)] transition disabled:opacity-50">
+            {billingLoading ? "Loading…" : "Manage Billing"}
           </button>
         )}
       </div>
@@ -2462,7 +2479,7 @@ function TrialBanner({ userId }) {
 }
 
 /* ---------------- SUBSCRIPTION STATUS ---------------- */
-function SubscriptionStatus({ userId, onManageBilling }) {
+function SubscriptionStatus({ userId, onManageBilling, billingLoading }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -2511,8 +2528,8 @@ function SubscriptionStatus({ userId, onManageBilling }) {
       )}
 
       {!isFree && sub === "active" && (
-        <button onClick={onManageBilling} className="btn-primary w-full mt-3">
-          Manage Billing
+        <button onClick={onManageBilling} disabled={billingLoading} className="btn-primary w-full mt-3 disabled:opacity-50">
+          {billingLoading ? "Loading…" : "Manage Billing"}
         </button>
       )}
 
