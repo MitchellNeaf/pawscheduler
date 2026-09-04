@@ -119,6 +119,7 @@ function PetEditModal({
   setExtraPhotos,
   newPhotoFiles,
   setNewPhotoFiles,
+  savingPet,
 }) {
   if (!open) return null;
 
@@ -401,11 +402,11 @@ function PetEditModal({
           </div>
 
           <div className="flex gap-3 pt-2 justify-end">
-            <button type="button" className="btn-secondary" onClick={onClose}>
+            <button type="button" className="btn-secondary" onClick={onClose} disabled={savingPet}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary">
-              {editingId ? "Update Pet" : "Add Pet"}
+            <button type="submit" className="btn-primary disabled:opacity-50" disabled={savingPet}>
+              {savingPet ? "Saving…" : editingId ? "Update Pet" : "Add Pet"}
             </button>
           </div>
         </form>
@@ -538,6 +539,7 @@ export default function ClientPets() {
   const [intakeQuestions, setIntakeQuestions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingClient, setSavingClient] = useState(false);
+  const [savingPet, setSavingPet] = useState(false);
   const [serviceAreas, setServiceAreas] = useState([]);
   const [geocoding, setGeocoding] = useState(false);
 
@@ -737,7 +739,10 @@ export default function ClientPets() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!user) return;
+    if (savingPet) return; // guard against a repeated/impatient click firing this again
+    setSavingPet(true);
 
+    try {
     const finalTags = otherTag
       ? [...new Set([...form.tags.filter((t) => t !== "Other"), otherTag])]
       : form.tags;
@@ -763,21 +768,26 @@ export default function ClientPets() {
       }
     }
 
-    // Upload additional photos
+    // Upload additional photos — in parallel rather than one at a time,
+    // since a sequential loop here was the real reason this could take
+    // 20-30+ seconds with multiple photos, which is what led to someone
+    // clicking Submit repeatedly in the first place.
     let allUrls = [...extraPhotos]; // start with existing kept photos
-    for (let i = 0; i < newPhotoFiles.length; i++) {
-      const file = newPhotoFiles[i];
-      const path = `${user.id}/${editingId || `new-${Date.now()}`}/extra-${Date.now()}-${i}.jpg`;
-      const { error: upErr } = await supabase.storage
-        .from("pet-photos")
-        .upload(path, file, { upsert: true, contentType: "image/jpeg" });
-      if (!upErr) {
+    const uploadResults = await Promise.all(
+      newPhotoFiles.map(async (file, i) => {
+        const path = `${user.id}/${editingId || `new-${Date.now()}`}/extra-${Date.now()}-${i}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from("pet-photos")
+          .upload(path, file, { upsert: true, contentType: "image/jpeg" });
+        if (upErr) {
+          console.error("Extra photo upload failed:", upErr.message);
+          return null;
+        }
         const { data: pub } = supabase.storage.from("pet-photos").getPublicUrl(path);
-        allUrls.push(pub.publicUrl + "?v=" + Date.now());
-      } else {
-        console.error("Extra photo upload failed:", upErr.message);
-      }
-    }
+        return pub.publicUrl + "?v=" + Date.now();
+      })
+    );
+    allUrls.push(...uploadResults.filter(Boolean));
 
     // If no primary photo but we have extra photos, promote first extra
     if (!photoUrl && allUrls.length > 0) {
@@ -836,6 +846,9 @@ export default function ClientPets() {
         setPets((prev) => [data, ...prev]);
         resetForm();
       }
+    }
+    } finally {
+      setSavingPet(false);
     }
   };
 
@@ -1484,6 +1497,7 @@ export default function ClientPets() {
         setExtraPhotos={setExtraPhotos}
         newPhotoFiles={newPhotoFiles}
         setNewPhotoFiles={setNewPhotoFiles}
+        savingPet={savingPet}
       />
 
       {/* SHOT MODAL */}
