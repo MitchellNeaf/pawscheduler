@@ -8,6 +8,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// Single shared number for the AI bot, used by every Pro groomer —
+// not a per-groomer dedicated number. See Profile's SMS Bot tab.
+const SHARED_BOT_NUMBER = "+18332370040";
+
 const PRO_PRICE_IDS = new Set([
   "price_1TPYoh1RxmPJHwWbPV02049p",
   "price_1TPYp11RxmPJHwWbHbkYTZwq",
@@ -136,6 +140,7 @@ exports.handler = async (event) => {
           stripe_subscription_id: subscriptionId,
           plan_tier: planTier,
           sms_bot_enabled: planTier === "pro",
+          sms_bot_number: planTier === "pro" ? SHARED_BOT_NUMBER : null,
           cancel_at_period_end: subscription.cancel_at_period_end || false,
           current_period_end: currentPeriodEnd,
         },
@@ -190,6 +195,7 @@ exports.handler = async (event) => {
           subscription_status: status,
           plan_tier: planTier,
           sms_bot_enabled: planTier === "pro" && status === "active",
+          sms_bot_number: (planTier === "pro" && status === "active") ? SHARED_BOT_NUMBER : null,
           cancel_at_period_end: subscription.cancel_at_period_end || false,
           current_period_end: currentPeriodEnd,
         })
@@ -210,6 +216,7 @@ exports.handler = async (event) => {
           subscription_status: "free",
           plan_tier: "free",
           sms_bot_enabled: false,
+          sms_bot_number: null,
           cancel_at_period_end: false,
         })
         .eq("stripe_customer_id", customerId);
