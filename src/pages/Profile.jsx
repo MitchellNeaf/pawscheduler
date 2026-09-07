@@ -105,6 +105,7 @@ export default function Profile() {
           })));
         }
         setBookingRequiresApproval(data.booking_requires_approval || false);
+        setAllowNewClients(data.allow_new_clients || false);
         setBookingEnabled(data.booking_enabled !== false); // default true if null
         setBookingClosedMessage(data.booking_closed_message || "");
         setFullName(data.full_name || "");
@@ -302,6 +303,7 @@ export default function Profile() {
         max_appts_per_day: maxApptsPerDay || null,
         time_zone: timeZone,
         booking_requires_approval: bookingRequiresApproval,
+        allow_new_clients: allowNewClients,
         booking_enabled: bookingEnabled,
         reminder_message_template: reminderTemplate.trim() || null,
         sms_confirmation_template: confirmationTemplate.trim() || null,
@@ -392,6 +394,7 @@ export default function Profile() {
   const [customAddons, setCustomAddons] = useState([]);
   const [customFees, setCustomFees] = useState([]);
   const [bookingRequiresApproval, setBookingRequiresApproval] = useState(false);
+  const [allowNewClients, setAllowNewClients] = useState(false);
   const [bookingEnabled, setBookingEnabled] = useState(true);
   const [bookingClosedMessage, setBookingClosedMessage] = useState("");
   const [savingClosedMessage, setSavingClosedMessage] = useState(false);
@@ -675,22 +678,6 @@ export default function Profile() {
             </div>
           )}
 
-                    {/* Booking Approval */}
-          <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-[var(--text-1)] text-sm">Require Booking Approval</h3>
-                <p className="text-xs text-[var(--text-3)] mt-0.5">Clients submit a request instead of booking directly. You approve or decline from your schedule.</p>
-              </div>
-              <button
-                onClick={() => setBookingRequiresApproval(prev => !prev)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ml-4 ${bookingRequiresApproval ? "bg-emerald-500" : "bg-gray-200"}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${bookingRequiresApproval ? "translate-x-6" : "translate-x-1"}`} />
-              </button>
-            </div>
-          </div>
-
           {/* ── SMS REMINDERS & CONFIRMATIONS — Basic+ ── */}
           {(planTier === "basic" || planTier === "growth" || planTier === "pro") ? (
           <>
@@ -968,6 +955,42 @@ export default function Profile() {
                 <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
                   bookingEnabled ? "translate-x-6" : "translate-x-1"
                 }`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Booking Approval */}
+          <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-[var(--text-1)] text-sm">Require Booking Approval</h3>
+                <p className="text-xs text-[var(--text-3)] mt-0.5">Clients submit a request instead of booking directly. You approve or decline from your schedule.</p>
+              </div>
+              <button
+                onClick={() => setBookingRequiresApproval(prev => !prev)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ml-4 ${bookingRequiresApproval ? "bg-emerald-500" : "bg-gray-200"}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${bookingRequiresApproval ? "translate-x-6" : "translate-x-1"}`} />
+              </button>
+            </div>
+          </div>
+
+          {/* Allow New Clients to Self-Book */}
+          <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-[var(--text-1)] text-sm">Allow New Clients to Book</h3>
+                <p className="text-xs text-[var(--text-3)] mt-0.5">
+                  Let people who aren't your clients yet book their first appointment directly from your booking page,
+                  instead of needing to contact you first. Their first booking always requires your approval,
+                  regardless of the setting above.
+                </p>
+              </div>
+              <button
+                onClick={() => setAllowNewClients(prev => !prev)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ml-4 ${allowNewClients ? "bg-emerald-500" : "bg-gray-200"}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${allowNewClients ? "translate-x-6" : "translate-x-1"}`} />
               </button>
             </div>
           </div>

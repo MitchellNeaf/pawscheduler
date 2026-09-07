@@ -120,6 +120,13 @@ export default function BookPage() {
 
   const [clientForm, setClientForm] = useState({ name: "", last4: "" });
   const [client, setClient] = useState(null);
+  const [isNewClientFirstBooking, setIsNewClientFirstBooking] = useState(false);
+  const [newClientForm, setNewClientForm] = useState({
+    name: "", phone: "", email: "", smsOptIn: false,
+    petName: "", petBreed: "", petSize: 1,
+  });
+  const [newClientSubmitting, setNewClientSubmitting] = useState(false);
+  const [newClientError, setNewClientError] = useState("");
 
   // "login" | "home" | "book" | "cancel"
   const [view, setView] = useState("login");
@@ -160,7 +167,7 @@ export default function BookPage() {
     (async () => {
       const { data, error: gErr } = await anonSupabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, booking_enabled, booking_closed_message, bio, business_address, business_phone, sms_number, brand_color")
+        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, booking_enabled, booking_closed_message, allow_new_clients, bio, business_address, business_phone, sms_number, brand_color")
         .eq("slug", slug)
         .single();
 
@@ -530,14 +537,19 @@ export default function BookPage() {
         time: form.time,
         duration_min: Number(form.duration_min),
         services: form.services,
-        confirmed: groomer?.booking_requires_approval ? false : false,
+        // Bug fix: this used to be `groomer?.booking_requires_approval ? false : false`
+        // — both branches were false, so every booking silently required
+        // approval regardless of the groomer's actual setting. Also: a
+        // brand-new, never-vetted client's first booking always requires
+        // approval no matter what, even if the groomer normally auto-confirms.
+        confirmed: isNewClientFirstBooking ? false : !groomer?.booking_requires_approval,
+        source: isNewClientFirstBooking ? "new_client_booking" : "booking_page",
         no_show: false,
         amount: autoAmount > 0 ? autoAmount : null,
         paid: false,
         notes: form.notes || "",
         slot_weight: slotWeight,
         size_category: sizeCategory,
-        source: "booking_page",
       },
     ]).select("id");
 
@@ -557,7 +569,9 @@ export default function BookPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             to: groomer.email,
-            subject: `New booking — ${pets.find((p) => p.id === selectedPetId)?.name || "a pet"} on ${form.date}`,
+            subject: isNewClientFirstBooking
+              ? `🆕 NEW CLIENT — ${pets.find((p) => p.id === selectedPetId)?.name || "a pet"} on ${form.date} — please review`
+              : `New booking — ${pets.find((p) => p.id === selectedPetId)?.name || "a pet"} on ${form.date}`,
             template: "groomer_notification",
             data: {
               pet_name: pets.find((p) => p.id === selectedPetId)?.name || "—",
@@ -567,23 +581,30 @@ export default function BookPage() {
               duration_min: form.duration_min,
               services: form.services.join(", "),
               amount: autoAmount > 0 ? `$${autoAmount.toFixed(2)}` : "—",
-              notes: form.notes || "",
+              notes: isNewClientFirstBooking
+                ? `⚠️ This is a NEW CLIENT you haven't met before — their first booking always needs your approval, regardless of your usual setting. ${form.notes || ""}`.trim()
+                : (form.notes || ""),
             },
           }),
         }).catch(() => {}); // don't block on email failure
       }
 
       // SMS alert to groomer (fire-and-forget)
+      // Bug fix: this was sending `groomerId`, but notifyGroomerSms.js
+      // requires `slug` (deliberately — it's a public, no-auth function).
+      // The mismatch meant every SMS alert silently failed with "Missing
+      // slug" — groomers likely never received a single one of these.
       fetch("/.netlify/functions/notifyGroomerSms", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          groomerId,
+          slug,
           petName: pets.find((p) => p.id === selectedPetId)?.name || "a pet",
           clientName: client?.full_name || "a client",
           date: form.date,
           time: form.time,
           requiresApproval: groomer?.booking_requires_approval || false,
+          isNewClient: isNewClientFirstBooking,
         }),
       }).catch(() => {});
 
@@ -593,8 +614,12 @@ export default function BookPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           groomerId,
-          title: groomer?.booking_requires_approval ? "New Booking Request" : "New Booking",
-          message: `${client?.full_name || "A client"} booked ${pets.find((p) => p.id === selectedPetId)?.name || "a pet"} on ${form.date}`,
+          title: isNewClientFirstBooking
+            ? "🆕 New Client Booking Request"
+            : groomer?.booking_requires_approval ? "New Booking Request" : "New Booking",
+          message: isNewClientFirstBooking
+            ? `${client?.full_name || "Someone new"} (new client) wants to book ${pets.find((p) => p.id === selectedPetId)?.name || "a pet"} on ${form.date} — please review`
+            : `${client?.full_name || "A client"} booked ${pets.find((p) => p.id === selectedPetId)?.name || "a pet"} on ${form.date}`,
           url: "https://app.pawscheduler.app/schedule",
         }),
       }).catch(() => {});
@@ -883,9 +908,127 @@ export default function BookPage() {
               Continue →
             </button>
           </form>
-          <p style={{ textAlign: "center", fontSize: "0.75rem", color: "#9ca3af", marginTop: 12 }}>
-            New client? Contact us to get set up.
+          {groomer?.allow_new_clients ? (
+            <button
+              type="button"
+              onClick={() => { setNewClientError(""); setView("new_client"); }}
+              style={{ display: "block", width: "100%", textAlign: "center", fontSize: "0.8rem", marginTop: 12,
+                color: getTheme(groomer?.brand_color).accent, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}
+            >
+              New client? Book your first appointment →
+            </button>
+          ) : (
+            <p style={{ textAlign: "center", fontSize: "0.75rem", color: "#9ca3af", marginTop: 12 }}>
+              New client? Contact us to get set up.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── NEW CLIENT INFO VIEW ── */}
+      {view === "new_client" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <button type="button" onClick={() => setView("login")}
+            style={{ alignSelf: "flex-start", background: "none", border: "none", color: "#6b7280", fontSize: "0.85rem", cursor: "pointer" }}>
+            ← Back
+          </button>
+          <p style={{ textAlign: "center", color: "#6b7280", fontSize: "0.9rem" }}>
+            Let's get you set up — just a few details before picking a time.
           </p>
+
+          <input placeholder="Your full name" value={newClientForm.name}
+            onChange={(e) => setNewClientForm(f => ({ ...f, name: e.target.value }))}
+            style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "1rem" }} required />
+
+          <input placeholder="Phone number" type="tel" value={newClientForm.phone}
+            onChange={(e) => setNewClientForm(f => ({ ...f, phone: e.target.value }))}
+            style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "1rem" }} required />
+
+          <input placeholder="Email (optional)" type="email" value={newClientForm.email}
+            onChange={(e) => setNewClientForm(f => ({ ...f, email: e.target.value }))}
+            style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "1rem" }} />
+
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: 12, borderRadius: 8, border: "1px solid #e5e7eb", background: "#f9fafb" }}>
+            <input type="checkbox" checked={newClientForm.smsOptIn}
+              onChange={(e) => setNewClientForm(f => ({ ...f, smsOptIn: e.target.checked }))}
+              style={{ marginTop: 2 }} />
+            <span style={{ fontSize: "0.75rem", color: "#4b5563", lineHeight: 1.5 }}>
+              I agree to receive text messages from <strong>{groomer?.full_name || "this business"}</strong> for
+              appointment reminders and confirmations. Message frequency varies. Msg &amp; data rates may apply.
+              Reply STOP to opt out, HELP for help. View our{" "}
+              <a href="https://pawscheduler.app/privacy.html" target="_blank" rel="noreferrer" style={{ color: "#059669" }}>Privacy Policy</a>{" "}
+              and{" "}
+              <a href="https://pawscheduler.app/terms.html" target="_blank" rel="noreferrer" style={{ color: "#059669" }}>Terms &amp; Conditions</a>.
+            </span>
+          </label>
+
+          <div style={{ height: 1, background: "#e5e7eb", margin: "4px 0" }} />
+
+          <input placeholder="Your dog's name" value={newClientForm.petName}
+            onChange={(e) => setNewClientForm(f => ({ ...f, petName: e.target.value }))}
+            style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "1rem" }} required />
+
+          <input placeholder="Breed (optional)" value={newClientForm.petBreed}
+            onChange={(e) => setNewClientForm(f => ({ ...f, petBreed: e.target.value }))}
+            style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "1rem" }} />
+
+          <select value={newClientForm.petSize}
+            onChange={(e) => setNewClientForm(f => ({ ...f, petSize: Number(e.target.value) }))}
+            style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "1rem" }}>
+            <option value={1}>Small (under 25 lbs)</option>
+            <option value={2}>Medium (25–40 lbs)</option>
+            <option value={3}>Large (40–80 lbs)</option>
+            <option value={4}>XL (80+ lbs)</option>
+          </select>
+
+          {newClientError && <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{newClientError}</p>}
+
+          <button
+            type="button"
+            disabled={newClientSubmitting}
+            onClick={async () => {
+              setNewClientError("");
+              if (!newClientForm.name.trim() || !newClientForm.phone.trim() || !newClientForm.petName.trim()) {
+                setNewClientError("Please fill in your name, phone, and your dog's name.");
+                return;
+              }
+              setNewClientSubmitting(true);
+              try {
+                const res = await fetch("/.netlify/functions/submitNewClientBooking", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    slug,
+                    client: { full_name: newClientForm.name, phone: newClientForm.phone, email: newClientForm.email, sms_opt_in: newClientForm.smsOptIn },
+                    pet: { name: newClientForm.petName, breed: newClientForm.petBreed, size_category: newClientForm.petSize },
+                  }),
+                });
+                const json = await res.json();
+                if (!res.ok || json.error) {
+                  setNewClientError(json.error || "Something went wrong. Please try again.");
+                  return;
+                }
+                // Log them in exactly as if they'd just matched on the
+                // login screen — reuses the entire existing, tested
+                // slot-picker flow rather than duplicating it.
+                setClient(json.client);
+                setPets([json.pet]);
+                setSelectedPetId(json.pet.id);
+                setSelectedPetWeight(json.pet.size_category === 3 ? 2 : json.pet.size_category === 4 ? 3 : 1);
+                setSelectedPetSizeCategory(json.pet.size_category || 1);
+                setIsNewClientFirstBooking(true);
+                setView("book");
+              } catch {
+                setNewClientError("Network error. Please check your connection and try again.");
+              } finally {
+                setNewClientSubmitting(false);
+              }
+            }}
+            style={{ padding: "12px", borderRadius: 8,
+              background: getTheme(groomer?.brand_color).accent, color: "#fff",
+              fontWeight: 700, border: "none", cursor: "pointer", fontSize: "0.95rem" }}>
+            {newClientSubmitting ? "Setting you up…" : "Continue to pick a time →"}
+          </button>
         </div>
       )}
 

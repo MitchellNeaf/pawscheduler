@@ -2630,9 +2630,9 @@ export default function Schedule() {
     if (!user) return;
     supabase
       .from("appointments")
-      .select("id, date, time, waitlist, pets(name, clients(full_name))")
+      .select("id, date, time, waitlist, source, pets(name, clients(full_name))")
       .eq("groomer_id", user.id)
-      .eq("source", "booking_page")
+      .in("source", ["booking_page", "new_client_booking"])
       .eq("confirmed", false)
       .gte("date", new Date().toISOString().slice(0, 10))
       .order("date", { ascending: true })
@@ -3636,14 +3636,17 @@ export default function Schedule() {
       )}
 
       {/* Pending booking requests banner — shows ALL pending across all dates */}
-      {groomer?.booking_requires_approval && allPendingRequests.length > 0 && (() => {
-        const pending    = allPendingRequests.filter(r => !r.waitlist);
+      {allPendingRequests.length > 0 && (() => {
+        const newClients = allPendingRequests.filter(r => r.source === "new_client_booking" && !r.waitlist);
+        const pending    = allPendingRequests.filter(r => r.source !== "new_client_booking" && !r.waitlist);
         const waitlisted = allPendingRequests.filter(r => r.waitlist);
         return (
           <div className="mx-4 mt-3 rounded-xl px-4 py-3 bg-amber-50 border border-amber-200 text-amber-800 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold">
-                📋 {pending.length > 0 && `${pending.length} request${pending.length !== 1 ? "s" : ""} need${pending.length === 1 ? "s" : ""} approval`}
+                {newClients.length > 0 && `🆕 ${newClients.length} new client${newClients.length !== 1 ? "s" : ""}`}
+                {newClients.length > 0 && (pending.length > 0 || waitlisted.length > 0) && " · "}
+                {pending.length > 0 && `📋 ${pending.length} request${pending.length !== 1 ? "s" : ""} need${pending.length === 1 ? "s" : ""} approval`}
                 {pending.length > 0 && waitlisted.length > 0 && " · "}
                 {waitlisted.length > 0 && `${waitlisted.length} on waitlist`}
               </span>
@@ -3652,12 +3655,17 @@ export default function Schedule() {
               {allPendingRequests.map(req => {
                 const [y, m, d] = req.date.split("-").map(Number);
                 const dateStr = new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                const isNewClient = req.source === "new_client_booking" && !req.waitlist;
                 return (
-                  <div key={req.id} className={`flex items-center justify-between rounded-lg px-3 py-2 ${req.waitlist ? "bg-blue-50 border border-blue-200" : "bg-amber-100"}`}>
+                  <div key={req.id} className={`flex items-center justify-between rounded-lg px-3 py-2 border ${
+                    req.waitlist ? "bg-blue-50 border-blue-200" : isNewClient ? "bg-red-50 border-red-300" : "bg-amber-100 border-transparent"
+                  }`}>
                     <span className="text-xs font-medium flex items-center gap-1.5">
                       {req.waitlist && <span className="text-blue-600">⏸</span>}
+                      {isNewClient && <span className="text-red-600">🆕</span>}
                       {req.pets?.name} ({req.pets?.clients?.full_name}) — {dateStr} at {fmt12Hour(req.time)}
                       {req.waitlist && <span className="text-blue-600 font-semibold">· Waitlist</span>}
+                      {isNewClient && <span className="text-red-600 font-semibold">· New Client</span>}
                     </span>
                     <button
                       onClick={() => {
@@ -3667,7 +3675,9 @@ export default function Schedule() {
                           if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
                         }, 300);
                       }}
-                      className={`text-xs font-bold px-2.5 py-1 rounded-lg text-white transition ml-2 whitespace-nowrap ${req.waitlist ? "bg-blue-500 hover:bg-blue-600" : "bg-amber-500 hover:bg-amber-600"}`}
+                      className={`text-xs font-bold px-2.5 py-1 rounded-lg text-white transition ml-2 whitespace-nowrap ${
+                        req.waitlist ? "bg-blue-500 hover:bg-blue-600" : isNewClient ? "bg-red-500 hover:bg-red-600" : "bg-amber-500 hover:bg-amber-600"
+                      }`}
                     >
                       Review →
                     </button>

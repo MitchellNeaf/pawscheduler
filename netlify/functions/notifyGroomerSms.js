@@ -30,9 +30,9 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  let slug, petName, clientName, date, time, requiresApproval;
+  let slug, petName, clientName, date, time, requiresApproval, isNewClient;
   try {
-    ({ slug, petName, clientName, date, time, requiresApproval } = JSON.parse(event.body || "{}"));
+    ({ slug, petName, clientName, date, time, requiresApproval, isNewClient } = JSON.parse(event.body || "{}"));
   } catch {
     return { statusCode: 400, body: "Invalid JSON" };
   }
@@ -73,8 +73,12 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "No phone configured" }) };
   }
 
-  const action = requiresApproval ? "booking request" : "booking";
-  const message = `PawScheduler: New ${action} from ${clientName} for ${petName} on ${date} at ${fmtTime(time)}.${requiresApproval ? " Approval needed." : ""}`;
+  const message = isNewClient
+    ? `PawScheduler: 🆕 NEW CLIENT ${clientName} wants to book ${petName} on ${date} at ${fmtTime(time)}. This is their first booking — please review before approving.`
+    : (() => {
+        const action = requiresApproval ? "booking request" : "booking";
+        return `PawScheduler: New ${action} from ${clientName} for ${petName} on ${date} at ${fmtTime(time)}.${requiresApproval ? " Approval needed." : ""}`;
+      })();
 
   const res = await fetch("https://api.telnyx.com/v2/messages", {
     method: "POST",
