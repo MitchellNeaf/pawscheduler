@@ -6,6 +6,8 @@ const SECTIONS = [
   { id: "profile",       label: "Profile Setup",            icon: "👤" },
   { id: "booking-page",  label: "Booking Page & Themes",    icon: "🎨" },
   { id: "booking-toggle",label: "Online Booking Toggle",    icon: "🟢" },
+  { id: "approving-requests", label: "Approving Booking Requests", icon: "📋", badge: "Updated" },
+  { id: "new-clients",   label: "New Client Self-Booking",  icon: "🆕", badge: "New" },
   { id: "schedule",      label: "Working Hours",            icon: "🕒" },
   { id: "vacation",      label: "Time Blocks & Closed Days",icon: "🏖️" },
   { id: "slug",          label: "Booking Link",             icon: "🔗" },
@@ -23,6 +25,7 @@ const SECTIONS = [
   { id: "calendar-views",label: "Calendar Views",           icon: "📅" },
   { id: "multipet",      label: "Multi-Pet Bookings",       icon: "🐕‍🦺" },
   { id: "sms-inbox",     label: "SMS Inbox (Two-Way)",      icon: "💬" },
+  { id: "ai-bot",        label: "AI Booking Bot",           icon: "🤖", badge: "Pro" },
   { id: "reminders",     label: "SMS Reminders",            icon: "📱" },
   { id: "confirmations", label: "SMS Confirmations",        icon: "✅" },
   { id: "push-notif",    label: "Push Notifications",       icon: "🔔" },
@@ -266,7 +269,7 @@ export default function Help() {
                 </div>
                 <div className="rounded-xl border border-red-200 bg-red-50 p-4">
                   <p className="font-semibold text-red-900 mb-1">🔴 When booking is closed</p>
-                  <p className="text-red-900/80">Clients see a branded closed page with your business name, a message saying you're not accepting bookings online, and a Call Us button (if you have a business phone saved).</p>
+                  <p className="text-red-900/80">Clients see a branded closed page — your own message if you've written one (or a friendly default), plus tappable Call and Text buttons pulled from your business phone and dedicated number, so they can still reach you directly.</p>
                 </div>
               </div>
               <BulletList items={[
@@ -319,6 +322,47 @@ export default function Help() {
                 { title: "Delete a block", text: "Tap Delete on the block card in List view. Removes it immediately — the slot reopens for booking.", tone: "tip" },
                 { title: "Recurring weekly breaks", text: "Set in Profile → Schedule tab (like a lunch break every day). These show a 'Recurring' badge in List view — edit them from Profile, not from the Schedule page." },
                 { title: "Month view auto-updates", text: "Adding, editing, or deleting a block instantly refreshes the month grid — no page reload needed.", tone: "tip" },
+              ]} />
+            </div>
+          </Section>
+
+          {/* ── APPROVING BOOKING REQUESTS ── */}
+          <Section id="approving-requests" title="📋 Approving Booking Requests" subtitle="Review and act on pending requests without hunting through your schedule.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">Where to find pending requests</p>
+                <ol className="list-decimal ml-5 space-y-1.5">
+                  <li>Go to your <strong>Schedule</strong> page</li>
+                  <li>If anything's waiting on you, a banner appears near the top with a count — e.g. "2 requests need approval"</li>
+                  <li>Tap <strong>Review</strong> next to any entry</li>
+                  <li>A popup opens showing everything: the client's name, phone, email, pet, requested date/time, and services</li>
+                  <li>Tap <strong>Approve</strong>, <strong>Waitlist</strong>, or <strong>Decline</strong> right there</li>
+                </ol>
+              </div>
+              <BulletList items={[
+                { title: "Clients are notified automatically", text: "Whichever action you take, the client gets an automatic email letting them know — approved, waitlisted, or declined. Nothing further to do on your end." },
+                { title: "When this shows up", text: "Requests need your approval when Require Booking Approval is turned on (Profile → Booking Page), or automatically for any brand-new client's first booking — see New Client Self-Booking below." },
+                { title: "New client requests are flagged", text: "A request from someone who's never booked with you before shows a red 🆕 New Client tag and a warning in the review popup, so you know to look it over carefully.", tone: "tip" },
+              ]} />
+            </div>
+          </Section>
+
+          {/* ── NEW CLIENT SELF-BOOKING ── */}
+          <Section id="new-clients" title="🆕 New Client Self-Booking" subtitle="Let people who've never booked with you before create their own client profile and book directly.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">Turning it on</p>
+                <ol className="list-decimal ml-5 space-y-1.5">
+                  <li>Go to <strong>Profile → Booking Page tab</strong></li>
+                  <li>Find <strong>Allow New Clients to Book</strong>, right below Require Booking Approval</li>
+                  <li>Flip it on — no Save button needed</li>
+                </ol>
+              </div>
+              <BulletList items={[
+                { title: "What changes for clients", text: "Your booking page's login screen shows a real \"New client? Book your first appointment →\" link instead of just telling them to contact you." },
+                { title: "What they fill in", text: "Just enough to book — their name, phone, optional email, SMS consent, and their pet's name/breed/size. Not the full intake form; that comes after their first visit is approved." },
+                { title: "Always requires your approval", text: "A brand-new client's very first booking always needs your review, even if Require Booking Approval is turned off. You've never met this person — this keeps a stranger from landing straight onto your calendar with zero review.", tone: "warn" },
+                { title: "Off by default", text: "This is a real setting change, not a passive feature — existing groomers keep their current \"contact us first\" behavior until this is explicitly turned on.", tone: "tip" },
               ]} />
             </div>
           </Section>
@@ -865,10 +909,33 @@ export default function Help() {
               <BulletList items={[
                 { title: "Unread badge", text: "A green number badge on Messages in the nav shows how many unread messages you have. Conversations with unread messages show a bold green avatar." },
                 { title: "New message", text: "Tap the ✏️ button in the inbox to start a new conversation. Search your client list by name or phone and pick who to message." },
-                { title: "AI SMS bot", text: "Pro plan users can enable an AI bot that handles the inbox automatically — answering booking questions, checking availability, and scheduling appointments via text. Manage this in Profile → SMS Bot.", tone: "tip" },
+                { title: "AI SMS bot", text: "Pro plan users can enable an AI bot that handles booking, rescheduling, and cancellations automatically via text — see AI Booking Bot below for the full picture.", tone: "tip" },
                 { title: "Inbox link from appointment", text: "On every appointment card in list view, the 📥 Inbox button is next to Call and Text — tap it to jump straight to that client's thread.", tone: "tip" },
                 { title: "Requires Growth or higher", text: "Two-way SMS inbox is not available on the Free or Basic plan.", tone: "warn" },
                 { title: "Polls automatically", text: "The inbox checks for new messages every 10 seconds while you have it open — no manual refresh needed." },
+              ]} />
+            </div>
+          </Section>
+
+          {/* ── AI BOOKING BOT ── */}
+          <Section id="ai-bot" title="🤖 AI Booking Bot" subtitle="A Pro-only AI assistant that books, reschedules, and cancels appointments by text — no app download needed for your clients.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">Turning it on</p>
+                <ol className="list-decimal ml-5 space-y-1.5">
+                  <li>Go to <strong>Profile → SMS Bot tab</strong></li>
+                  <li>Flip the toggle on — your bot number is shown right there, with a copy button</li>
+                  <li>Share that number with your clients so they know where to text</li>
+                </ol>
+              </div>
+              <Callout type="warn" title="This is a shared number, not a dedicated one.">
+                Every Pro groomer's clients text the same AI bot number — the bot figures out who's texting by matching their phone number against your client list, not by which number they texted. Your regular two-way inbox number (Growth+) is still your own dedicated line; this is separate.
+              </Callout>
+              <BulletList items={[
+                { title: "What it can do", text: "Book a new appointment, check availability, reschedule, or cancel — all through natural conversation, no menus or keywords required." },
+                { title: "Only works for existing clients", text: "The bot looks up the sender's phone number in your client list. Someone who's never booked with you before won't be recognized — pair this with New Client Self-Booking so they have a way in." },
+                { title: "You still see everything", text: "Every bot conversation shows up in your SMS Inbox alongside your regular messages, so nothing happens without your visibility." },
+                { title: "Powered by Claude", text: "The bot runs on Anthropic's Claude AI, called directly through their API — the same model family used to build PawScheduler itself.", tone: "tip" },
               ]} />
             </div>
           </Section>
@@ -1093,7 +1160,7 @@ export default function Help() {
                 { title: "No-show toggle", text: "Mark no-shows directly from the appointment card. No-shows are excluded from revenue totals and don't appear on the Unpaid page." },
                 { title: "Paid toggle", text: "A quick toggle on each card. For a full payment method and tip record, use Edit → Payment Method or the quick payment buttons after checkout.", tone: "tip" },
                 { title: "Day summary bar", text: "At the top of the Schedule page, a summary bar shows: total appointments, confirmed/unconfirmed count, today's revenue, and any unpaid or vaccine alerts." },
-                { title: "After 2 no-shows", text: "Many groomers require a deposit before booking. PawScheduler tracks history so you can see the pattern.", tone: "warn" },
+                { title: "Repeat no-shows are flagged automatically", text: "A client with prior no-shows shows a colored badge (amber at 1, red at 2+) right on their appointment card, in the booking modal when you're creating a new appointment for them, and on their own client page — so you can decide whether to require a deposit before it happens again.", tone: "warn" },
               ]} />
             </div>
           </Section>
