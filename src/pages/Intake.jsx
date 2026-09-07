@@ -477,9 +477,9 @@ export default function IntakePage() {
                   className="mt-0.5 w-5 h-5 rounded accent-emerald-500 flex-shrink-0"
                 />
                 <span className="text-xs text-[var(--text-2)] leading-relaxed">
-                  I agree to receive text messages from <strong>{groomer?.full_name || "this business"}</strong> for
-                  appointment reminders and confirmations. Message frequency varies. Msg &amp; data rates may apply.
-                  Consent is not a condition of purchase. Reply STOP to opt out, HELP for help.
+                  I agree to receive text messages from <strong>{groomer?.full_name || "this business"}</strong> via{" "}
+                  <strong>PawScheduler</strong> for appointment reminders and confirmations. Message frequency varies.
+                  Msg &amp; data rates may apply. Consent is not a condition of purchase. Reply STOP to opt out, HELP for help.
                 </span>
               </label>
 

@@ -2555,6 +2555,170 @@ function MapView({ userId, setViewMode, selectedDate }) {
 }
 
 
+/* ---------------- Review Request Modal ---------------- */
+// Shows full booking-request details and lets the groomer act on it
+// directly, without navigating away to find the appointment on its
+// date. Reuses the exact same approve/waitlist/decline logic and
+// client-notification emails already built into the List view cards.
+function ReviewRequestModal({ request, onClose, onActionComplete, loading, setLoading }) {
+  if (!request) return null;
+
+  const client = request.pets?.clients;
+  const isNewClient = request.source === "new_client_booking";
+
+  const act = async (action) => {
+    setLoading(true);
+    try {
+      if (action === "approve") {
+        await supabase.from("appointments").update({ confirmed: true, waitlist: false }).eq("id", request.id);
+        if (client?.email) {
+          fetch("/.netlify/functions/sendEmail", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: client.email,
+              subject: `Your appointment is confirmed — ${request.pets?.name}`,
+              template: "booking_approved",
+              data: {
+                groomer_id: request.groomer_id,
+                client_name: client.full_name || "there",
+                pet_name: request.pets?.name || "your pet",
+                date: fmtEmailDate(request.date),
+                time: request.time?.slice(0, 5),
+                services: (request.services || []).join(", "),
+                groomer_phone: "",
+              },
+            }),
+          }).catch(() => {});
+        }
+      } else if (action === "waitlist") {
+        await supabase.from("appointments").update({ waitlist: true }).eq("id", request.id);
+        if (client?.email) {
+          fetch("/.netlify/functions/sendEmail", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: client.email,
+              subject: `You're on the waitlist — ${request.pets?.name}`,
+              template: "booking_waitlisted",
+              data: {
+                groomer_id: request.groomer_id,
+                client_name: client.full_name || "there",
+                pet_name: request.pets?.name || "your pet",
+                date: fmtEmailDate(request.date),
+                time: request.time?.slice(0, 5),
+                groomer_phone: "",
+              },
+            }),
+          }).catch(() => {});
+        }
+      } else if (action === "decline") {
+        if (client?.email) {
+          await fetch("/.netlify/functions/sendEmail", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: client.email,
+              subject: `Booking request update — ${request.pets?.name}`,
+              template: "booking_declined",
+              data: {
+                groomer_id: request.groomer_id,
+                client_name: client.full_name || "there",
+                pet_name: request.pets?.name || "your pet",
+                date: fmtEmailDate(request.date),
+                time: request.time?.slice(0, 5),
+                groomer_phone: "",
+              },
+            }),
+          }).catch(() => {});
+        }
+        await supabase.from("appointments").delete().eq("id", request.id);
+      }
+      onActionComplete(request.id, action);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const [y, m, d] = request.date.split("-").map(Number);
+  const dateStr = new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="bg-white rounded-t-3xl sm:rounded-3xl w-full sm:max-w-md p-5 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-lg font-bold text-gray-900">
+            {request.waitlist ? "⏸ Waitlist Request" : "📋 Booking Request"}
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+        </div>
+
+        {isNewClient && (
+          <div className="mb-3 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+            🆕 This is a new client — you haven't met them before. Review carefully before approving.
+          </div>
+        )}
+
+        <div className="space-y-3 mb-5">
+          <div>
+            <div className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Client</div>
+            <div className="text-sm font-semibold text-gray-900">{client?.full_name || "—"}</div>
+            {client?.phone && <div className="text-xs text-gray-500">{client.phone}</div>}
+            {client?.email && <div className="text-xs text-gray-500">{client.email}</div>}
+          </div>
+          <div>
+            <div className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Pet</div>
+            <div className="text-sm font-semibold text-gray-900">{request.pets?.name || "—"}</div>
+          </div>
+          <div>
+            <div className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Requested Time</div>
+            <div className="text-sm font-semibold text-gray-900">{dateStr} at {fmt12Hour(request.time)}</div>
+          </div>
+          {request.services?.length > 0 && (
+            <div>
+              <div className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Services</div>
+              <div className="text-sm text-gray-700">{request.services.join(", ")}</div>
+            </div>
+          )}
+          {request.notes && (
+            <div>
+              <div className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Notes</div>
+              <div className="text-sm text-gray-700">{request.notes}</div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            disabled={loading}
+            onClick={() => act("approve")}
+            className="flex-1 text-sm py-2.5 rounded-lg bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition disabled:opacity-50"
+          >
+            ✓ Approve
+          </button>
+          {!request.waitlist && (
+            <button
+              disabled={loading}
+              onClick={() => act("waitlist")}
+              className="flex-1 text-sm py-2.5 rounded-lg bg-blue-100 text-blue-700 font-bold hover:bg-blue-200 transition disabled:opacity-50"
+            >
+              ⏸ Waitlist
+            </button>
+          )}
+          <button
+            disabled={loading}
+            onClick={() => act("decline")}
+            className="flex-1 text-sm py-2.5 rounded-lg bg-red-100 text-red-700 font-bold hover:bg-red-200 transition disabled:opacity-50"
+          >
+            ✕ Decline
+          </button>
+        </div>
+        {loading && <p className="text-xs text-gray-400 text-center mt-2">Working…</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function Schedule() {
   const [appointments, setAppointments] = useState([]);
   const [noShowCounts, setNoShowCounts] = useState({}); // { client_id: count }
@@ -2596,6 +2760,8 @@ export default function Schedule() {
   const FREE_LIMIT = 50;
   const [monthlyCount, setMonthlyCount] = useState(null);
   const [allPendingRequests, setAllPendingRequests] = useState([]);
+  const [reviewRequest, setReviewRequest] = useState(null); // the request currently open in the review modal
+  const [reviewActionLoading, setReviewActionLoading] = useState(false);
 
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editAppt, setEditAppt] = useState(null);
@@ -2630,7 +2796,7 @@ export default function Schedule() {
     if (!user) return;
     supabase
       .from("appointments")
-      .select("id, date, time, waitlist, source, pets(name, clients(full_name))")
+      .select("id, date, time, waitlist, source, services, duration_min, notes, groomer_id, pets(name, clients(full_name, phone, email))")
       .eq("groomer_id", user.id)
       .in("source", ["booking_page", "new_client_booking"])
       .eq("confirmed", false)
@@ -3668,13 +3834,7 @@ export default function Schedule() {
                       {isNewClient && <span className="text-red-600 font-semibold">· New Client</span>}
                     </span>
                     <button
-                      onClick={() => {
-                        setSelectedDate(req.date);
-                        setTimeout(() => {
-                          const el = document.getElementById(`appt-${req.id}`);
-                          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-                        }, 300);
-                      }}
+                      onClick={() => setReviewRequest(req)}
                       className={`text-xs font-bold px-2.5 py-1 rounded-lg text-white transition ml-2 whitespace-nowrap ${
                         req.waitlist ? "bg-blue-500 hover:bg-blue-600" : isNewClient ? "bg-red-500 hover:bg-red-600" : "bg-amber-500 hover:bg-amber-600"
                       }`}
@@ -4976,6 +5136,29 @@ export default function Schedule() {
         appt={reportCardAppt}
         onClose={() => setReportCardAppt(null)}
         user={user}
+      />
+
+      <ReviewRequestModal
+        request={reviewRequest}
+        loading={reviewActionLoading}
+        setLoading={setReviewActionLoading}
+        onClose={() => setReviewRequest(null)}
+        onActionComplete={(requestId, action) => {
+          // Always remove it from the pending-requests list
+          setAllPendingRequests(prev => prev.filter(r => r.id !== requestId));
+
+          // Also keep the currently-loaded day's appointments in sync,
+          // in case this request happened to be on the visible date
+          if (action === "approve") {
+            setAppointments(prev => prev.map(a => a.id === requestId ? { ...a, confirmed: true, waitlist: false } : a));
+          } else if (action === "waitlist") {
+            setAppointments(prev => prev.map(a => a.id === requestId ? { ...a, waitlist: true } : a));
+          } else if (action === "decline") {
+            setAppointments(prev => prev.filter(a => a.id !== requestId));
+          }
+
+          setReviewRequest(null);
+        }}
       />
 
       {paymentLinkModal && (
