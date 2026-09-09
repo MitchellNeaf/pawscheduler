@@ -70,6 +70,7 @@ exports.handler = async (event) => {
         },
         body: JSON.stringify({
           from: { email: "noreply@pawscheduler.app", name: "Mitchell from PawScheduler" },
+          reply_to: { email: "pawscheduler@gmail.com", name: "Mitchell from PawScheduler" },
           to: [{ email }],
           subject,
           html,

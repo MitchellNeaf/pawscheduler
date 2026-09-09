@@ -68,6 +68,8 @@ exports.handler = async function(event) {
       fileName = "waiver_request.html";
     } else if (template === "intake_notification") {
       fileName = "intake_notification.html";
+    } else if (template === "telnyx_info_submitted") {
+      fileName = "telnyx_info_submitted.html";
     } else if (template === "intake_email") {
       fileName = "intake_email.html";
     } else if (template === "payment_request") {

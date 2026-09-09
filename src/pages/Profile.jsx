@@ -104,6 +104,14 @@ export default function Profile() {
         if (data.sms_confirmation_template) setConfirmationTemplate(data.sms_confirmation_template || "");
         if (data.reminder_rules) setReminderRules(data.reminder_rules);
         if (data.sms_number) setSmsNumber(data.sms_number);
+        if (data.telnyx_info_submitted_at) setTelnyxInfoSubmittedAt(data.telnyx_info_submitted_at);
+        setTelnyxForm({
+          legalName: data.telnyx_legal_name || "",
+          entityType: data.telnyx_entity_type || "sole_proprietor",
+          ein: data.telnyx_ein || "",
+          address: data.telnyx_business_address || "",
+          website: data.telnyx_website || "",
+        });
         if (data.custom_services) {
           setCustomServices(data.custom_services);
         } else {
@@ -116,6 +124,14 @@ export default function Profile() {
         }
         setBookingRequiresApproval(data.booking_requires_approval || false);
         setAllowNewClients(data.allow_new_clients || false);
+        // This was the actual bug: stripeConnected was only ever set true
+        // during the one-time "?stripe=success" redirect handler, never
+        // loaded from the real, server-verified status on a normal visit
+        // — so it silently reverted to false (prompting "reconnect") every
+        // time someone came back to this page later, even while genuinely
+        // still connected. stripe_onboarding_complete is the real signal,
+        // set correctly by stripeConnectWebhook.js when Stripe confirms it.
+        setStripeConnected(!!data.stripe_onboarding_complete);
         if (Array.isArray(data.size_category_labels) && data.size_category_labels.length === 4) {
           setSizeCategoryLabels(data.size_category_labels);
         }
@@ -398,11 +414,18 @@ export default function Profile() {
   const tabBarRef = useRef(null);
   const [tabBarHasOverflow, setTabBarHasOverflow] = useState(false);
   const [stripeConnecting, setStripeConnecting] = useState(false);
+  const [stripeDashboardLoading, setStripeDashboardLoading] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
   const [reminderTemplate, setReminderTemplate] = useState("");
   const [confirmationTemplate, setConfirmationTemplate] = useState("");
   const [reminderRules, setReminderRules] = useState([48, 2]); // hours before appointment
   const [smsNumber, setSmsNumber] = useState(null); // dedicated texting number, if assigned
+  const [telnyxInfoSubmittedAt, setTelnyxInfoSubmittedAt] = useState(null);
+  const [telnyxForm, setTelnyxForm] = useState({
+    legalName: "", entityType: "sole_proprietor", ein: "", address: "", website: "",
+  });
+  const [telnyxSubmitting, setTelnyxSubmitting] = useState(false);
+  const [telnyxError, setTelnyxError] = useState("");
   const [customServices, setCustomServices] = useState(null);
   const [customAddons, setCustomAddons] = useState([]);
   const [customFees, setCustomFees] = useState([]);
@@ -547,6 +570,77 @@ export default function Profile() {
       setStripeError("Network error. Please try again.");
     } finally {
       setStripeConnecting(false);
+    }
+  };
+
+  const handleSubmitTelnyxInfo = async () => {
+    setTelnyxError("");
+    if (!telnyxForm.legalName.trim() || !telnyxForm.address.trim()) {
+      setTelnyxError("Please fill in your legal business name and address.");
+      return;
+    }
+    if (telnyxForm.entityType === "llc_or_corp" && !telnyxForm.ein.trim()) {
+      setTelnyxError("An EIN is required for an LLC or corporation.");
+      return;
+    }
+    setTelnyxSubmitting(true);
+    const { error } = await supabase
+      .from("groomers")
+      .update({
+        telnyx_legal_name: telnyxForm.legalName.trim(),
+        telnyx_entity_type: telnyxForm.entityType,
+        telnyx_ein: telnyxForm.entityType === "llc_or_corp" ? telnyxForm.ein.trim() : null,
+        telnyx_business_address: telnyxForm.address.trim(),
+        telnyx_website: telnyxForm.website.trim() || null,
+        telnyx_info_submitted_at: new Date().toISOString(),
+      })
+      .eq("id", user.id);
+    setTelnyxSubmitting(false);
+    if (error) {
+      setTelnyxError("Could not save — please try again.");
+    } else {
+      setTelnyxInfoSubmittedAt(new Date().toISOString());
+      // Fire-and-forget internal notification — don't block on it
+      fetch("/.netlify/functions/sendEmail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: "pawscheduler@gmail.com",
+          subject: `New Telnyx info submitted — ${fullName || "a groomer"}`,
+          template: "telnyx_info_submitted",
+          data: {
+            groomer_name: fullName || "—",
+            legal_name: telnyxForm.legalName.trim(),
+            entity_type: telnyxForm.entityType === "llc_or_corp" ? "LLC / Corporation" : "Sole Proprietor",
+            ein: telnyxForm.entityType === "llc_or_corp" ? telnyxForm.ein.trim() : "—",
+            address: telnyxForm.address.trim(),
+            website: telnyxForm.website.trim() || "—",
+          },
+        }),
+      }).catch(() => {});
+    }
+  };
+
+  const handleViewStripeDashboard = async () => {
+    if (!user) return;
+    setStripeDashboardLoading(true);
+    setStripeError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/.netlify/functions/stripeExpressLogin", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      const json = await res.json();
+      if (res.ok && json.url) {
+        window.open(json.url, "_blank");
+      } else {
+        setStripeError(json.error || "Could not open your Stripe dashboard. Please try again.");
+      }
+    } catch {
+      setStripeError("Network error. Please try again.");
+    } finally {
+      setStripeDashboardLoading(false);
     }
   };
 
@@ -1107,7 +1201,7 @@ export default function Profile() {
         <div className="space-y-4">
           {(planTier === "basic" || planTier === "growth" || planTier === "pro") ? (
           <>
-          {smsNumber && (
+          {smsNumber ? (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 flex items-center gap-3">
               <span className="text-2xl">📱</span>
               <div>
@@ -1115,6 +1209,67 @@ export default function Profile() {
                 <div className="text-lg font-bold text-emerald-900">{smsNumber}</div>
                 <p className="text-xs text-emerald-700 mt-0.5">Reminders and replies send from this number — safe to give to clients directly.</p>
               </div>
+            </div>
+          ) : telnyxInfoSubmittedAt ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+              <span className="text-2xl">⏳</span>
+              <div>
+                <div className="text-xs font-bold text-amber-800 uppercase tracking-wide">Your number isn't available yet</div>
+                <p className="text-sm text-amber-900 mt-1">We've got your info and are working with our provider to get your number set up. This usually takes a little while — we'll notify you the moment it's ready.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
+              <div>
+                <div className="text-xs font-bold text-amber-800 uppercase tracking-wide">Your number isn't available yet</div>
+                <p className="text-sm text-amber-900 mt-1">
+                  Before we can get you a dedicated texting number, our phone provider requires a few details about your
+                  business to report on your behalf. This only takes a minute.
+                </p>
+              </div>
+              <input
+                type="text" placeholder="Legal business name (or your own legal name if a sole proprietor)"
+                value={telnyxForm.legalName}
+                onChange={(e) => setTelnyxForm(f => ({ ...f, legalName: e.target.value }))}
+                className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
+              />
+              <select
+                value={telnyxForm.entityType}
+                onChange={(e) => setTelnyxForm(f => ({ ...f, entityType: e.target.value }))}
+                className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
+              >
+                <option value="sole_proprietor">Sole Proprietor</option>
+                <option value="llc_or_corp">LLC / Corporation</option>
+              </select>
+              {telnyxForm.entityType === "llc_or_corp" && (
+                <input
+                  type="text" placeholder="EIN"
+                  value={telnyxForm.ein}
+                  onChange={(e) => setTelnyxForm(f => ({ ...f, ein: e.target.value }))}
+                  className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
+                />
+              )}
+              <input
+                type="text" placeholder="Business address"
+                value={telnyxForm.address}
+                onChange={(e) => setTelnyxForm(f => ({ ...f, address: e.target.value }))}
+                className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
+              />
+              <input
+                type="text" placeholder="Website (your PawScheduler booking page link works fine)"
+                value={telnyxForm.website}
+                onChange={(e) => setTelnyxForm(f => ({ ...f, website: e.target.value }))}
+                className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
+              />
+              {telnyxError && <p className="text-xs text-red-600">{telnyxError}</p>}
+              <button
+                type="button"
+                disabled={telnyxSubmitting}
+                onClick={handleSubmitTelnyxInfo}
+                className="w-full py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 transition disabled:opacity-50"
+              >
+                {telnyxSubmitting ? "Saving…" : "Submit Info"}
+              </button>
             </div>
           )}
           <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
@@ -1951,6 +2106,14 @@ export default function Profile() {
                   <li>The appointment is automatically marked as paid when payment completes.</li>
                 </ol>
               </div>
+              <button
+                type="button"
+                onClick={handleViewStripeDashboard}
+                disabled={stripeDashboardLoading}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition disabled:opacity-50"
+              >
+                {stripeDashboardLoading ? "Loading…" : "📊 View My Balance & Payouts"}
+              </button>
               <button
                 type="button"
                 onClick={handleConnectStripe}
