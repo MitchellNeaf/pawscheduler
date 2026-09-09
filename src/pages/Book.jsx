@@ -167,7 +167,7 @@ export default function BookPage() {
     (async () => {
       const { data, error: gErr } = await anonSupabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, booking_enabled, booking_closed_message, allow_new_clients, bio, business_address, business_phone, sms_number, brand_color")
+        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, booking_enabled, booking_closed_message, allow_new_clients, bio, business_address, business_phone, sms_number, brand_color, email")
         .eq("slug", slug)
         .single();
 
