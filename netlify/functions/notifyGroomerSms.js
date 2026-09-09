@@ -110,13 +110,17 @@ exports.handler = async (event) => {
   }
 
   // Log to sms_messages for rate limiting and usage tracking
-  await supabase.from("sms_messages").insert({
-    groomer_id:   groomer.id,
-    client_phone: null,
-    direction:    "outbound",
-    body:         message,
-    message_type: "booking_notify",
-  }).catch(() => {}); // non-blocking
+  try {
+    await supabase.from("sms_messages").insert({
+      groomer_id:   groomer.id,
+      client_phone: null,
+      direction:    "outbound",
+      body:         message,
+      message_type: "booking_notify",
+    });
+  } catch (logErr) {
+    console.error("Failed to log booking_notify to sms_messages (non-fatal):", logErr.message);
+  }
 
   return { statusCode: 200, body: JSON.stringify({ sent: true }) };
 };
