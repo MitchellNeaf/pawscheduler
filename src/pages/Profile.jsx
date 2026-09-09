@@ -116,6 +116,14 @@ export default function Profile() {
         }
         setBookingRequiresApproval(data.booking_requires_approval || false);
         setAllowNewClients(data.allow_new_clients || false);
+        // This was the actual bug: stripeConnected was only ever set true
+        // during the one-time "?stripe=success" redirect handler, never
+        // loaded from the real, server-verified status on a normal visit
+        // — so it silently reverted to false (prompting "reconnect") every
+        // time someone came back to this page later, even while genuinely
+        // still connected. stripe_onboarding_complete is the real signal,
+        // set correctly by stripeConnectWebhook.js when Stripe confirms it.
+        setStripeConnected(!!data.stripe_onboarding_complete);
         if (Array.isArray(data.size_category_labels) && data.size_category_labels.length === 4) {
           setSizeCategoryLabels(data.size_category_labels);
         }
@@ -398,6 +406,7 @@ export default function Profile() {
   const tabBarRef = useRef(null);
   const [tabBarHasOverflow, setTabBarHasOverflow] = useState(false);
   const [stripeConnecting, setStripeConnecting] = useState(false);
+  const [stripeDashboardLoading, setStripeDashboardLoading] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
   const [reminderTemplate, setReminderTemplate] = useState("");
   const [confirmationTemplate, setConfirmationTemplate] = useState("");
@@ -547,6 +556,29 @@ export default function Profile() {
       setStripeError("Network error. Please try again.");
     } finally {
       setStripeConnecting(false);
+    }
+  };
+
+  const handleViewStripeDashboard = async () => {
+    if (!user) return;
+    setStripeDashboardLoading(true);
+    setStripeError("");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/.netlify/functions/stripeExpressLogin", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      const json = await res.json();
+      if (res.ok && json.url) {
+        window.open(json.url, "_blank");
+      } else {
+        setStripeError(json.error || "Could not open your Stripe dashboard. Please try again.");
+      }
+    } catch {
+      setStripeError("Network error. Please try again.");
+    } finally {
+      setStripeDashboardLoading(false);
     }
   };
 
@@ -1951,6 +1983,14 @@ export default function Profile() {
                   <li>The appointment is automatically marked as paid when payment completes.</li>
                 </ol>
               </div>
+              <button
+                type="button"
+                onClick={handleViewStripeDashboard}
+                disabled={stripeDashboardLoading}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition disabled:opacity-50"
+              >
+                {stripeDashboardLoading ? "Loading…" : "📊 View My Balance & Payouts"}
+              </button>
               <button
                 type="button"
                 onClick={handleConnectStripe}
