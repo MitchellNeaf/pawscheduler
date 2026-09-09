@@ -6,6 +6,16 @@ import VacationSection from "../components/VacationSection";
 import ServiceAreasSection from "../components/ServiceAreasSection";
 import { SERVICE_OPTIONS, DEFAULT_PRICING } from "../utils/grooming";
 
+// Positionally mapped to size values 1 (Small) through 4 (XL). Only the
+// label text is customizable — the underlying slot/scheduling-capacity
+// weight per size stays fixed in code, unaffected by this.
+const DEFAULT_SIZE_LABELS = [
+  "Small (under 25 lbs)",
+  "Medium (25–40 lbs)",
+  "Large (40–80 lbs)",
+  "XL (80+ lbs)",
+];
+
 
 const WEEKDAYS = [
   "Sunday",
@@ -106,6 +116,9 @@ export default function Profile() {
         }
         setBookingRequiresApproval(data.booking_requires_approval || false);
         setAllowNewClients(data.allow_new_clients || false);
+        if (Array.isArray(data.size_category_labels) && data.size_category_labels.length === 4) {
+          setSizeCategoryLabels(data.size_category_labels);
+        }
         setBookingEnabled(data.booking_enabled !== false); // default true if null
         setBookingClosedMessage(data.booking_closed_message || "");
         setFullName(data.full_name || "");
@@ -395,6 +408,8 @@ export default function Profile() {
   const [customFees, setCustomFees] = useState([]);
   const [bookingRequiresApproval, setBookingRequiresApproval] = useState(false);
   const [allowNewClients, setAllowNewClients] = useState(false);
+  const [sizeCategoryLabels, setSizeCategoryLabels] = useState(DEFAULT_SIZE_LABELS);
+  const [savingSizeLabels, setSavingSizeLabels] = useState(false);
   const [bookingEnabled, setBookingEnabled] = useState(true);
   const [bookingClosedMessage, setBookingClosedMessage] = useState("");
   const [savingClosedMessage, setSavingClosedMessage] = useState(false);
@@ -1530,6 +1545,53 @@ export default function Profile() {
               <p className="text-sm text-[var(--text-3)]">
                 Edit your service names and prices by dog size. Changes apply to scheduling and your public booking page.
               </p>
+            </div>
+
+            {/* Size category labels */}
+            <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
+              <div>
+                <h3 className="font-bold text-[var(--text-1)] text-sm">Size Category Labels</h3>
+                <p className="text-xs text-[var(--text-3)] mt-0.5">
+                  Customize how each size shows to clients on intake forms and booking. This only changes the label —
+                  scheduling capacity per size stays the same either way.
+                </p>
+              </div>
+              <div className="space-y-2">
+                {sizeCategoryLabels.map((label, i) => (
+                  <input
+                    key={i}
+                    type="text"
+                    value={label}
+                    onChange={(e) => {
+                      const updated = [...sizeCategoryLabels];
+                      updated[i] = e.target.value;
+                      setSizeCategoryLabels(updated);
+                    }}
+                    placeholder={DEFAULT_SIZE_LABELS[i]}
+                    className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2 text-sm bg-[var(--bg)] text-[var(--text-1)]"
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                disabled={savingSizeLabels}
+                onClick={async () => {
+                  setSavingSizeLabels(true);
+                  const { error } = await supabase
+                    .from("groomers")
+                    .update({ size_category_labels: sizeCategoryLabels })
+                    .eq("id", user.id);
+                  setSavingSizeLabels(false);
+                  setConfirmConfig(
+                    error
+                      ? { title: "Could not save", message: error.message, confirmLabel: "OK", onConfirm: () => {} }
+                      : { title: "Saved! ✓", message: "Your size labels have been updated.", confirmLabel: "OK", onConfirm: () => {} }
+                  );
+                }}
+                className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-sm disabled:opacity-50"
+              >
+                {savingSizeLabels ? "Saving…" : "Save Size Labels"}
+              </button>
             </div>
 
           {/* Service cards */}

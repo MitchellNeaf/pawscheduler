@@ -67,6 +67,14 @@ export default function IntakePage() {
   const cid = searchParams.get("cid");
 
   const [groomer, setGroomer] = useState(null);
+
+  // Labels are customizable per groomer; slotWeight (scheduling capacity)
+  // is not, and stays exactly matched to SIZE_OPTIONS above regardless.
+  const displaySizeOptions = SIZE_OPTIONS.map((opt, i) => ({
+    ...opt,
+    label: groomer?.size_category_labels?.[i] || opt.label,
+  }));
+
   const [pageError, setPageError] = useState("");
   const [loading, setLoading] = useState(true);
   const [submitted, setSubmitted] = useState(false);
@@ -132,7 +140,7 @@ export default function IntakePage() {
     (async () => {
       const { data, error } = await supabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, custom_intake_questions, waiver_text")
+        .select("id, full_name, slug, logo_url, custom_intake_questions, waiver_text, size_category_labels")
         .eq("slug", slug)
         .single();
 
@@ -586,7 +594,7 @@ export default function IntakePage() {
               <div>
                 <label className={labelCls}>Size</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {SIZE_OPTIONS.map(({ value, label }) => (
+                  {displaySizeOptions.map(({ value, label }) => (
                     <button key={value} type="button"
                       onClick={() => updatePet(idx, "size_category", value)}
                       className={`py-2 px-2 rounded-xl border text-xs font-semibold transition-colors text-center

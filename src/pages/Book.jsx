@@ -167,7 +167,7 @@ export default function BookPage() {
     (async () => {
       const { data, error: gErr } = await anonSupabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, booking_enabled, booking_closed_message, allow_new_clients, bio, business_address, business_phone, sms_number, brand_color, email")
+        .select("id, full_name, slug, logo_url, max_parallel, service_pricing, custom_services, booking_requires_approval, booking_enabled, booking_closed_message, allow_new_clients, bio, business_address, business_phone, sms_number, brand_color, email, size_category_labels")
         .eq("slug", slug)
         .single();
 
@@ -975,10 +975,10 @@ export default function BookPage() {
           <select value={newClientForm.petSize}
             onChange={(e) => setNewClientForm(f => ({ ...f, petSize: Number(e.target.value) }))}
             style={{ border: "1px solid #d1d5db", borderRadius: 8, padding: "10px 12px", fontSize: "1rem" }}>
-            <option value={1}>Small (under 25 lbs)</option>
-            <option value={2}>Medium (25–40 lbs)</option>
-            <option value={3}>Large (40–80 lbs)</option>
-            <option value={4}>XL (80+ lbs)</option>
+            <option value={1}>{groomer?.size_category_labels?.[0] || "Small (under 25 lbs)"}</option>
+            <option value={2}>{groomer?.size_category_labels?.[1] || "Medium (25–40 lbs)"}</option>
+            <option value={3}>{groomer?.size_category_labels?.[2] || "Large (40–80 lbs)"}</option>
+            <option value={4}>{groomer?.size_category_labels?.[3] || "XL (80+ lbs)"}</option>
           </select>
 
           {newClientError && <p style={{ color: "#dc2626", fontSize: "0.85rem", textAlign: "center" }}>{newClientError}</p>}
