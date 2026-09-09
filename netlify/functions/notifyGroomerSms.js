@@ -25,6 +25,19 @@ function fmtTime(t) {
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
 }
 
+// business_phone is a free-text field a groomer types directly into
+// Profile — nothing normalizes it, so it could be stored as raw digits,
+// dashes, spaces, anything. Telnyx requires strict E.164 (+1XXXXXXXXXX)
+// and rejects anything else with error 40310 "Invalid 'to' address" —
+// which was silently failing every single notification until this fix.
+function normalizePhone(input) {
+  if (!input) return null;
+  const digits = String(input).replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return null;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -66,11 +79,12 @@ exports.handler = async (event) => {
     return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "Rate limit" }) };
   }
 
-  const toPhone = groomer.business_phone;
+  const toPhone = normalizePhone(groomer.business_phone);
   const fromNumber = groomer.sms_number || process.env.TELNYX_PHONE_NUMBER;
 
   if (!toPhone || !fromNumber) {
-    return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "No phone configured" }) };
+    console.log(`notifyGroomerSms skipped for ${groomer.id} — business_phone: "${groomer.business_phone}" normalized to: ${toPhone}, fromNumber: ${fromNumber || "none"}`);
+    return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "No phone configured or invalid format" }) };
   }
 
   const message = isNewClient
