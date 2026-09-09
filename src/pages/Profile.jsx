@@ -132,6 +132,14 @@ export default function Profile() {
         // still connected. stripe_onboarding_complete is the real signal,
         // set correctly by stripeConnectWebhook.js when Stripe confirms it.
         setStripeConnected(!!data.stripe_onboarding_complete);
+        // This was the actual bug: stripeConnected was only ever set true
+        // during the one-time "?stripe=success" redirect handler, never
+        // loaded from the real, server-verified status on a normal visit
+        // — so it silently reverted to false (prompting "reconnect") every
+        // time someone came back to this page later, even while genuinely
+        // still connected. stripe_onboarding_complete is the real signal,
+        // set correctly by stripeConnectWebhook.js when Stripe confirms it.
+        setStripeConnected(!!data.stripe_onboarding_complete);
         if (Array.isArray(data.size_category_labels) && data.size_category_labels.length === 4) {
           setSizeCategoryLabels(data.size_category_labels);
         }
@@ -414,6 +422,7 @@ export default function Profile() {
   const tabBarRef = useRef(null);
   const [tabBarHasOverflow, setTabBarHasOverflow] = useState(false);
   const [stripeConnecting, setStripeConnecting] = useState(false);
+  const [stripeDashboardLoading, setStripeDashboardLoading] = useState(false);
   const [stripeDashboardLoading, setStripeDashboardLoading] = useState(false);
   const [stripeConnected, setStripeConnected] = useState(false);
   const [reminderTemplate, setReminderTemplate] = useState("");
@@ -2106,6 +2115,14 @@ export default function Profile() {
                   <li>The appointment is automatically marked as paid when payment completes.</li>
                 </ol>
               </div>
+              <button
+                type="button"
+                onClick={handleViewStripeDashboard}
+                disabled={stripeDashboardLoading}
+                className="w-full py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-bold hover:bg-emerald-700 transition disabled:opacity-50"
+              >
+                {stripeDashboardLoading ? "Loading…" : "📊 View My Balance & Payouts"}
+              </button>
               <button
                 type="button"
                 onClick={handleViewStripeDashboard}
