@@ -54,6 +54,22 @@ export default function Signup() {
     }
 
     if (referredBy.trim()) {
+      // Write referred_by directly rather than relying on the DB trigger
+      // to copy it from signup metadata — confirmed it doesn't. Retry a
+      // few times since the groomers row might not exist the instant
+      // signUp() returns, if whatever creates it has any async delay.
+      (async () => {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const { data: updated } = await supabase
+            .from("groomers")
+            .update({ referred_by: referredBy.trim() })
+            .eq("id", signData.user.id)
+            .select();
+          if (updated && updated.length > 0) break;
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      })();
+
       // Fire-and-forget — this is the actual critical path here, not
       // just a nice-to-have, since it's what lets Mitchell manually
       // send out the referral coupon codes.
