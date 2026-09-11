@@ -163,6 +163,13 @@ export default function Onboarding() {
 
         // ⭐ Track signup source
         signup_source: pilot === "mobile60" ? "mobile_pilot_60" : "standard",
+
+        // ⭐ Referral tracking — set at signup as auth metadata, read
+        // here since this is where the groomers row actually gets
+        // created (not at signup itself, which just creates the auth
+        // user — confirmed the row can be created much later, or never,
+        // depending on when/whether someone finishes onboarding).
+        referred_by: user.user_metadata?.referred_by || null,
       },
     ]);
 
