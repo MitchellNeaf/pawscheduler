@@ -60,14 +60,14 @@ export default function AdminEmail() {
 
   // Sync selection when filter changes
   useEffect(() => {
-    setSelected(new Set(filtered.map(g => g.email)));
+    setSelected(new Set(filtered.map(g => g.id)));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter, groomers]);
 
-  const toggleOne = (email) => {
+  const toggleOne = (id) => {
     setSelected(prev => {
       const next = new Set(prev);
-      next.has(email) ? next.delete(email) : next.add(email);
+      next.has(id) ? next.delete(id) : next.add(id);
       return next;
     });
   };
@@ -76,7 +76,7 @@ export default function AdminEmail() {
     if (selected.size === filtered.length) {
       setSelected(new Set());
     } else {
-      setSelected(new Set(filtered.map(g => g.email)));
+      setSelected(new Set(filtered.map(g => g.id)));
     }
   };
 
@@ -100,7 +100,7 @@ export default function AdminEmail() {
           Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
-          recipients: [...selected],
+          recipients: groomers.filter(g => selected.has(g.id)).map(g => g.email),
           subject: subject.trim(),
           body: body.trim(),
         }),
@@ -166,18 +166,29 @@ export default function AdminEmail() {
         </div>
 
         <div className="border rounded-xl overflow-hidden">
-          <label className="flex items-center gap-3 px-4 py-2.5 bg-gray-50 border-b cursor-pointer hover:bg-gray-100">
-            <input
-              type="checkbox"
-              checked={allChecked}
-              ref={el => { if (el) el.indeterminate = someChecked; }}
-              onChange={toggleAll}
-              className="w-4 h-4 accent-emerald-600"
-            />
-            <span className="text-sm font-semibold text-gray-700">
-              {allChecked ? "Deselect all" : "Select all"} — {filtered.length} users
-            </span>
-          </label>
+          <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b">
+            <label className="flex items-center gap-3 cursor-pointer hover:opacity-80 flex-1">
+              <input
+                type="checkbox"
+                checked={allChecked}
+                ref={el => { if (el) el.indeterminate = someChecked; }}
+                onChange={toggleAll}
+                className="w-4 h-4 accent-emerald-600"
+              />
+              <span className="text-sm font-semibold text-gray-700">
+                {allChecked ? "Deselect all" : "Select all"} — {filtered.length} users
+              </span>
+            </label>
+            {selected.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelected(new Set())}
+                className="text-xs font-semibold text-red-600 hover:text-red-700 hover:underline flex-shrink-0 ml-3"
+              >
+                Deselect all
+              </button>
+            )}
+          </div>
 
           <div className="max-h-64 overflow-y-auto divide-y">
             {filtered.length === 0 && (
@@ -187,8 +198,8 @@ export default function AdminEmail() {
               <label key={g.id} className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50">
                 <input
                   type="checkbox"
-                  checked={selected.has(g.email)}
-                  onChange={() => toggleOne(g.email)}
+                  checked={selected.has(g.id)}
+                  onChange={() => toggleOne(g.id)}
                   className="w-4 h-4 accent-emerald-600 flex-shrink-0"
                 />
                 <div className="min-w-0 flex-1">
