@@ -46,6 +46,16 @@ function getCurrentPeriodEnd(subscription) {
   return raw ? new Date(raw * 1000).toISOString() : null;
 }
 
+// Flexible billing mode (which this account uses) represents a
+// Customer Portal cancellation via `cancel_at` (a future timestamp)
+// rather than the older `cancel_at_period_end` boolean — confirmed
+// directly from a real cancellation where cancel_at_period_end stayed
+// false despite the subscription genuinely being set to cancel. Check
+// both, since either one indicates a scheduled cancellation.
+function willCancelAtPeriodEnd(subscription) {
+  return !!(subscription.cancel_at_period_end || subscription.cancel_at);
+}
+
 async function updateGroomerByBestMatch({ groomerId, customerId, email, updates }) {
   if (groomerId) {
     const { data, error } = await supabase
@@ -141,7 +151,7 @@ exports.handler = async (event) => {
           plan_tier: planTier,
           sms_bot_enabled: planTier === "pro",
           sms_bot_number: planTier === "pro" ? SHARED_BOT_NUMBER : null,
-          cancel_at_period_end: subscription.cancel_at_period_end || false,
+          cancel_at_period_end: willCancelAtPeriodEnd(subscription),
           current_period_end: currentPeriodEnd,
         },
       });
@@ -196,7 +206,7 @@ exports.handler = async (event) => {
           plan_tier: planTier,
           sms_bot_enabled: planTier === "pro" && status === "active",
           sms_bot_number: (planTier === "pro" && status === "active") ? SHARED_BOT_NUMBER : null,
-          cancel_at_period_end: subscription.cancel_at_period_end || false,
+          cancel_at_period_end: willCancelAtPeriodEnd(subscription),
           current_period_end: currentPeriodEnd,
         })
         .eq("stripe_customer_id", customerId);
