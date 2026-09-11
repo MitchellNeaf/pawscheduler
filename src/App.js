@@ -22,6 +22,7 @@ import Clients from "./pages/Clients";
 import ClientPets from "./pages/ClientPets";
 import PetAppointments from "./pages/PetAppointments";
 import Schedule from "./pages/Schedule";
+import RequestHistory from "./pages/RequestHistory";
 import UnpaidAppointments from "./pages/UnpaidAppointments";
 import Book from "./pages/Book";
 import Revenue from "./pages/Revenue";
@@ -517,6 +518,7 @@ function AppShell() {
   const navItems = useMemo(
     () => [
       { to: "/schedule", label: "Schedule" },
+      { to: "/history", label: "History" },
       { to: "/clients", label: "Clients" },
       { to: "/inbox", label: "Inbox" },
       { to: "/unpaid", label: "Unpaid" },
@@ -691,6 +693,14 @@ function AppShell() {
           element={
             <ProtectedRoute>
               <Schedule />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/history"
+          element={
+            <ProtectedRoute>
+              <RequestHistory />
             </ProtectedRoute>
           }
         />

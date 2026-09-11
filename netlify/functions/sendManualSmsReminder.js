@@ -79,7 +79,7 @@ exports.handler = async (event) => {
       id, date, time, duration_min, services, amount,
       pets (
         id, name,
-        clients ( id, full_name, phone, sms_opt_in )
+        clients ( id, full_name, phone, email, sms_opt_in )
       )
     `)
     .eq("id", appointmentId)
@@ -93,6 +93,76 @@ exports.handler = async (event) => {
   const client = appt.pets?.clients;
   const pet    = appt.pets;
 
+  // ── Load groomer for business name, tier, and from number ───────
+  const { data: groomer } = await supabase
+    .from("groomers")
+    .select("full_name, business_name, sms_number, plan_tier")
+    .eq("id", user.id)
+    .single();
+
+  const groomerName = groomer?.business_name || groomer?.full_name || "Your groomer";
+  const isBasic = groomer?.plan_tier === "basic";
+
+  if (isBasic) {
+    // ── Basic: email instead of SMS, no shared-number dependency ──
+    if (!client?.email) {
+      return { statusCode: 422, body: JSON.stringify({ error: "No email on file for this client." }) };
+    }
+
+    const services = Array.isArray(appt.services) ? appt.services.join(", ") : appt.services || "";
+    const dateStr = fmtDate(appt.date);
+    const timeStr = fmtTime(appt.time);
+
+    const html = `
+      <div style="font-family:-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:32px 20px">
+        <div style="background:white;border-radius:16px;padding:32px;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+          <div style="text-align:center;font-size:48px;margin-bottom:16px">🐾</div>
+          <h2 style="text-align:center;color:#111827;margin-bottom:8px">Appointment Reminder</h2>
+          <p style="color:#374151;margin-bottom:20px">
+            Hi <strong>${client.full_name?.split(" ")[0] || "there"}</strong>,<br/>
+            This is a reminder that <strong>${pet.name}</strong>'s grooming appointment with ${groomerName} is coming up!
+          </p>
+          <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:12px;padding:16px;margin-bottom:20px">
+            <div style="font-size:14px;color:#166534;margin-bottom:6px"><strong>📅 Date:</strong> ${dateStr}</div>
+            <div style="font-size:14px;color:#166534;margin-bottom:6px"><strong>⏰ Time:</strong> ${timeStr}</div>
+            ${services ? `<div style="font-size:14px;color:#166534"><strong>✂️ Services:</strong> ${services}</div>` : ""}
+          </div>
+        </div>
+        <p style="text-align:center;color:#9ca3af;font-size:12px;margin-top:16px">Powered by PawScheduler</p>
+      </div>`;
+
+    const mailRes = await fetch("https://api.mailersend.com/v1/email", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.MAILERSEND_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: { email: "noreply@pawscheduler.app", name: groomerName },
+        to: [{ email: client.email, name: client.full_name || "" }],
+        subject: `Reminder: ${pet.name}'s grooming appointment on ${dateStr}`,
+        html,
+      }),
+    });
+
+    if (!mailRes.ok) {
+      const err = await mailRes.text();
+      console.error("MailerSend error:", err);
+      return { statusCode: 502, body: JSON.stringify({ error: "Failed to send email. Please try again." }) };
+    }
+
+    await supabase
+      .from("appointments")
+      .update({ sms_reminder_sent_at: new Date().toISOString() })
+      .eq("id", appointmentId)
+      .eq("groomer_id", user.id);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true, message: `Reminder emailed to ${client.full_name}.` }),
+    };
+  }
+
   // ── Check SMS eligibility ───────────────────────────────────────
   if (!client?.phone) {
     return { statusCode: 422, body: JSON.stringify({ error: "No phone number on file for this client." }) };
@@ -102,14 +172,6 @@ exports.handler = async (event) => {
     return { statusCode: 422, body: JSON.stringify({ error: "Client has not opted in to SMS reminders." }) };
   }
 
-  // ── Load groomer for business name + from number ────────────────
-  const { data: groomer } = await supabase
-    .from("groomers")
-    .select("full_name, business_name, sms_number")
-    .eq("id", user.id)
-    .single();
-
-  const groomerName = groomer?.business_name || groomer?.full_name || "Your groomer";
   const fromNumber = groomer?.sms_number || process.env.TELNYX_PHONE_NUMBER;
 
   // ── Build message ───────────────────────────────────────────────

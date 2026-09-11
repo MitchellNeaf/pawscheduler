@@ -70,6 +70,8 @@ exports.handler = async function(event) {
       fileName = "intake_notification.html";
     } else if (template === "telnyx_info_submitted") {
       fileName = "telnyx_info_submitted.html";
+    } else if (template === "basic_reminder_email") {
+      fileName = "basic_reminder_email.html";
     } else if (template === "intake_email") {
       fileName = "intake_email.html";
     } else if (template === "payment_request") {

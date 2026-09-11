@@ -2632,6 +2632,23 @@ function ReviewRequestModal({ request, onClose, onActionComplete, loading, setLo
             }),
           }).catch(() => {});
         }
+        // Archive before deleting, so there's always a real, searchable
+        // record of what was declined — not just silence afterward.
+        await supabase.from("declined_appointments").insert({
+          original_appointment_id: request.id,
+          groomer_id: request.groomer_id,
+          client_id: client?.id || null,
+          client_name: client?.full_name || null,
+          client_phone: client?.phone || null,
+          client_email: client?.email || null,
+          pet_id: request.pets?.id || null,
+          pet_name: request.pets?.name || null,
+          date: request.date,
+          time: request.time,
+          services: request.services || [],
+          source: request.source,
+          was_new_client_first_booking: request.source === "new_client_booking",
+        });
         await supabase.from("appointments").delete().eq("id", request.id);
       }
       onActionComplete(request.id, action);
@@ -2796,7 +2813,7 @@ export default function Schedule() {
     if (!user) return;
     supabase
       .from("appointments")
-      .select("id, date, time, waitlist, source, services, duration_min, notes, groomer_id, pets(name, clients(full_name, phone, email))")
+      .select("id, date, time, waitlist, source, services, duration_min, notes, groomer_id, pets(id, name, clients(id, full_name, phone, email))")
       .eq("groomer_id", user.id)
       .in("source", ["booking_page", "new_client_booking"])
       .eq("confirmed", false)
@@ -2927,7 +2944,7 @@ export default function Schedule() {
       ] = await Promise.all([
         supabase
           .from("groomers")
-          .select("max_parallel, service_pricing, plan_tier, booking_requires_approval, custom_services, subscription_status, custom_intake_questions")
+          .select("max_parallel, service_pricing, plan_tier, booking_requires_approval, custom_services, subscription_status, custom_intake_questions, sms_number, telnyx_info_submitted_at")
           .eq("id", user.id)
           .maybeSingle(),
         supabase
@@ -3802,6 +3819,18 @@ export default function Schedule() {
       )}
 
       {/* Pending booking requests banner — shows ALL pending across all dates */}
+      {(groomer?.plan_tier === "growth" || groomer?.plan_tier === "pro") &&
+        !groomer?.sms_number && !groomer?.telnyx_info_submitted_at && (
+        <Link
+          to="/profile?tab=reminders"
+          className="block mx-4 mt-3 rounded-xl px-4 py-3 bg-red-50 border border-red-200 text-red-800 hover:bg-red-100 transition"
+        >
+          <span className="text-sm font-bold">
+            📋 We need a bit more info to get your dedicated number set up — tap here to fill it out (Profile → Reminders) →
+          </span>
+        </Link>
+      )}
+
       {allPendingRequests.length > 0 && (() => {
         const newClients = allPendingRequests.filter(r => r.source === "new_client_booking" && !r.waitlist);
         const pending    = allPendingRequests.filter(r => r.source !== "new_client_booking" && !r.waitlist);
@@ -4583,6 +4612,26 @@ export default function Schedule() {
                                   }).catch(() => {});
                                 }
                                 const groupIds = group.map(a => a.id);
+                                // Archive before deleting — one row per pet
+                                // in the group, so multi-pet declines are
+                                // each individually searchable later.
+                                await supabase.from("declined_appointments").insert(
+                                  group.map(a => ({
+                                    original_appointment_id: a.id,
+                                    groomer_id: a.groomer_id,
+                                    client_id: a.pets?.clients?.id || null,
+                                    client_name: a.pets?.clients?.full_name || null,
+                                    client_phone: a.pets?.clients?.phone || null,
+                                    client_email: a.pets?.clients?.email || null,
+                                    pet_id: a.pets?.id || null,
+                                    pet_name: a.pets?.name || null,
+                                    date: a.date,
+                                    time: a.time,
+                                    services: a.services || [],
+                                    source: a.source,
+                                    was_new_client_first_booking: a.source === "new_client_booking",
+                                  }))
+                                );
                                 await supabase.from("appointments").delete().in("id", groupIds);
                                 setAppointments(prev => prev.filter(a => !groupIds.includes(a.id)));
                               },

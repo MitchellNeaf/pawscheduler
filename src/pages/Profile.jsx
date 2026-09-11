@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabase";
 import Loader from "../components/Loader";
 import ConfirmModal from "../components/ConfirmModal";
@@ -111,6 +112,7 @@ export default function Profile() {
           ein: data.telnyx_ein || "",
           address: data.telnyx_business_address || "",
           website: data.telnyx_website || "",
+          notes: data.telnyx_additional_notes || "",
         });
         if (data.custom_services) {
           setCustomServices(data.custom_services);
@@ -410,7 +412,8 @@ export default function Profile() {
   // ---------------- SAVE PRICING ----------------
 
   // ---------------- TABS ----------------
-  const [activeTab, setActiveTab] = useState("profile");
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => searchParams.get("tab") || "profile");
   const tabBarRef = useRef(null);
   const [tabBarHasOverflow, setTabBarHasOverflow] = useState(false);
   const [stripeConnecting, setStripeConnecting] = useState(false);
@@ -422,7 +425,7 @@ export default function Profile() {
   const [smsNumber, setSmsNumber] = useState(null); // dedicated texting number, if assigned
   const [telnyxInfoSubmittedAt, setTelnyxInfoSubmittedAt] = useState(null);
   const [telnyxForm, setTelnyxForm] = useState({
-    legalName: "", entityType: "sole_proprietor", ein: "", address: "", website: "",
+    legalName: "", entityType: "sole_proprietor", ein: "", address: "", website: "", notes: "",
   });
   const [telnyxSubmitting, setTelnyxSubmitting] = useState(false);
   const [telnyxError, setTelnyxError] = useState("");
@@ -590,8 +593,10 @@ export default function Profile() {
         telnyx_legal_name: telnyxForm.legalName.trim(),
         telnyx_entity_type: telnyxForm.entityType,
         telnyx_ein: telnyxForm.entityType === "llc_or_corp" ? telnyxForm.ein.trim() : null,
+        telnyx_registration_country: "US",
         telnyx_business_address: telnyxForm.address.trim(),
         telnyx_website: telnyxForm.website.trim() || null,
+        telnyx_additional_notes: telnyxForm.notes.trim() || null,
         telnyx_info_submitted_at: new Date().toISOString(),
       })
       .eq("id", user.id);
@@ -600,13 +605,26 @@ export default function Profile() {
       setTelnyxError("Could not save — please try again.");
     } else {
       setTelnyxInfoSubmittedAt(new Date().toISOString());
+
+      // Flag likely Telnyx risk factors for whoever actually submits this,
+      // so it's caught before submission rather than after a rejection.
+      const freemailDomains = ["gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "icloud.com", "aol.com"];
+      const emailDomain = (user?.email || "").split("@")[1]?.toLowerCase();
+      const risks = [];
+      if (freemailDomains.includes(emailDomain)) {
+        risks.push(`Email is a freemail domain (${emailDomain}) — Telnyx flags this as a possible decline reason.`);
+      }
+      if (!telnyxForm.website.trim() || telnyxForm.website.includes("pawscheduler.app")) {
+        risks.push("No real business website provided (or just the PawScheduler booking link) — Telnyx expects an About/Contact/Services page.");
+      }
+
       // Fire-and-forget internal notification — don't block on it
       fetch("/.netlify/functions/sendEmail", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: "pawscheduler@gmail.com",
-          subject: `New Telnyx info submitted — ${fullName || "a groomer"}`,
+          subject: `New Telnyx info submitted — ${fullName || "a groomer"}${risks.length ? " ⚠️" : ""}`,
           template: "telnyx_info_submitted",
           data: {
             groomer_name: fullName || "—",
@@ -615,6 +633,9 @@ export default function Profile() {
             ein: telnyxForm.entityType === "llc_or_corp" ? telnyxForm.ein.trim() : "—",
             address: telnyxForm.address.trim(),
             website: telnyxForm.website.trim() || "—",
+            notes: telnyxForm.notes.trim() || "—",
+            risk_warning: risks.length > 0,
+            risks: risks.join(" / "),
           },
         }),
       }).catch(() => {});
@@ -1255,11 +1276,24 @@ export default function Profile() {
                 onChange={(e) => setTelnyxForm(f => ({ ...f, address: e.target.value }))}
                 className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
               />
-              <input
-                type="text" placeholder="Website (your PawScheduler booking page link works fine)"
-                value={telnyxForm.website}
-                onChange={(e) => setTelnyxForm(f => ({ ...f, website: e.target.value }))}
-                className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
+              <div>
+                <input
+                  type="text" placeholder="Website or social media page (a Facebook/Instagram business page works)"
+                  value={telnyxForm.website}
+                  onChange={(e) => setTelnyxForm(f => ({ ...f, website: e.target.value }))}
+                  className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
+                />
+                <p className="text-xs text-amber-700 mt-1">
+                  Your provider prefers a real business page showing your services and contact info — a plain
+                  booking link alone may not be enough. No website? A Facebook or Instagram business page works too.
+                </p>
+              </div>
+              <textarea
+                placeholder="Anything else worth explaining? (optional — e.g. if your email or website doesn't obviously match your business name)"
+                value={telnyxForm.notes}
+                onChange={(e) => setTelnyxForm(f => ({ ...f, notes: e.target.value }))}
+                rows={2}
+                className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white resize-none"
               />
               {telnyxError && <p className="text-xs text-red-600">{telnyxError}</p>}
               <button

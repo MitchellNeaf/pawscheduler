@@ -85,12 +85,14 @@ exports.handler = async (event) => {
   const WINDOW = 29; // ±29 minutes — pairs with 30-min cron to catch any appointment time
 
   try {
-    // Load all active groomers with SMS numbers and reminder rules
+    // Load all active groomers eligible for reminders. Growth/Pro need a
+    // real dedicated sms_number to be included; Basic doesn't, since they
+    // now route through email instead of the shared SMS number.
     const { data: groomers, error: gErr } = await supabase
       .from("groomers")
-      .select("id, full_name, sms_number, time_zone, reminder_message_template, sms_confirmation_template, reminder_rules, subscription_status, plan_tier")
-      .not("sms_number", "is", null)
-      .in("subscription_status", ["active", "trial"]);
+      .select("id, full_name, email, sms_number, time_zone, reminder_message_template, sms_confirmation_template, reminder_rules, subscription_status, plan_tier")
+      .in("subscription_status", ["active", "trial"])
+      .or("sms_number.not.is.null,plan_tier.eq.basic");
 
     if (gErr) throw gErr;
 
@@ -103,6 +105,15 @@ exports.handler = async (event) => {
       // Must be basic+ for reminders
       if (groomer.plan_tier === "free") {
         console.log(`Skipping groomer ${groomer.id} — free plan`);
+        skipped++; continue;
+      }
+
+      const isBasic = groomer.plan_tier === "basic";
+
+      // Growth/Pro still need a real dedicated number — Basic doesn't,
+      // since it routes through email instead.
+      if (!isBasic && !groomer.sms_number) {
+        console.log(`Skipping groomer ${groomer.id} — ${groomer.plan_tier} with no sms_number assigned yet`);
         skipped++; continue;
       }
 
@@ -127,7 +138,7 @@ exports.handler = async (event) => {
           .select(`
             id, date, time, duration_min, services, confirmed, confirm_token,
             sms_reminder_sent_at,
-            pets ( name, clients ( id, full_name, phone, sms_opt_in ) )
+            pets ( name, clients ( id, full_name, phone, email, sms_opt_in ) )
           `)
           .eq("groomer_id", groomer.id)
           .eq("date", targetDateStr)
@@ -138,7 +149,12 @@ exports.handler = async (event) => {
 
         for (const appt of (appts || [])) {
           const client = appt.pets?.clients;
-          if (!client?.phone || !client?.sms_opt_in) {
+          if (isBasic) {
+            if (!client?.email) {
+              console.log(`  Skipping appt ${appt.id} — Basic account, client has no email on file`);
+              skipped++; continue;
+            }
+          } else if (!client?.phone || !client?.sms_opt_in) {
             console.log(`  Skipping appt ${appt.id} — no phone or sms_opt_in false (phone: ${client?.phone}, opt_in: ${client?.sms_opt_in})`);
             skipped++; continue;
           }
@@ -197,6 +213,46 @@ exports.handler = async (event) => {
           // Build token vars
           const firstName = (client.full_name || "").split(" ")[0];
           const services = Array.isArray(appt.services) ? appt.services.join(", ") : appt.services || "";
+
+          if (isBasic) {
+            // ── Basic: email instead of SMS, same confirm-link flow ──
+            try {
+              const res = await fetch(`${process.env.URL || "https://app.pawscheduler.app"}/.netlify/functions/sendEmail`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  to: client.email,
+                  subject: `Reminder: ${appt.pets?.name || "Your pet"}'s appointment ${fmtDate(appt.date)}`,
+                  template: "basic_reminder_email",
+                  data: {
+                    first_name: firstName,
+                    pet: appt.pets?.name || "",
+                    date: fmtDate(appt.date),
+                    time: fmtTime(appt.time),
+                    services,
+                    confirm_link: confirmLink,
+                    business_name: groomer.full_name || "",
+                  },
+                }),
+              });
+
+              if (!res.ok) {
+                const err = await res.text();
+                console.error(`Email reminder failed for appt ${appt.id}:`, err);
+                await supabase.from("appointments").update({ sms_reminder_sent_at: null }).eq("id", appt.id);
+                skipped++;
+                continue;
+              }
+
+              console.log(`  ✅ Email reminder sent successfully for appt ${appt.id}`);
+              sent++;
+            } catch (emailErr) {
+              console.error(`Email reminder failed for appt ${appt.id}:`, emailErr.message);
+              await supabase.from("appointments").update({ sms_reminder_sent_at: null }).eq("id", appt.id);
+              skipped++;
+            }
+            continue; // skip the SMS path entirely for Basic
+          }
 
           const vars = {
             first_name: firstName,

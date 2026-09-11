@@ -136,6 +136,53 @@ exports.handler = async (event) => {
       return { statusCode: 200, body: "Opt-out processed" };
     }
 
+    if (normalized === "HELP") {
+      try {
+        await fetch("https://api.telnyx.com/v2/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${process.env.TELNYX_API_KEY}`,
+          },
+          body: JSON.stringify({
+            from: toPhone,
+            to: fromPhone,
+            text: "PawScheduler: Text to book, view, or cancel your grooming appointment. Reply STOP to opt out. For support, contact your groomer directly.",
+          }),
+        });
+      } catch (err) {
+        console.error("HELP auto-reply failed:", err.message);
+      }
+      console.log(`HELP received from ${fromPhone} — auto-reply sent`);
+      return { statusCode: 200, body: "Help message sent" };
+    }
+
+    if (normalized === "START") {
+      await supabase
+        .from("clients")
+        .update({ sms_opt_in: true })
+        .eq("phone", fromPhone);
+
+      try {
+        await fetch("https://api.telnyx.com/v2/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${process.env.TELNYX_API_KEY}`,
+          },
+          body: JSON.stringify({
+            from: toPhone,
+            to: fromPhone,
+            text: "PawScheduler: You're re-subscribed to appointment reminders. Reply STOP to opt out at any time.",
+          }),
+        });
+      } catch (err) {
+        console.error("START auto-reply failed:", err.message);
+      }
+      console.log(`START received from ${fromPhone} — opted back in`);
+      return { statusCode: 200, body: "Opt-in processed" };
+    }
+
     let groomerId = null;
 
     const { data: groomerByDedicatedNum } = await supabase

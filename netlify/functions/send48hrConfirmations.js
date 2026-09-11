@@ -154,7 +154,7 @@ exports.handler = async (event) => {
         ? `https://app.pawscheduler.app/.netlify/functions/confirmAppointmentSms?token=${appt.confirm_token}`
         : null;
 
-      const useSms = client?.sms_opt_in && client?.phone && groomer?.sms_number;
+      const useSms = groomer?.plan_tier !== "basic" && client?.sms_opt_in && client?.phone && groomer?.sms_number;
 
       if (useSms) {
         // ── Send SMS ─────────────────────────────────────────
