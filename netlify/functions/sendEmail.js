@@ -72,6 +72,8 @@ exports.handler = async function(event) {
       fileName = "telnyx_info_submitted.html";
     } else if (template === "basic_reminder_email") {
       fileName = "basic_reminder_email.html";
+    } else if (template === "referral_signup_notification") {
+      fileName = "referral_signup_notification.html";
     } else if (template === "intake_email") {
       fileName = "intake_email.html";
     } else if (template === "payment_request") {

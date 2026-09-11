@@ -13,6 +13,7 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [referredBy, setReferredBy] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [confirmConfig, setConfirmConfig] = useState(null);
@@ -35,6 +36,7 @@ export default function Signup() {
         data: {
           display_name: displayName,
           pilot: pilot || null,
+          referred_by: referredBy.trim() || null,
         },
       },
     });
@@ -49,6 +51,26 @@ export default function Signup() {
       setError("Signup failed. Please try again.");
       setLoading(false);
       return;
+    }
+
+    if (referredBy.trim()) {
+      // Fire-and-forget — this is the actual critical path here, not
+      // just a nice-to-have, since it's what lets Mitchell manually
+      // send out the referral coupon codes.
+      fetch("/.netlify/functions/sendEmail", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: "pawscheduler@gmail.com",
+          subject: `New referral signup — ${displayName || email}`,
+          template: "referral_signup_notification",
+          data: {
+            new_signup_name: displayName || "—",
+            new_signup_email: email,
+            referred_by: referredBy.trim(),
+          },
+        }),
+      }).catch(() => {});
     }
 
     setConfirmConfig({
@@ -149,6 +171,14 @@ export default function Signup() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
+            className="w-full mb-4"
+          />
+
+          <input
+            type="text"
+            placeholder="Who referred you? (optional)"
+            value={referredBy}
+            onChange={(e) => setReferredBy(e.target.value)}
             className="w-full mb-4"
           />
 
