@@ -178,13 +178,19 @@ export default function Signup() {
             className="w-full mb-4"
           />
 
-          <input
-            type="text"
-            placeholder="Who referred you? (optional)"
-            value={referredBy}
-            onChange={(e) => setReferredBy(e.target.value)}
-            className="w-full mb-4"
-          />
+          <div className="mb-4">
+            <label className="block text-xs text-gray-600 mb-1.5">
+              Referred by an existing PawScheduler groomer? Enter their business name below and get{" "}
+              <strong>50% off your first month</strong> once we confirm it.
+            </label>
+            <input
+              type="text"
+              placeholder="Who referred you? (optional)"
+              value={referredBy}
+              onChange={(e) => setReferredBy(e.target.value)}
+              className="w-full"
+            />
+          </div>
 
           <button
             type="submit"

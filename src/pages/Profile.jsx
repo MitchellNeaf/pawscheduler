@@ -107,7 +107,9 @@ export default function Profile() {
         if (data.sms_number) setSmsNumber(data.sms_number);
         if (data.telnyx_info_submitted_at) setTelnyxInfoSubmittedAt(data.telnyx_info_submitted_at);
         setTelnyxForm({
-          legalName: data.telnyx_legal_name || "",
+          firstName: data.telnyx_first_name || "",
+          lastName: data.telnyx_last_name || "",
+          businessName: data.telnyx_business_name || "",
           entityType: data.telnyx_entity_type || "sole_proprietor",
           ein: data.telnyx_ein || "",
           address: data.telnyx_business_address || "",
@@ -424,8 +426,9 @@ export default function Profile() {
   const [reminderRules, setReminderRules] = useState([48, 2]); // hours before appointment
   const [smsNumber, setSmsNumber] = useState(null); // dedicated texting number, if assigned
   const [telnyxInfoSubmittedAt, setTelnyxInfoSubmittedAt] = useState(null);
+  const [editingTelnyxInfo, setEditingTelnyxInfo] = useState(false);
   const [telnyxForm, setTelnyxForm] = useState({
-    legalName: "", entityType: "sole_proprietor", ein: "", address: "", website: "", notes: "",
+    firstName: "", lastName: "", businessName: "", entityType: "sole_proprietor", ein: "", address: "", website: "", notes: "",
   });
   const [telnyxSubmitting, setTelnyxSubmitting] = useState(false);
   const [telnyxError, setTelnyxError] = useState("");
@@ -578,8 +581,12 @@ export default function Profile() {
 
   const handleSubmitTelnyxInfo = async () => {
     setTelnyxError("");
-    if (!telnyxForm.legalName.trim() || !telnyxForm.address.trim()) {
-      setTelnyxError("Please fill in your legal business name and address.");
+    if (!telnyxForm.firstName.trim() || !telnyxForm.lastName.trim()) {
+      setTelnyxError("Please fill in your first and last name.");
+      return;
+    }
+    if (!telnyxForm.businessName.trim() || !telnyxForm.address.trim()) {
+      setTelnyxError("Please fill in your business name and address.");
       return;
     }
     if (telnyxForm.entityType === "llc_or_corp" && !telnyxForm.ein.trim()) {
@@ -590,7 +597,9 @@ export default function Profile() {
     const { error } = await supabase
       .from("groomers")
       .update({
-        telnyx_legal_name: telnyxForm.legalName.trim(),
+        telnyx_first_name: telnyxForm.firstName.trim(),
+        telnyx_last_name: telnyxForm.lastName.trim(),
+        telnyx_business_name: telnyxForm.businessName.trim(),
         telnyx_entity_type: telnyxForm.entityType,
         telnyx_ein: telnyxForm.entityType === "llc_or_corp" ? telnyxForm.ein.trim() : null,
         telnyx_registration_country: "US",
@@ -605,6 +614,7 @@ export default function Profile() {
       setTelnyxError("Could not save — please try again.");
     } else {
       setTelnyxInfoSubmittedAt(new Date().toISOString());
+      setEditingTelnyxInfo(false);
 
       // Flag likely Telnyx risk factors for whoever actually submits this,
       // so it's caught before submission rather than after a rejection.
@@ -624,11 +634,12 @@ export default function Profile() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           to: "pawscheduler@gmail.com",
-          subject: `New Telnyx info submitted — ${fullName || "a groomer"}${risks.length ? " ⚠️" : ""}`,
+          subject: `${editingTelnyxInfo ? "Updated" : "New"} Telnyx info submitted — ${fullName || "a groomer"}${risks.length ? " ⚠️" : ""}`,
           template: "telnyx_info_submitted",
           data: {
             groomer_name: fullName || "—",
-            legal_name: telnyxForm.legalName.trim(),
+            legal_name: `${telnyxForm.firstName.trim()} ${telnyxForm.lastName.trim()}`,
+            business_name: telnyxForm.businessName.trim(),
             entity_type: telnyxForm.entityType === "llc_or_corp" ? "LLC / Corporation" : "Sole Proprietor",
             ein: telnyxForm.entityType === "llc_or_corp" ? telnyxForm.ein.trim() : "—",
             address: telnyxForm.address.trim(),
@@ -710,6 +721,23 @@ export default function Profile() {
 
           {/* ── Account Info Card ── */}
           <AccountInfoCard userId={user?.id} planTier={planTier} onManageBilling={handleManageBilling} billingLoading={billingLoading} />
+
+          {/* ── Referral Program ── */}
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🎁</span>
+              <h3 className="font-bold text-emerald-900 text-sm">Refer a Friend, Save 25%</h3>
+            </div>
+            <p className="text-sm text-emerald-800">
+              For every groomer you refer who signs up and pays for a subscription, you get{" "}
+              <strong>25% off your own subscription for 3 months</strong> — and it stacks. Refer 4 people,
+              and that's a full year at 25% off.
+            </p>
+            <p className="text-xs text-emerald-700">
+              Tell them to enter <strong>"{fullName || "your business name"}"</strong> in the "Who referred
+              you?" field when they sign up — and they'll get <strong>50% off their own first month</strong> too.
+            </p>
+          </div>
 
           <div className="flex flex-col items-center gap-3">
             {logoUrl ? (
@@ -1231,27 +1259,51 @@ export default function Profile() {
                 <p className="text-xs text-emerald-700 mt-0.5">Reminders and replies send from this number — safe to give to clients directly.</p>
               </div>
             </div>
-          ) : telnyxInfoSubmittedAt ? (
+          ) : telnyxInfoSubmittedAt && !editingTelnyxInfo ? (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
               <span className="text-2xl">⏳</span>
-              <div>
+              <div className="flex-1">
                 <div className="text-xs font-bold text-amber-800 uppercase tracking-wide">Your number isn't available yet</div>
                 <p className="text-sm text-amber-900 mt-1">We've got your info and are working with our provider to get your number set up. This usually takes a little while — we'll notify you the moment it's ready.</p>
+                <button
+                  type="button"
+                  onClick={() => setEditingTelnyxInfo(true)}
+                  className="text-xs font-semibold text-amber-700 underline mt-2"
+                >
+                  Need to fix or add something? Edit your info →
+                </button>
               </div>
             </div>
           ) : (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 space-y-3">
               <div>
-                <div className="text-xs font-bold text-amber-800 uppercase tracking-wide">Your number isn't available yet</div>
+                <div className="text-xs font-bold text-amber-800 uppercase tracking-wide">
+                  {editingTelnyxInfo ? "Edit your business info" : "Your number isn't available yet"}
+                </div>
                 <p className="text-sm text-amber-900 mt-1">
-                  Before we can get you a dedicated texting number, our phone provider requires a few details about your
-                  business to report on your behalf. This only takes a minute.
+                  {editingTelnyxInfo
+                    ? "Update anything below, then submit again — we'll pick up the new info."
+                    : "Before we can get you a dedicated texting number, our phone provider requires a few details about your business to report on your behalf. This only takes a minute."}
                 </p>
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  type="text" placeholder="Your first name"
+                  value={telnyxForm.firstName}
+                  onChange={(e) => setTelnyxForm(f => ({ ...f, firstName: e.target.value }))}
+                  className="border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
+                />
+                <input
+                  type="text" placeholder="Your last name"
+                  value={telnyxForm.lastName}
+                  onChange={(e) => setTelnyxForm(f => ({ ...f, lastName: e.target.value }))}
+                  className="border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
+                />
+              </div>
               <input
-                type="text" placeholder="Legal business name (or your own legal name if a sole proprietor)"
-                value={telnyxForm.legalName}
-                onChange={(e) => setTelnyxForm(f => ({ ...f, legalName: e.target.value }))}
+                type="text" placeholder="Business name (e.g. Sparkle Paws Grooming)"
+                value={telnyxForm.businessName}
+                onChange={(e) => setTelnyxForm(f => ({ ...f, businessName: e.target.value }))}
                 className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
               />
               <select
@@ -1278,14 +1330,15 @@ export default function Profile() {
               />
               <div>
                 <input
-                  type="text" placeholder="Website or social media page (a Facebook/Instagram business page works)"
+                  type="text" placeholder="Facebook or Instagram business page (preferred), or your own website"
                   value={telnyxForm.website}
                   onChange={(e) => setTelnyxForm(f => ({ ...f, website: e.target.value }))}
                   className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white"
                 />
                 <p className="text-xs text-amber-700 mt-1">
-                  Your provider prefers a real business page showing your services and contact info — a plain
-                  booking link alone may not be enough. No website? A Facebook or Instagram business page works too.
+                  <strong>Please don't enter your PawScheduler booking link here</strong> — it won't count as a business
+                  website for this. Don't have a website? A free Facebook or Instagram business page works great and
+                  only takes a few minutes to set up.
                 </p>
               </div>
               <textarea
@@ -1296,14 +1349,25 @@ export default function Profile() {
                 className="w-full border border-amber-300 rounded-xl px-3 py-2 text-sm bg-white resize-none"
               />
               {telnyxError && <p className="text-xs text-red-600">{telnyxError}</p>}
-              <button
-                type="button"
-                disabled={telnyxSubmitting}
-                onClick={handleSubmitTelnyxInfo}
-                className="w-full py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 transition disabled:opacity-50"
-              >
-                {telnyxSubmitting ? "Saving…" : "Submit Info"}
-              </button>
+              <div className="flex gap-2">
+                {editingTelnyxInfo && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingTelnyxInfo(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-amber-300 text-amber-800 text-sm font-semibold hover:bg-amber-100 transition"
+                  >
+                    Cancel
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={telnyxSubmitting}
+                  onClick={handleSubmitTelnyxInfo}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-bold hover:bg-amber-600 transition disabled:opacity-50"
+                >
+                  {telnyxSubmitting ? "Saving…" : editingTelnyxInfo ? "Save Changes" : "Submit Info"}
+                </button>
+              </div>
             </div>
           )}
           <div className="rounded-2xl border border-[var(--border-med)] bg-[var(--surface)] p-4 space-y-3">
