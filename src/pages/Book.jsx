@@ -525,6 +525,19 @@ export default function BookPage() {
       return;
     }
 
+    // "Other" alone doesn't count as a real service selection — matches
+    // the same filter already used to decide whether to show pricing.
+    if (form.services.filter(s => s !== "Other").length === 0) {
+      setConfirmConfig({
+        title: "Select a service",
+        message: "Please select at least one service before booking.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+      setSubmitting(false);
+      return;
+    }
+
     const slotWeight = selectedPetWeight ?? 1;
     const sizeCategory = selectedPetSizeCategory ?? 1;
     const autoAmount = calcAmount(form.services, sizeCategory, pricing, addonOptions) + calcAddons(form.services, addonOptions);
