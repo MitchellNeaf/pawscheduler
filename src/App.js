@@ -24,6 +24,7 @@ import ClientPets from "./pages/ClientPets";
 import PetAppointments from "./pages/PetAppointments";
 import Schedule from "./pages/Schedule";
 import RequestHistory from "./pages/RequestHistory";
+import BotConversations from "./pages/BotConversations";
 import UnpaidAppointments from "./pages/UnpaidAppointments";
 import Book from "./pages/Book";
 import Revenue from "./pages/Revenue";
@@ -521,6 +522,7 @@ function AppShell() {
     () => [
       { to: "/schedule", label: "Schedule" },
       { to: "/history", label: "History" },
+      { to: "/bot-conversations", label: "Bot Chats" },
       { to: "/clients", label: "Clients" },
       { to: "/inbox", label: "Inbox" },
       { to: "/unpaid", label: "Unpaid" },
@@ -703,6 +705,14 @@ function AppShell() {
           element={
             <ProtectedRoute>
               <RequestHistory />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/bot-conversations"
+          element={
+            <ProtectedRoute>
+              <BotConversations />
             </ProtectedRoute>
           }
         />

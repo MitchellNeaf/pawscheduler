@@ -934,7 +934,7 @@ export default function Help() {
               <BulletList items={[
                 { title: "What it can do", text: "Book a new appointment, check availability, reschedule, or cancel — all through natural conversation, no menus or keywords required." },
                 { title: "Only works for existing clients", text: "The bot looks up the sender's phone number in your client list. Someone who's never booked with you before won't be recognized — pair this with New Client Self-Booking so they have a way in." },
-                { title: "You still see everything", text: "Every bot conversation shows up in your SMS Inbox alongside your regular messages, so nothing happens without your visibility." },
+                { title: "You still see everything", text: "Every bot conversation is saved and reviewable under Bot Chats in the nav — search by client name or phone, and open any conversation to see the full back-and-forth, so nothing happens without your visibility." },
                 { title: "Powered by Claude", text: "The bot runs on Anthropic's Claude AI, called directly through their API — the same model family used to build PawScheduler itself.", tone: "tip" },
               ]} />
             </div>
