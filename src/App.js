@@ -13,6 +13,7 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
 import ConfirmModal from "./components/ConfirmModal";
+import AddToHomeScreenBanner from "./components/AddToHomeScreenBanner";
 
 import ResetPassword from "./pages/ResetPassword";
 import Signup from "./pages/Signup";
@@ -381,6 +382,7 @@ function ProtectedRoute({ children }) {
           }}
         />
       )}
+      {user?.id && <AddToHomeScreenBanner userId={user.id} />}
       {children}
     </>
   );
