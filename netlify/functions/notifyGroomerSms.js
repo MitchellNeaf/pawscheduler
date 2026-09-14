@@ -80,11 +80,16 @@ exports.handler = async (event) => {
   }
 
   const toPhone = normalizePhone(groomer.business_phone);
-  const fromNumber = groomer.sms_number || process.env.TELNYX_PHONE_NUMBER;
+  // No fallback to the shared TELNYX_PHONE_NUMBER here on purpose — that
+  // was the exact multi-tenant traffic pattern that prompted moving Basic
+  // to email in the first place. If there's no dedicated number, skip SMS
+  // entirely rather than send from a shared line; email + push (fired
+  // separately from Book.jsx) still reach the groomer regardless.
+  const fromNumber = groomer.sms_number;
 
   if (!toPhone || !fromNumber) {
-    console.log(`notifyGroomerSms skipped for ${groomer.id} — business_phone: "${groomer.business_phone}" normalized to: ${toPhone}, fromNumber: ${fromNumber || "none"}`);
-    return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "No phone configured or invalid format" }) };
+    console.log(`notifyGroomerSms skipped for ${groomer.id} — business_phone: "${groomer.business_phone}" normalized to: ${toPhone}, fromNumber: ${fromNumber || "none (no dedicated number)"}`);
+    return { statusCode: 200, body: JSON.stringify({ skipped: true, reason: "No dedicated number for this groomer" }) };
   }
 
   const message = isNewClient

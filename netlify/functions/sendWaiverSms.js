@@ -1,16 +1,14 @@
 /**
  * sendWaiverSms.js — Netlify function
  *
- * Sends a waiver signing link to a client via Telnyx SMS.
+ * Sends a waiver signing link to a client via text instead of email.
+ * Requires a real dedicated sms_number — no shared-number fallback,
+ * matching the same principle established elsewhere tonight. If the
+ * groomer doesn't have one yet, falls back to email automatically
+ * rather than failing outright.
  *
  * POST body:
  *   { clientId: string }
- *
- * Flow:
- *   1. Verify groomer is authenticated
- *   2. Load client — confirm they belong to this groomer and have sms_opt_in
- *   3. Load groomer slug
- *   4. Send SMS with waiver link via Telnyx
  */
 
 const { createClient } = require("@supabase/supabase-js");
@@ -25,7 +23,6 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
 
-  // ── Auth ────────────────────────────────────────────────
   const token = (event.headers.authorization || "").replace("Bearer ", "").trim();
   if (!token) {
     return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
@@ -36,7 +33,6 @@ exports.handler = async (event) => {
     return { statusCode: 401, body: JSON.stringify({ error: "Unauthorized" }) };
   }
 
-  // ── Parse body ──────────────────────────────────────────
   let clientId;
   try {
     ({ clientId } = JSON.parse(event.body || "{}"));
@@ -48,30 +44,20 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "clientId required" }) };
   }
 
-  // ── Load client ─────────────────────────────────────────
   const { data: client, error: clientErr } = await supabase
     .from("clients")
-    .select("id, full_name, phone, sms_opt_in")
+    .select("id, full_name, email, phone, sms_opt_in")
     .eq("id", clientId)
-    .eq("groomer_id", user.id) // security: only own clients
+    .eq("groomer_id", user.id)
     .single();
 
   if (clientErr || !client) {
     return { statusCode: 404, body: JSON.stringify({ error: "Client not found" }) };
   }
 
-  if (!client.phone) {
-    return { statusCode: 422, body: JSON.stringify({ error: "No phone number on file for this client." }) };
-  }
-
-  if (!client.sms_opt_in) {
-    return { statusCode: 422, body: JSON.stringify({ error: "Client has not opted in to SMS." }) };
-  }
-
-  // ── Load groomer slug ───────────────────────────────────
   const { data: groomer } = await supabase
     .from("groomers")
-    .select("slug, full_name, business_name, sms_number")
+    .select("id, slug, full_name, business_name, sms_number")
     .eq("id", user.id)
     .single();
 
@@ -80,36 +66,86 @@ exports.handler = async (event) => {
   }
 
   const groomerName = groomer.business_name || groomer.full_name || "Your groomer";
-  const firstName = client.full_name.split(" ")[0];
-
-  // Include client_id so the waiver page can store it on sign
   const siteUrl = process.env.URL || "https://app.pawscheduler.app";
   const waiverUrl = `${siteUrl}/waiver/${groomer.slug}?cid=${client.id}`;
 
-  const message = `Hi ${firstName}! ${groomerName} has sent you a grooming waiver to sign before your appointment. Please review and sign here: ${waiverUrl}`;
+  // No dedicated number, or client hasn't opted into texting — fall
+  // back to email rather than fail outright.
+  const canText = !!(groomer.sms_number && client.phone && client.sms_opt_in);
 
-  // ── Send via Telnyx ─────────────────────────────────────
-  const telnyxRes = await fetch("https://api.telnyx.com/v2/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.TELNYX_API_KEY}`,
-    },
-    body: JSON.stringify({
-      from: groomer.sms_number || process.env.TELNYX_PHONE_NUMBER,
-      to: client.phone,
-      text: message,
-    }),
-  });
+  if (!canText) {
+    if (!client.email) {
+      return {
+        statusCode: 422,
+        body: JSON.stringify({ error: "No dedicated texting number set up, and no email on file for this client either." }),
+      };
+    }
 
-  if (!telnyxRes.ok) {
-    const err = await telnyxRes.text();
-    console.error("Telnyx error:", err);
-    return { statusCode: 502, body: JSON.stringify({ error: "Failed to send SMS. Please try again." }) };
+    const res = await fetch(`${siteUrl}/.netlify/functions/sendWaiverEmail`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ clientId }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error("Fallback sendWaiverEmail error:", err);
+      return { statusCode: 502, body: JSON.stringify({ error: "Failed to send waiver. Please try again." }) };
+    }
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        ok: true,
+        channel: "email",
+        note: groomer.sms_number
+          ? "This client hasn't opted in to texting, so this was sent by email instead."
+          : "You don't have a dedicated texting number set up yet, so this was sent by email instead.",
+      }),
+    };
   }
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify({ ok: true }),
-  };
+  const message = `Hi ${client.full_name.split(" ")[0]}, please sign your grooming waiver with ${groomerName} here: ${waiverUrl}`;
+
+  try {
+    const res = await fetch("https://api.telnyx.com/v2/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.TELNYX_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: groomer.sms_number,
+        to: client.phone,
+        text: message,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      console.error("Telnyx send failed:", err);
+      return { statusCode: 502, body: JSON.stringify({ error: "Failed to send text. Please try again." }) };
+    }
+
+    let telnyxMsgId = null;
+    try { telnyxMsgId = (await res.json())?.data?.id || null; } catch {}
+
+    await supabase.from("sms_messages").insert({
+      groomer_id: groomer.id,
+      client_id: client.id,
+      client_phone: client.phone,
+      direction: "outbound",
+      body: message,
+      telnyx_msg_id: telnyxMsgId,
+      message_type: "waiver_request",
+    });
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ ok: true, channel: "sms" }),
+    };
+  } catch (err) {
+    console.error("sendWaiverSms error:", err.message);
+    return { statusCode: 500, body: JSON.stringify({ error: err.message || "Something went wrong." }) };
+  }
 };
