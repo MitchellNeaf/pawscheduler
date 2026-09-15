@@ -14,6 +14,22 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+// Fills [placeholder] tokens with the matching field from a recipient
+// object. Unrecognized placeholders are left as-is rather than silently
+// removed, so a typo is obvious in the sent email instead of vanishing.
+function fillPlaceholders(text, recipient) {
+  const values = {
+    groomer: recipient.full_name || "",
+    business: recipient.full_name || "",
+    email: recipient.email || "",
+    plan: recipient.plan_tier || "",
+  };
+  return text.replace(/\[(\w+)\]/g, (match, key) => {
+    const lowerKey = key.toLowerCase();
+    return lowerKey in values ? values[lowerKey] : match;
+  });
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
@@ -42,13 +58,26 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: "recipients, subject, and body required" }) };
   }
 
-  // Minimal plain-text style HTML — avoids Gmail promotional tab
-  const html = `<!DOCTYPE html>
+  // Accept either full recipient objects ({ email, full_name, plan_tier })
+  // or plain email strings for backward compatibility — the latter just
+  // won't have anything to substitute into [groomer]-style placeholders.
+  const normalizedRecipients = recipients.map((r) =>
+    typeof r === "string" ? { email: r } : r
+  );
+
+  const results = [];
+
+  for (const recipient of normalizedRecipients) {
+    const email = recipient.email;
+    const personalizedSubject = fillPlaceholders(subject, recipient);
+    const personalizedBody = fillPlaceholders(body, recipient);
+
+    const html = `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;font-family:Arial,sans-serif;font-size:15px;color:#111827;background:#ffffff;">
   <div style="max-width:580px;margin:0 auto;padding:32px 24px;">
-    ${body.replace(/\n/g, "<br>")}
+    ${personalizedBody.replace(/\n/g, "<br>")}
     <br><br>
     <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
     <p style="font-size:12px;color:#9ca3af;margin:0;">
@@ -58,9 +87,6 @@ exports.handler = async (event) => {
 </body>
 </html>`;
 
-  const results = [];
-
-  for (const email of recipients) {
     try {
       const res = await fetch("https://api.mailersend.com/v1/email", {
         method: "POST",
@@ -72,9 +98,9 @@ exports.handler = async (event) => {
           from: { email: "noreply@pawscheduler.app", name: "Mitchell from PawScheduler" },
           reply_to: { email: "pawscheduler@gmail.com", name: "Mitchell from PawScheduler" },
           to: [{ email }],
-          subject,
+          subject: personalizedSubject,
           html,
-          text: body,
+          text: personalizedBody,
         }),
       });
 

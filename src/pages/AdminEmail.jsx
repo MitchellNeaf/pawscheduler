@@ -100,7 +100,11 @@ export default function AdminEmail() {
           Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
-          recipients: groomers.filter(g => selected.has(g.id)).map(g => g.email),
+          recipients: groomers.filter(g => selected.has(g.id)).map(g => ({
+            email: g.email,
+            full_name: g.full_name,
+            plan_tier: g.plan_tier,
+          })),
           subject: subject.trim(),
           body: body.trim(),
         }),
@@ -241,10 +245,16 @@ export default function AdminEmail() {
 
         <label className="flex flex-col gap-1.5">
           <span className="text-sm font-medium text-gray-700">Message</span>
+          <p className="text-xs text-gray-400">
+            Use <code className="bg-gray-100 px-1 rounded">[groomer]</code>,{" "}
+            <code className="bg-gray-100 px-1 rounded">[email]</code>, or{" "}
+            <code className="bg-gray-100 px-1 rounded">[plan]</code> to personalize each email — works in the
+            subject too.
+          </p>
           <textarea
             value={body}
             onChange={e => setBody(e.target.value)}
-            placeholder={"Hi there,\n\nJust wanted to let you know..."}
+            placeholder={"Hi [groomer],\n\nJust wanted to let you know..."}
             rows={10}
             className="border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-y"
           />
@@ -255,6 +265,9 @@ export default function AdminEmail() {
           <div className="rounded-xl border border-dashed border-gray-200 p-3 space-y-1">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Preview</p>
             <p className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">{body}</p>
+            {/\[groomer\]|\[email\]|\[plan\]/i.test(body) && (
+              <p className="text-xs text-emerald-600 pt-1">Placeholders above will be filled in individually for each recipient when sent.</p>
+            )}
           </div>
         )}
 
