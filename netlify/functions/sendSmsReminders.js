@@ -90,7 +90,7 @@ exports.handler = async (event) => {
     // now route through email instead of the shared SMS number.
     const { data: groomers, error: gErr } = await supabase
       .from("groomers")
-      .select("id, full_name, email, sms_number, time_zone, reminder_message_template, sms_confirmation_template, reminder_rules, subscription_status, plan_tier")
+      .select("id, full_name, email, sms_number, time_zone, reminder_message_template, sms_confirmation_template, reminder_rules, subscription_status, plan_tier, business_address")
       .in("subscription_status", ["active", "trial"])
       .or("sms_number.not.is.null,plan_tier.eq.basic");
 
@@ -137,12 +137,13 @@ exports.handler = async (event) => {
           .from("appointments")
           .select(`
             id, date, time, duration_min, services, confirmed, confirm_token,
-            sms_reminder_sent_at,
+            sms_reminder_sent_at, is_tentative,
             pets ( name, clients ( id, full_name, phone, email, sms_opt_in ) )
           `)
           .eq("groomer_id", groomer.id)
           .eq("date", targetDateStr)
           .eq("reminder_enabled", true)
+          .eq("is_tentative", false)
           .or("no_show.is.null,no_show.eq.false");
 
         console.log(`  Found ${(appts || []).length} appointment(s) on ${targetDateStr} with reminder_enabled`);
@@ -232,6 +233,7 @@ exports.handler = async (event) => {
                     services,
                     confirm_link: confirmLink,
                     business_name: groomer.full_name || "",
+                    business_address: groomer.business_address || "",
                   },
                 }),
               });

@@ -76,7 +76,7 @@ exports.handler = async (event) => {
   const { data: appt, error: apptErr } = await supabase
     .from("appointments")
     .select(`
-      id, date, time, duration_min, services, amount,
+      id, date, time, duration_min, services, amount, is_tentative,
       pets (
         id, name,
         clients ( id, full_name, phone, email, sms_opt_in )
@@ -88,6 +88,13 @@ exports.handler = async (event) => {
 
   if (apptErr || !appt) {
     return { statusCode: 404, body: JSON.stringify({ error: "Appointment not found" }) };
+  }
+
+  if (appt.is_tentative) {
+    return {
+      statusCode: 422,
+      body: JSON.stringify({ error: "This appointment is marked tentative. Confirm the date first before sending a reminder." }),
+    };
   }
 
   const client = appt.pets?.clients;

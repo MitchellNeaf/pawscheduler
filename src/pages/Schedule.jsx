@@ -710,6 +710,14 @@ function MultiPetAppointmentModal({
             </p>
           )}
 
+          <label className="flex items-center gap-2 text-sm p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+            <input type="checkbox" checked={!!form.is_tentative}
+              onChange={(e) => setForm((p) => ({ ...p, is_tentative: e.target.checked }))} />
+            <span className="text-amber-800">
+              📌 Tentative date — no reminders or confirmations will be sent until this is unchecked
+            </span>
+          </label>
+
           {/* Recurring */}
           {newPets.length === 1 && (
             <div className="rounded-xl border border-[var(--border-med)] bg-[var(--surface)] p-3 space-y-2">
@@ -2904,7 +2912,7 @@ export default function Schedule() {
         .from("appointments")
         .select(`
           id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
-          services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id, is_flexible,
+          services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id, is_flexible, is_tentative,
           checked_in_at, checked_out_at, payment_method,
           pets (
             id, name, tags, client_id, photo_url, size_category,
@@ -2962,7 +2970,7 @@ export default function Schedule() {
           .from("appointments")
           .select(`
             id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
-            services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id, is_flexible,
+            services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id, is_flexible, is_tentative,
             checked_in_at, checked_out_at, payment_method,
             pets (
               id, name, tags, notes, client_id, photo_url, size_category,
@@ -3381,6 +3389,7 @@ export default function Schedule() {
       slot_weight:          pet.slot_weight || 1,
       size_category:        pet.size_category || 1,
       reminder_enabled:     planTier !== "free" && newForm.reminder_enabled,
+      is_tentative:         !!newForm.is_tentative,
       reminder_sent:        false,
       amount:               form.amount ?? null,
       appointment_group_id: groupId,
@@ -3465,6 +3474,7 @@ export default function Schedule() {
       notes: appt.notes || "",
       amount: appt.amount ?? null,
       reminder_enabled: appt.reminder_enabled ?? false,
+      is_tentative: !!appt.is_tentative,
       payment_method: appt.payment_method || "",
       tip: appt.tip != null ? String(appt.tip) : "",
       paid: appt.paid ?? false,
@@ -3499,6 +3509,7 @@ export default function Schedule() {
         notes: editForm.notes,
         amount: editForm.amount ?? null,
         reminder_enabled: editForm.reminder_enabled,
+        is_tentative: !!editForm.is_tentative,
         payment_method: editForm.payment_method || null,
         tip: editForm.tip ? parseFloat(editForm.tip) || null : null,
         paid: editForm.paid ?? false,
@@ -3559,6 +3570,17 @@ export default function Schedule() {
 
   const handleSendReminder = async (appt) => {
     const client = appt.pets?.clients;
+
+    // Guard: tentative — no reminders until the date is actually locked in
+    if (appt.is_tentative) {
+      setConfirmConfig({
+        title: "This date is tentative",
+        message: "Uncheck \"Tentative date\" on this appointment before sending a reminder — clients shouldn't get a confirm link for a date that might still change.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+      return;
+    }
 
     // Guard: no phone
     if (!client?.phone) {
@@ -4700,6 +4722,7 @@ export default function Schedule() {
                         >
                           {displayName}{" "}
                           {isMulti && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">Multi</span>}
+                          {appt.is_tentative && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold">📌 Tentative</span>}
                           {!isMulti && <span className="text-xs text-gray-500">{size.label}</span>}
                         </button>
                         <div className="text-sm flex items-center gap-1.5 flex-wrap">

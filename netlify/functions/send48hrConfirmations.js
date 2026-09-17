@@ -66,7 +66,7 @@ exports.handler = async (event) => {
       .from("appointments")
       .select(`
         id, date, time, duration_min, services, confirmed, confirm_token,
-        reminder_enabled, sms_reminder_enabled, groomer_id,
+        reminder_enabled, sms_reminder_enabled, groomer_id, is_tentative,
         pets (
           id, name,
           clients ( id, full_name, email, phone, sms_opt_in )
@@ -74,6 +74,7 @@ exports.handler = async (event) => {
       `)
       .eq("date", targetDate)
       .eq("confirmed", false)
+      .eq("is_tentative", false)
       .is("confirmation_sent_at", null)
       .or("no_show.is.null,no_show.eq.false");
 
