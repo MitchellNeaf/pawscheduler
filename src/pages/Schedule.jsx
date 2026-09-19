@@ -1177,6 +1177,14 @@ function AppointmentModal({
               🔒 Automatic reminders require Basic or higher. <a href="/upgrade" className="text-emerald-600 font-semibold">Upgrade →</a>
             </p>
           )}
+
+          <label className="flex items-center gap-2 text-sm p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+            <input type="checkbox" checked={!!form.is_tentative}
+              onChange={(e) => setForm((prev) => ({ ...prev, is_tentative: e.target.checked }))} />
+            <span className="text-amber-800">
+              📌 Tentative date — no reminders or confirmations will be sent until this is unchecked
+            </span>
+          </label>
         </div>
 
         {/* Footer */}
@@ -2785,6 +2793,7 @@ export default function Schedule() {
   const FREE_LIMIT = 50;
   const [monthlyCount, setMonthlyCount] = useState(null);
   const [allPendingRequests, setAllPendingRequests] = useState([]);
+  const [staleTentativeAppts, setStaleTentativeAppts] = useState([]);
   const [reviewRequest, setReviewRequest] = useState(null); // the request currently open in the review modal
   const [reviewActionLoading, setReviewActionLoading] = useState(false);
 
@@ -2828,6 +2837,25 @@ export default function Schedule() {
       .gte("date", new Date().toISOString().slice(0, 10))
       .order("date", { ascending: true })
       .then(({ data }) => setAllPendingRequests(data || []));
+  }, [user, appointments]);
+
+  // Warn about tentative appointments still unconfirmed within 5 days —
+  // these get zero reminders sent the whole time they stay tentative, so
+  // one sitting this close to its date risks the client never being
+  // reminded at all if the groomer forgets to lock it in.
+  useEffect(() => {
+    if (!user) return;
+    const fiveDaysOut = new Date();
+    fiveDaysOut.setDate(fiveDaysOut.getDate() + 5);
+    supabase
+      .from("appointments")
+      .select("id, date, time, pets(name, clients(full_name, phone))")
+      .eq("groomer_id", user.id)
+      .eq("is_tentative", true)
+      .gte("date", new Date().toISOString().slice(0, 10))
+      .lte("date", fiveDaysOut.toISOString().slice(0, 10))
+      .order("date", { ascending: true })
+      .then(({ data }) => setStaleTentativeAppts(data || []));
   }, [user, appointments]);
 
   // Compute no-show counts for whichever clients are on today's schedule —
@@ -3401,7 +3429,7 @@ export default function Schedule() {
       .select(`
         id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled,
-        appointment_group_id, is_flexible,
+        appointment_group_id, is_flexible, is_tentative,
         pets (
           id, name, tags, client_id, photo_url, size_category,
           clients ( id, full_name, phone, email )
@@ -3522,7 +3550,7 @@ export default function Schedule() {
       .select(`
         id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
         services, notes, confirmed, no_show, paid, amount, reminder_enabled, appointment_group_id,
-        payment_method, checked_in_at, checked_out_at, source, is_flexible,
+        payment_method, checked_in_at, checked_out_at, source, is_flexible, is_tentative,
         pets ( id, name, tags, client_id, photo_url, size_category, clients ( id, full_name, phone, email ) )
       `)
       .single();
@@ -3567,6 +3595,29 @@ export default function Schedule() {
 
 
 
+
+  const handleToggleTentative = (appt) => {
+    const turningOn = !appt.is_tentative;
+    setConfirmConfig({
+      title: turningOn ? "Mark this date tentative?" : "Confirm this date?",
+      message: turningOn
+        ? "No reminders or confirmations will go out for this appointment until you mark it confirmed again."
+        : "This will unmark it as tentative — reminders and confirmations will start going out for it normally.",
+      confirmLabel: turningOn ? "Yes, mark tentative" : "Yes, confirm date",
+      onConfirm: async () => {
+        const { error } = await supabase
+          .from("appointments")
+          .update({ is_tentative: turningOn })
+          .eq("id", appt.id)
+          .eq("groomer_id", user.id);
+        if (error) {
+          console.error("Failed to toggle tentative:", error.message);
+          return;
+        }
+        setAppointments(prev => prev.map(a => a.id === appt.id ? { ...a, is_tentative: turningOn } : a));
+      },
+    });
+  };
 
   const handleSendReminder = async (appt) => {
     const client = appt.pets?.clients;
@@ -3851,6 +3902,18 @@ export default function Schedule() {
             📋 We need a bit more info to get your dedicated number set up — tap here to fill it out (Profile → Reminders) →
           </span>
         </Link>
+      )}
+
+      {staleTentativeAppts.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setSelectedDate(staleTentativeAppts[0].date)}
+          className="block w-full text-left mx-4 mt-3 rounded-xl px-4 py-3 bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition"
+        >
+          <span className="text-sm font-bold">
+            📌 {staleTentativeAppts.length} tentative appointment{staleTentativeAppts.length !== 1 ? "s" : ""} still unconfirmed within 5 days — {staleTentativeAppts[0].pets?.name || "a pet"}'s on {staleTentativeAppts[0].date} hasn't sent any reminders yet →
+          </span>
+        </button>
       )}
 
       {allPendingRequests.length > 0 && (() => {
@@ -4274,6 +4337,14 @@ export default function Schedule() {
                                       : appt.pets?.name || "Pet"}
                                   </span>
                                   <span className="flex items-center gap-0.5 flex-shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleToggleTentative(appt); }}
+                                      className={`text-[11px] leading-none ${appt.is_tentative ? "" : "opacity-20 hover:opacity-60"}`}
+                                      title={appt.is_tentative ? "Tentative — tap to confirm this date" : "Tap to mark this date tentative"}
+                                    >
+                                      📌
+                                    </button>
                                     {hasHighSeverityTag(appt.pets?.tags) && (
                                       <span className="text-[11px]" title={appt.pets.tags.filter(t => HIGH_SEVERITY_TAGS.includes(t)).join(", ")}>⚠️</span>
                                     )}
@@ -4722,8 +4793,19 @@ export default function Schedule() {
                         >
                           {displayName}{" "}
                           {isMulti && <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-semibold">Multi</span>}
-                          {appt.is_tentative && <span className="text-xs bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full font-semibold">📌 Tentative</span>}
                           {!isMulti && <span className="text-xs text-gray-500">{size.label}</span>}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTentative(appt)}
+                          className={`ml-1.5 text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+                            appt.is_tentative
+                              ? "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                              : "bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600 border border-dashed border-gray-300"
+                          }`}
+                          title={appt.is_tentative ? "Tap to confirm this date" : "Tap to mark this date tentative"}
+                        >
+                          {appt.is_tentative ? "📌 Tentative — tap to confirm" : "📌 Mark tentative"}
                         </button>
                         <div className="text-sm flex items-center gap-1.5 flex-wrap">
                           <Link
