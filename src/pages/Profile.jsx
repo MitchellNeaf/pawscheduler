@@ -1237,6 +1237,16 @@ export default function Profile() {
               placeholder="Optional — add a personal note before your standard grooming waiver"
               className="border rounded w-full p-2 text-sm resize-none" />
             <p className="text-xs text-gray-400 mt-1">Shown at the top of your waiver, before the standard sections.</p>
+            {slug && (
+              <a
+                href={`/waiver/${slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-emerald-600 underline mt-1 inline-block"
+              >
+                👀 Preview full waiver as your clients see it →
+              </a>
+            )}
           </div>
 
           <button onClick={saveProfile} disabled={saving} className="btn-primary w-full mt-2">
@@ -2476,6 +2486,16 @@ export default function Profile() {
                 >
                   Save Waiver Text
                 </button>
+                {slug && (
+                  <a
+                    href={`/waiver/${slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-emerald-600 underline block text-center"
+                  >
+                    👀 Preview full waiver as your clients see it →
+                  </a>
+                )}
               </div>
             </>
           )}

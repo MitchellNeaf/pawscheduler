@@ -46,6 +46,10 @@ export default function WaiverPage() {
   const { slug } = useParams();
   const [searchParams] = useSearchParams();
   const clientId = searchParams.get("cid") || null;
+  // No cid means this is the groomer previewing their own waiver, not a
+  // real client link — sendWaiverEmail.js and sendWaiverSms.js always
+  // include ?cid=, so a real client link never hits this branch.
+  const isPreview = !clientId;
 
   const [groomer, setGroomer] = useState(null);
   const [error, setError] = useState("");
@@ -76,6 +80,7 @@ export default function WaiverPage() {
   }, [slug]);
 
   const handleSign = async () => {
+    if (isPreview) return; // safety net — button is disabled anyway
     if (!signerName.trim()) {
       setSubmitError("Please type your full name to sign.");
       return;
@@ -155,6 +160,14 @@ export default function WaiverPage() {
     <main className="min-h-screen bg-[var(--bg)] py-8 px-4">
       <div className="max-w-2xl mx-auto space-y-6">
 
+        {isPreview && (
+          <div className="rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 text-center">
+            <p className="text-sm font-semibold text-blue-800">
+              👀 Preview mode — this is exactly what your clients see. Signing is disabled here.
+            </p>
+          </div>
+        )}
+
         {/* Header */}
         <div className="text-center space-y-2">
           {groomer.logo_url && (
@@ -210,17 +223,19 @@ export default function WaiverPage() {
                 placeholder="e.g. Jane Smith"
                 value={signerName}
                 onChange={(e) => setSignerName(e.target.value)}
-                className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2.5 text-sm bg-[var(--surface)] text-[var(--text-1)]"
+                disabled={isPreview}
+                className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2.5 text-sm bg-[var(--surface)] text-[var(--text-1)] disabled:opacity-50 disabled:cursor-not-allowed"
                 autoComplete="name"
               />
             </div>
 
-            <label className="flex items-start gap-3 cursor-pointer">
+            <label className={`flex items-start gap-3 ${isPreview ? "cursor-not-allowed" : "cursor-pointer"}`}>
               <input
                 type="checkbox"
                 checked={agreed}
                 onChange={(e) => setAgreed(e.target.checked)}
-                className="mt-0.5 w-5 h-5 rounded accent-emerald-500 flex-shrink-0"
+                disabled={isPreview}
+                className="mt-0.5 w-5 h-5 rounded accent-emerald-500 flex-shrink-0 disabled:opacity-50"
               />
               <span className="text-sm text-[var(--text-2)] leading-relaxed">
                 I have read and understand the grooming release and waiver above.
@@ -237,14 +252,14 @@ export default function WaiverPage() {
 
             <button
               onClick={handleSign}
-              disabled={submitting || !signerName.trim() || !agreed}
+              disabled={isPreview || submitting || !signerName.trim() || !agreed}
               className="w-full py-3.5 rounded-xl font-bold text-sm transition
                 bg-emerald-600 text-white border-2 border-emerald-600
                 hover:bg-emerald-700 hover:border-emerald-700
                 active:bg-emerald-800
                 disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed"
             >
-              {submitting ? "Signing…" : "Sign Waiver"}
+              {isPreview ? "Signing disabled in preview" : submitting ? "Signing…" : "Sign Waiver"}
             </button>
 
             <p className="text-xs text-[var(--text-3)] text-center">
