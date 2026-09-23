@@ -20,7 +20,7 @@ const supabase = createClient(
 );
 
 const PRICES = {
-  basic_monthly:   "price_1TQX0t1RxmPJHwWbVt2rKvfr",
+  basic_monthly:   "price_1UIxb01RxmPJHwWb16MpfeQJ",
   growth_monthly: "price_1TPYnd1RxmPJHwWbqJYQub43",
   growth_yearly:  "price_1TPYo91RxmPJHwWb5qSpBQcV",
   pro_monthly:     "price_1TPYoh1RxmPJHwWbPV02049p",

@@ -551,7 +551,7 @@ export default function Profile() {
     { id: "pricing",   emoji: "✂️", label: "Services"  },
     { id: "reminders", emoji: "🔔", label: (planTier === "basic" || planTier === "growth" || planTier === "pro") ? "Reminders" : "Reminders 🔒" },
     { id: "areas",     emoji: "🗺", label: (planTier === "growth" || planTier === "pro") ? "Areas" : "Areas 🔒" },
-    { id: "intake",    emoji: "📋", label: (planTier === "growth" || planTier === "pro") ? "Intake" : "Intake 🔒" },
+    { id: "intake",    emoji: "📋", label: (planTier === "basic" || planTier === "growth" || planTier === "pro") ? "Intake" : "Intake 🔒" },
     { id: "payments",  emoji: "💳", label: planTier === "pro" ? "Payments" : "Payments 🔒" },
     { id: "smsbot",    emoji: "💬", label: planTier === "pro" ? "SMS Bot" : "SMS Bot 🔒" },
   ];
@@ -2274,13 +2274,13 @@ export default function Profile() {
       {/* ── INTAKE TAB ── */}
       {activeTab === "intake" && (
         <div className="space-y-4">
-          {(planTier !== "growth" && planTier !== "pro") ? (
+          {(planTier !== "basic" && planTier !== "growth" && planTier !== "pro") ? (
             <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-6 text-center space-y-3">
               <div className="text-3xl">📋</div>
-              <h3 className="font-bold text-[var(--text-1)]">Intake forms require Growth or higher</h3>
+              <h3 className="font-bold text-[var(--text-1)]">Intake forms require a paid plan</h3>
               <p className="text-sm text-[var(--text-2)]">Upgrade to customize the questions your clients answer when they fill out your intake form.</p>
               <a href="/upgrade" className="inline-block px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
-                Upgrade to Growth — $49.99/mo →
+                See Plans →
               </a>
             </div>
           ) : (

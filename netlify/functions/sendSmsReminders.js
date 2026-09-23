@@ -90,9 +90,9 @@ exports.handler = async (event) => {
     // now route through email instead of the shared SMS number.
     const { data: groomers, error: gErr } = await supabase
       .from("groomers")
-      .select("id, full_name, email, sms_number, time_zone, reminder_message_template, sms_confirmation_template, reminder_rules, subscription_status, plan_tier, business_address")
+      .select("id, full_name, email, sms_number, time_zone, reminder_message_template, sms_confirmation_template, reminder_rules, subscription_status, plan_tier, business_address, free_reminders_this_month, free_reminders_reset_at")
       .in("subscription_status", ["active", "trial"])
-      .or("sms_number.not.is.null,plan_tier.eq.basic");
+      .or("sms_number.not.is.null,plan_tier.eq.basic,plan_tier.eq.free");
 
     if (gErr) throw gErr;
 
@@ -102,17 +102,36 @@ exports.handler = async (event) => {
     let skipped = 0;
 
     for (const groomer of (groomers || [])) {
-      // Must be basic+ for reminders
-      if (groomer.plan_tier === "free") {
-        console.log(`Skipping groomer ${groomer.id} — free plan`);
-        skipped++; continue;
+      const isBasic = groomer.plan_tier === "basic";
+      const isFree = groomer.plan_tier === "free";
+      const useEmail = isBasic || isFree; // neither ever has a dedicated number
+
+      // Free tier gets a limited monthly allowance of email reminders —
+      // a real taste of the feature, not the unlimited version Basic pays
+      // for. Resets on a rolling monthly basis, same pattern as
+      // route_optimizations_this_month elsewhere in the app.
+      const FREE_REMINDER_CAP = 25;
+      let freeRemindersThisMonth = groomer.free_reminders_this_month || 0;
+      if (isFree) {
+        const resetAt = groomer.free_reminders_reset_at ? new Date(groomer.free_reminders_reset_at) : null;
+        if (!resetAt || now >= resetAt) {
+          // New month — reset the counter and push the next reset out 30 days.
+          const nextReset = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+          await supabase
+            .from("groomers")
+            .update({ free_reminders_this_month: 0, free_reminders_reset_at: nextReset.toISOString() })
+            .eq("id", groomer.id);
+          freeRemindersThisMonth = 0;
+        }
+        if (freeRemindersThisMonth >= FREE_REMINDER_CAP) {
+          console.log(`Skipping groomer ${groomer.id} — free plan, hit ${FREE_REMINDER_CAP}/mo reminder cap`);
+          skipped++; continue;
+        }
       }
 
-      const isBasic = groomer.plan_tier === "basic";
-
-      // Growth/Pro still need a real dedicated number — Basic doesn't,
-      // since it routes through email instead.
-      if (!isBasic && !groomer.sms_number) {
+      // Growth/Pro still need a real dedicated number — Basic and Free
+      // don't, since both route through email instead.
+      if (!useEmail && !groomer.sms_number) {
         console.log(`Skipping groomer ${groomer.id} — ${groomer.plan_tier} with no sms_number assigned yet`);
         skipped++; continue;
       }
@@ -150,9 +169,9 @@ exports.handler = async (event) => {
 
         for (const appt of (appts || [])) {
           const client = appt.pets?.clients;
-          if (isBasic) {
+          if (useEmail) {
             if (!client?.email) {
-              console.log(`  Skipping appt ${appt.id} — Basic account, client has no email on file`);
+              console.log(`  Skipping appt ${appt.id} — ${groomer.plan_tier} account, client has no email on file`);
               skipped++; continue;
             }
           } else if (!client?.phone || !client?.sms_opt_in) {
@@ -215,8 +234,8 @@ exports.handler = async (event) => {
           const firstName = (client.full_name || "").split(" ")[0];
           const services = Array.isArray(appt.services) ? appt.services.join(", ") : appt.services || "";
 
-          if (isBasic) {
-            // ── Basic: email instead of SMS, same confirm-link flow ──
+          if (useEmail) {
+            // ── Basic/Free: email instead of SMS, same confirm-link flow ──
             try {
               const res = await fetch(`${process.env.URL || "https://app.pawscheduler.app"}/.netlify/functions/sendEmail`, {
                 method: "POST",
@@ -246,6 +265,14 @@ exports.handler = async (event) => {
                 continue;
               }
 
+              if (isFree) {
+                await supabase
+                  .from("groomers")
+                  .update({ free_reminders_this_month: freeRemindersThisMonth + 1 })
+                  .eq("id", groomer.id);
+                freeRemindersThisMonth++;
+              }
+
               console.log(`  ✅ Email reminder sent successfully for appt ${appt.id}`);
               sent++;
             } catch (emailErr) {
@@ -253,7 +280,7 @@ exports.handler = async (event) => {
               await supabase.from("appointments").update({ sms_reminder_sent_at: null }).eq("id", appt.id);
               skipped++;
             }
-            continue; // skip the SMS path entirely for Basic
+            continue; // skip the SMS path entirely for Basic/Free
           }
 
           const vars = {
