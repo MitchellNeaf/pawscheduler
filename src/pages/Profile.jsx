@@ -165,6 +165,7 @@ export default function Profile() {
 
         // Load waiver text
         setWaiverText(data.waiver_text || "");
+        setWaiverPoliciesText(data.waiver_policies_text || "");
         setBrandColor(data.brand_color || "forest");
 
         // Load service pricing — merge with defaults so new services always have a price
@@ -348,6 +349,7 @@ export default function Profile() {
         custom_services: customServices,
         brand_color: brandColor || "forest",
         waiver_text: waiverText.trim() || null,
+        waiver_policies_text: waiverPoliciesText.trim() || null,
       })
       .eq("id", user.id);
 
@@ -447,6 +449,7 @@ export default function Profile() {
   const [customIntakeQuestions, setCustomIntakeQuestions] = useState(null);
   const [savedIntakeQuestions, setSavedIntakeQuestions] = useState(null); // last known DB state, for the unsaved-changes cue
   const [waiverText, setWaiverText] = useState("");
+  const [waiverPoliciesText, setWaiverPoliciesText] = useState("");
   const [brandColor, setBrandColor] = useState("forest");
   const [savingIntake, setSavingIntake] = useState(false);
 
@@ -1237,6 +1240,14 @@ export default function Profile() {
               placeholder="Optional — add a personal note before your standard grooming waiver"
               className="border rounded w-full p-2 text-sm resize-none" />
             <p className="text-xs text-gray-400 mt-1">Shown at the top of your waiver, before the standard sections.</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Additional Policies</label>
+            <textarea value={waiverPoliciesText} onChange={(e) => setWaiverPoliciesText(e.target.value)} rows={4}
+              placeholder="Optional — your own policies, like pickup times or refunds"
+              className="border rounded w-full p-2 text-sm resize-none" />
+            <p className="text-xs text-gray-400 mt-1">Shown after the standard sections, right before the client signs.</p>
             {slug && (
               <a
                 href={`/waiver/${slug}`}
@@ -2486,6 +2497,35 @@ export default function Profile() {
                 >
                   Save Waiver Text
                 </button>
+
+                <div className="pt-4 border-t border-[var(--border-med)]">
+                  <h3 className="font-semibold text-[var(--text-1)]">Additional Policies</h3>
+                  <p className="text-xs text-[var(--text-3)] mt-1">
+                    Your own policies — pickup times, refunds, cancellations, etc. Shown after the standard sections, right before the client signs.
+                  </p>
+                </div>
+                <textarea
+                  value={waiverPoliciesText}
+                  onChange={(e) => setWaiverPoliciesText(e.target.value)}
+                  rows={5}
+                  placeholder="e.g. Pets must be picked up within 1 hour of completion. Refunds are not offered for completed services..."
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none"
+                />
+                <button
+                  onClick={async () => {
+                    const { error } = await supabase
+                      .from("groomers")
+                      .update({ waiver_policies_text: waiverPoliciesText || null })
+                      .eq("id", user.id);
+                    if (!error) {
+                      setConfirmConfig({ title: "Saved! ✓", message: "Your additional policies have been updated.", confirmLabel: "OK", onConfirm: () => {} });
+                    }
+                  }}
+                  className="btn-primary w-full"
+                >
+                  Save Additional Policies
+                </button>
+
                 {slug && (
                   <a
                     href={`/waiver/${slug}`}

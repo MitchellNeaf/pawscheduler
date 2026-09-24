@@ -66,7 +66,7 @@ export default function WaiverPage() {
     (async () => {
       const { data, error: gErr } = await supabase
         .from("groomers")
-        .select("id, full_name, slug, logo_url, waiver_text")
+        .select("id, full_name, slug, logo_url, waiver_text, waiver_policies_text")
         .eq("slug", slug)
         .single();
 
@@ -208,6 +208,21 @@ export default function WaiverPage() {
             ))}
           </div>
         </div>
+
+        {/* Groomer's own additional policies — pickup, refunds, etc.
+            Separate from the standard sections above, which stay fixed. */}
+        {groomer.waiver_policies_text && (
+          <div className="card">
+            <div className="card-body">
+              <h2 className="font-semibold text-sm text-[var(--text-1)] mb-2">
+                Additional Policies — {groomer.full_name}
+              </h2>
+              <p className="text-sm text-[var(--text-2)] leading-relaxed whitespace-pre-wrap">
+                {groomer.waiver_policies_text}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Signature section */}
         <div className="card">
