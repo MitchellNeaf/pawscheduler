@@ -74,16 +74,16 @@ export default function WhatsNew() {
         <div className="space-y-5">
           {RELEASES.map((release, i) => (
             <div key={i} className="card">
-              <div className="card-body space-y-2">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h2 className="font-bold text-[var(--text-1)]">{release.title}</h2>
-                  <span className="text-xs text-[var(--text-3)] whitespace-nowrap">
-                    {new Date(release.date + "T00:00:00").toLocaleDateString("en-US", {
-                      month: "short", day: "numeric", year: "numeric",
-                    })}
-                  </span>
-                </div>
-                <ul className="list-disc list-outside pl-5 space-y-1">
+              <div className="card-body space-y-2.5">
+                <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-3)]">
+                  {new Date(release.date + "T00:00:00").toLocaleDateString("en-US", {
+                    month: "short", day: "numeric", year: "numeric",
+                  })}
+                </span>
+                <h2 className="font-bold text-lg text-[var(--text-1)] leading-snug">
+                  {release.title}
+                </h2>
+                <ul className="list-disc list-outside pl-5 space-y-1.5">
                   {release.items.map((item, j) => (
                     <li key={j} className="text-sm text-[var(--text-2)] leading-relaxed">
                       {item}
