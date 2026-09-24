@@ -41,6 +41,7 @@ import PaymentCancelled from "./pages/PaymentCancelled";
 import ConfirmPage from "./pages/ConfirmPage";
 import OnboardingTour from "./components/OnboardingTour";
 import AdminEmail from "./pages/AdminEmail";
+import WhatsNew from "./pages/WhatsNew";
 // Legal pages
 import Terms from "./pages/legal/Terms";
 import Privacy from "./pages/legal/Privacy";
@@ -528,6 +529,7 @@ function AppShell() {
       { to: "/unpaid", label: "Unpaid" },
       { to: "/revenue", label: "Revenue" },
       { to: "/profile", label: "Profile" },
+      { to: "/whats-new", label: "What's New" },
       { to: "/help", label: "Help" },
       { to: "/support", label: "Support" }
     ],
@@ -745,6 +747,14 @@ function AppShell() {
           element={
             <ProtectedRoute>
               <Profile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/whats-new"
+          element={
+            <ProtectedRoute>
+              <WhatsNew />
             </ProtectedRoute>
           }
         />
