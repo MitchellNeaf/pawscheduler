@@ -1,6 +1,7 @@
 // src/pages/Schedule.jsx
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../supabase";
+import { emailFetch } from "../utils/sendEmail";
 import { Link } from "react-router-dom";
 import Loader from "../components/Loader";
 import OnboardingTour from "../components/OnboardingTour";
@@ -20,6 +21,16 @@ const toYMD = (d) => {
 const parseYMD = (s) => {
   const [y, m, d] = s.split("-").map(Number);
   return new Date(y, m - 1, d);
+};
+
+// First and last day of a month as YYYY-MM-DD (the month containing `ymd`,
+// or the current month if omitted). Used by the free-tier 50/month limit —
+// it must count only that month's appointments, not every future one.
+const currentMonthRange = (ymd) => {
+  const base = ymd ? parseYMD(ymd) : new Date();
+  const start = new Date(base.getFullYear(), base.getMonth(), 1);
+  const end = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+  return { monthStart: toYMD(start), monthEnd: toYMD(end) };
 };
 
 // Format a 24-hour "HH:MM" string as 12-hour with AM/PM
@@ -230,7 +241,7 @@ async function sendConfirmationEmail({ appointment, groomerId }) {
     const notesBlock = buildNotesBlockHtml(appointment.notes || "");
     const confirmUrl = buildConfirmUrl(appointment.id);
 
-    await fetch("/.netlify/functions/sendEmail", {
+    await emailFetch({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -241,7 +252,7 @@ async function sendConfirmationEmail({ appointment, groomerId }) {
           groomer_id: groomerId,
           pet_name: pet.name,
           date: appointment.date,
-          time: (appointment.time || "").slice(0, 5),
+          time: appointment.time ? appointment.time.slice(0, 5) : "Flexible — we'll confirm the time",
           duration_min: appointment.duration_min || 30,
           services: servicesHtml,
           price:
@@ -1122,8 +1133,8 @@ function AppointmentModal({
                 setForm((prev) => ({
                   ...prev,
                   payment_method: method,
-                  // Auto-mark paid when a method is selected, unmark when cleared
-                  paid: method ? true : prev.paid,
+                  // Picking a method marks paid; clearing back to "Not recorded" unmarks it
+                  paid: !!method,
                 }));
               }}
               className="border rounded px-3 py-2 text-sm bg-white"
@@ -1239,52 +1250,20 @@ function ToggleCheckbox({ label, field, appt, user, setAppointments, allAppointm
             ? (allAppointments || []).filter(a => a.appointment_group_id === appt.appointment_group_id).map(a => a.id)
             : [appt.id];
 
-          const { data, error } = await supabase
+          const { error } = await supabase
             .from("appointments")
             .update({ [field]: newValue })
             .in("id", groupIds)
-            .eq("groomer_id", user.id)
-            .select(
-              `
-              id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
-              services, notes, confirmed, no_show, paid, amount, reminder_enabled, appointment_group_id,
-              pets (
-                *,
-                clients (
-                  id,
-                  full_name,
-                  phone,
-                  email,
-                  street,
-                  city,
-                  state,
-                  zip
-                )
-              )
+            .eq("groomer_id", user.id);
 
-            `
-            );
-
-          if (!error && data) {
-            const shotsByPetId = {};
-            for (const row of data) {
-              if (!shotsByPetId[row.pet_id]) {
-                const { data: shots } = await supabase
-                  .from("pet_shot_records")
-                  .select("*")
-                  .eq("pet_id", row.pet_id)
-                  .order("date_expires", { ascending: false });
-                shotsByPetId[row.pet_id] = shots || [];
-              }
-            }
-
-            const updatedById = {};
-            data.forEach((row) => {
-              updatedById[row.id] = { ...row, shot_records: shotsByPetId[row.pet_id] };
-            });
-
+          // Bug fix: this used to replace each row with a narrow re-select that
+          // was missing check-in/out times, payment method, tip, flexible and
+          // tentative flags, etc. — so ticking "Confirmed" visually wiped those
+          // off the card until reload (plus one shot-records query per pet).
+          // Only one field changed, so just merge that field into what's there.
+          if (!error) {
             setAppointments((prev) =>
-              prev.map((a) => (updatedById[a.id] ? updatedById[a.id] : a))
+              prev.map((a) => (groupIds.includes(a.id) ? { ...a, [field]: newValue } : a))
             );
           }
         }}
@@ -2588,7 +2567,7 @@ function ReviewRequestModal({ request, onClose, onActionComplete, loading, setLo
       if (action === "approve") {
         await supabase.from("appointments").update({ confirmed: true, waitlist: false }).eq("id", request.id);
         if (client?.email) {
-          fetch("/.netlify/functions/sendEmail", {
+          emailFetch({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -2610,7 +2589,7 @@ function ReviewRequestModal({ request, onClose, onActionComplete, loading, setLo
       } else if (action === "waitlist") {
         await supabase.from("appointments").update({ waitlist: true }).eq("id", request.id);
         if (client?.email) {
-          fetch("/.netlify/functions/sendEmail", {
+          emailFetch({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -2630,7 +2609,7 @@ function ReviewRequestModal({ request, onClose, onActionComplete, loading, setLo
         }
       } else if (action === "decline") {
         if (client?.email) {
-          await fetch("/.netlify/functions/sendEmail", {
+          await emailFetch({
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -2940,11 +2919,11 @@ export default function Schedule() {
         .from("appointments")
         .select(`
           id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
-          services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id, is_flexible, is_tentative,
+          services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, waitlist, appointment_group_id, is_flexible, is_tentative,
           checked_in_at, checked_out_at, payment_method,
           pets (
-            id, name, tags, client_id, photo_url, size_category,
-            clients ( id, full_name, phone, email, sms_opt_in, street, city, state, zip )
+            id, name, tags, notes, client_id, photo_url, size_category,
+            clients ( id, full_name, phone, email, sms_opt_in, notes, street, city, state, zip, custom_intake_answers )
           )
         `)
         .eq("groomer_id", user.id)
@@ -2998,7 +2977,7 @@ export default function Schedule() {
           .from("appointments")
           .select(`
             id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
-            services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, appointment_group_id, is_flexible, is_tentative,
+            services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, waitlist, appointment_group_id, is_flexible, is_tentative,
             checked_in_at, checked_out_at, payment_method,
             pets (
               id, name, tags, notes, client_id, photo_url, size_category,
@@ -3085,12 +3064,15 @@ export default function Schedule() {
       const range = TIME_SLOTS.slice(startIdx, endIdx + 1);
       setWorkingRange(range);
 
+      // Breaks and time blocks are "start up to, but not including, end":
+      // a 12:00–1:00 lunch blocks 12:00–12:45, and 1:00 is bookable again.
+      // (Same rule on the booking page and the Pet Appointments page.)
       const breakSet = new Set();
       (breaks || []).forEach((b) => {
         const bi = TIME_SLOTS.indexOf(b.break_start.slice(0, 5));
         const ei = TIME_SLOTS.indexOf(b.break_end.slice(0, 5));
         if (bi === -1 || ei === -1) return;
-        TIME_SLOTS.slice(bi, ei + 1).forEach((s) => breakSet.add(s));
+        TIME_SLOTS.slice(bi, ei).forEach((s) => breakSet.add(s));
       });
 
       // Block slots for date-specific vacation_days entries
@@ -3101,7 +3083,7 @@ export default function Schedule() {
         }
         const bi = TIME_SLOTS.indexOf(v.start_time.slice(0, 5));
         const ei = TIME_SLOTS.indexOf(v.end_time.slice(0, 5));
-        if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei + 1).forEach(s => breakSet.add(s));
+        if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei).forEach(s => breakSet.add(s));
       });
 
       setBreakSlots([...breakSet]);
@@ -3173,14 +3155,16 @@ export default function Schedule() {
   // Monthly appointment count for free tier banner — excludes sample appointments
   useEffect(() => {
     if (!user) return;
-    const now = new Date();
-    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const { monthStart, monthEnd } = currentMonthRange();
     supabase
       .from("appointments")
       .select("id", { count: "exact", head: true })
       .eq("groomer_id", user.id)
       .gte("date", monthStart)
-      .neq("source", "sample")
+      .lte("date", monthEnd)
+      // .neq alone silently drops rows where source IS NULL (every appointment
+      // a groomer creates from this page), so they were never counted.
+      .or("source.is.null,source.neq.sample")
       .then(({ count }) => {
         if (count !== null) setMonthlyCount(count);
       });
@@ -3324,7 +3308,7 @@ export default function Schedule() {
       return;
     }
     const { data: savedAppts, error } = await supabase.from("appointments").insert(created)
-      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category, services, notes, confirmed, no_show, paid, amount, reminder_enabled, recurring_group_id, pets ( id, name, tags, client_id, photo_url, size_category, clients ( id, full_name, phone, email ) )`);
+      .select(`id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category, services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, waitlist, recurring_group_id, is_flexible, is_tentative, checked_in_at, checked_out_at, payment_method, pets ( id, name, tags, notes, client_id, photo_url, size_category, clients ( id, full_name, phone, email, sms_opt_in, notes, street, city, state, zip, custom_intake_answers ) )`);
     setSavingNew(false);
     if (error) { setConfirmConfig({ title: "Could not save", message: error.message, confirmLabel: "OK", onConfirm: () => {} }); return; }
     const todaysAppt = (savedAppts || []).find(a => a.date === selectedDate);
@@ -3369,20 +3353,22 @@ export default function Schedule() {
 
     // ── Free tier appointment limit check ──────────────────
     if (planTier === "free") {
-      const now = new Date();
-      const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+      // Count the month the appointment is IN, not today's month — otherwise a
+      // full current month blocked next month, and next month was never capped.
+      const { monthStart, monthEnd } = currentMonthRange(newForm.date);
       const { count } = await supabase
         .from("appointments")
         .select("id", { count: "exact", head: true })
         .eq("groomer_id", user.id)
         .gte("date", monthStart)
-        .neq("source", "sample");
+        .lte("date", monthEnd)
+        .or("source.is.null,source.neq.sample");
 
       if ((count ?? 0) >= FREE_LIMIT) {
         setSavingNew(false);
         setConfirmConfig({
           title: "Monthly limit reached",
-          message: `You've reached the ${FREE_LIMIT} appointment limit for the free plan this month. Upgrade to Basic or higher for unlimited appointments.`,
+          message: `You've reached the ${FREE_LIMIT} appointment limit for the free plan in that month. Upgrade to Basic or higher for unlimited appointments.`,
           confirmLabel: "Upgrade",
           cancelLabel: "Not now",
           onConfirm: () => { window.location.href = "/upgrade"; },
@@ -3428,11 +3414,11 @@ export default function Schedule() {
       .insert(insertRows)
       .select(`
         id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
-        services, notes, confirmed, no_show, paid, amount, reminder_enabled,
-        appointment_group_id, is_flexible, is_tentative,
+        services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, source, waitlist,
+        appointment_group_id, is_flexible, is_tentative, checked_in_at, checked_out_at, payment_method,
         pets (
-          id, name, tags, client_id, photo_url, size_category,
-          clients ( id, full_name, phone, email )
+          id, name, tags, notes, client_id, photo_url, size_category,
+          clients ( id, full_name, phone, email, sms_opt_in, notes, street, city, state, zip, custom_intake_answers )
         )
       `);
 
@@ -3448,7 +3434,8 @@ export default function Schedule() {
     }
 
     // Fire confirmation email for first pet if reminder enabled
-    if (planTier !== "free" && newForm.reminder_enabled && savedAppts?.[0]) {
+    // Tentative bookings promise "no reminders or confirmations" — honor that.
+    if (planTier !== "free" && newForm.reminder_enabled && !newForm.is_tentative && savedAppts?.[0]) {
       sendConfirmationEmail({ appointment: savedAppts[0], groomerId: user.id });
     }
 
@@ -3526,32 +3513,55 @@ export default function Schedule() {
 
     setSavingEdit(true);
 
+    // Bug fix: every save (even just recording payment or a tip after the
+    // groom) used to re-send the client a "your appointment is confirmed"
+    // email AND reset reminder_sent, which could re-trigger reminders. Now
+    // both only happen when the date/time actually changed, or when the
+    // groomer just turned reminders on for this appointment.
+    const newTime = editForm.isFlexible ? null : editForm.time;
+    const oldTime = editAppt.time ? editAppt.time.slice(0, 5) : null;
+    const scheduleChanged =
+      editForm.date !== editAppt.date ||
+      (newTime || null) !== (oldTime || null) ||
+      !!editForm.isFlexible !== !!editAppt.is_flexible;
+    const remindersJustEnabled = !!editForm.reminder_enabled && !editAppt.reminder_enabled;
+    // Unchecking "Tentative" is the moment the date becomes real, so that
+    // counts as news too. While still tentative, never send a confirmation.
+    const tentativeJustCleared = !!editAppt.is_tentative && !editForm.is_tentative;
+
+    const updatePayload = {
+      date: editForm.date,
+      time: newTime,
+      is_flexible: !!editForm.isFlexible,
+      duration_min: editForm.duration_min || 30,
+      services: editForm.services,
+      notes: editForm.notes,
+      amount: editForm.amount ?? null,
+      reminder_enabled: editForm.reminder_enabled,
+      is_tentative: !!editForm.is_tentative,
+      payment_method: editForm.payment_method || null,
+      tip: editForm.tip ? parseFloat(editForm.tip) || null : null,
+      paid: editForm.paid ?? false,
+      slot_weight: editAppt.slot_weight || 1,
+      size_category: editAppt.size_category || editAppt.pets?.size_category || 1,
+    };
+    if (scheduleChanged) {
+      updatePayload.reminder_sent = false;
+      // sendSmsReminders.js de-dupes on sms_reminder_sent_at (not
+      // reminder_sent), so that's the one that actually has to be cleared
+      // for a rescheduled appointment to get reminders for its new date.
+      updatePayload.sms_reminder_sent_at = null;
+    }
+
     const { data, error } = await supabase
       .from("appointments")
-      .update({
-        date: editForm.date,
-        time: editForm.isFlexible ? null : editForm.time,
-        is_flexible: !!editForm.isFlexible,
-        duration_min: editForm.duration_min || 30,
-        services: editForm.services,
-        notes: editForm.notes,
-        amount: editForm.amount ?? null,
-        reminder_enabled: editForm.reminder_enabled,
-        is_tentative: !!editForm.is_tentative,
-        payment_method: editForm.payment_method || null,
-        tip: editForm.tip ? parseFloat(editForm.tip) || null : null,
-        paid: editForm.paid ?? false,
-        reminder_sent: false,
-        slot_weight: editAppt.slot_weight || 1,
-        size_category: editAppt.size_category || editAppt.pets?.size_category || 1,
-      })
+      .update(updatePayload)
       .eq("id", editAppt.id)
       .eq("groomer_id", user.id)
       .select(`
         id, pet_id, groomer_id, date, time, duration_min, slot_weight, size_category,
-        services, notes, confirmed, no_show, paid, amount, reminder_enabled, appointment_group_id,
-        payment_method, checked_in_at, checked_out_at, source, is_flexible, is_tentative,
-        pets ( id, name, tags, client_id, photo_url, size_category, clients ( id, full_name, phone, email ) )
+        services, notes, confirmed, no_show, paid, amount, tip, reminder_enabled, appointment_group_id,
+        payment_method, checked_in_at, checked_out_at, source, waitlist, is_flexible, is_tentative
       `)
       .single();
 
@@ -3567,25 +3577,35 @@ export default function Schedule() {
       return;
     }
 
-    // fire-and-forget confirmation email if toggle on
-    if (planTier !== "free" && editForm.reminder_enabled) {
-      sendConfirmationEmail({ appointment: data, groomerId: user.id });
+    // fire-and-forget confirmation email — only when it's actually news
+    if (
+      planTier !== "free" &&
+      editForm.reminder_enabled &&
+      !editForm.is_tentative &&
+      (scheduleChanged || remindersJustEnabled || tentativeJustCleared)
+    ) {
+      sendConfirmationEmail({ appointment: { ...data, pets: editAppt.pets }, groomerId: user.id });
     }
 
-    const { data: shots } = await supabase
-      .from("pet_shot_records")
-      .select("*")
-      .eq("pet_id", data.pet_id)
-      .order("date_expires", { ascending: false });
-
-    const withShots = { ...data, shot_records: shots || [] };
-
+    // Bug fix: merge the saved appointment fields onto the existing card
+    // instead of replacing it with a narrower row. The old replace dropped
+    // the client's sms_opt_in, address, notes, etc., which greyed out
+    // Remind and hid Navigate until reload. The pet and client can't change
+    // in this modal, so the already-loaded pet/client/shot data stays valid.
     setAppointments((prev) =>
       prev
-        .map((a) => (a.id === editAppt.id ? withShots : a))
-        .sort((a, b) => (a.time || "").localeCompare(b.time || ""))
+        .map((a) => (a.id === editAppt.id ? { ...a, ...data, pets: a.pets, shot_records: a.shot_records } : a))
+        // Moved to a different day → it no longer belongs on this day's list
+        .filter((a) => a.id !== editAppt.id || a.date === selectedDate)
+        .sort((a, b) => {
+          if (!a.time && !b.time) return 0;
+          if (!a.time) return 1;
+          if (!b.time) return -1;
+          return a.time.localeCompare(b.time);
+        })
     );
 
+    if (scheduleChanged) setMonthRefreshKey((k) => k + 1);
     setEditModalOpen(false);
     setEditAppt(null);
   };
@@ -3633,8 +3653,23 @@ export default function Schedule() {
       return;
     }
 
+    // Basic sends reminders by EMAIL (see sendManualSmsReminder.js), so it
+    // only needs an email on file — the phone/opt-in checks below are for
+    // Growth/Pro, which text from their own number.
+    if (planTier === "basic") {
+      if (!client?.email) {
+        setConfirmConfig({
+          title: "No email address",
+          message: `${client?.full_name || "This client"} doesn't have an email on file. Add one from their client page.`,
+          confirmLabel: "OK",
+          onConfirm: () => {},
+        });
+        return;
+      }
+    }
+
     // Guard: no phone
-    if (!client?.phone) {
+    if (planTier !== "basic" && !client?.phone) {
       setConfirmConfig({
         title: "No phone number",
         message: `${client?.full_name || "This client"} doesn't have a phone number on file. Add one from the Clients page.`,
@@ -3645,7 +3680,7 @@ export default function Schedule() {
     }
 
     // Guard: not opted in
-    if (!client?.sms_opt_in) {
+    if (planTier !== "basic" && !client?.sms_opt_in) {
       setConfirmConfig({
         title: "Client not opted in",
         message: `${client?.full_name || "This client"} hasn't opted in to SMS reminders. Update their SMS settings from the Clients page.`,
@@ -3688,7 +3723,7 @@ export default function Schedule() {
         );
         setConfirmConfig({
           title: "Reminder sent ✓",
-          message: `SMS reminder sent to ${client.full_name}.`,
+          message: json.message || `Reminder sent to ${client.full_name}.`,
           confirmLabel: "OK",
           onConfirm: () => {},
         });
@@ -4510,11 +4545,11 @@ export default function Schedule() {
                                 if (br._source === "working_breaks") {
                                   const bi = TIME_SLOTS.indexOf((br.break_start||"").slice(0,5));
                                   const ei = TIME_SLOTS.indexOf((br.break_end||"").slice(0,5));
-                                  if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei+1).forEach(s=>bs.add(s));
+                                  if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei).forEach(s=>bs.add(s));
                                 } else if (!br.fullDay && br.break_start) {
                                   const bi = TIME_SLOTS.indexOf((br.break_start||"").slice(0,5));
                                   const ei = TIME_SLOTS.indexOf((br.break_end||"").slice(0,5));
-                                  if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei+1).forEach(s=>bs.add(s));
+                                  if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei).forEach(s=>bs.add(s));
                                 }
                               });
                               setBreakSlots([...bs]);
@@ -4616,7 +4651,7 @@ export default function Schedule() {
                             setAppointments(prev => prev.map(a => groupIds.includes(a.id) ? { ...a, confirmed: true, waitlist: false } : a));
                             const clientEmail = appt.pets?.clients?.email;
                             if (clientEmail) {
-                              fetch("/.netlify/functions/sendEmail", {
+                              emailFetch({
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({
@@ -4650,7 +4685,7 @@ export default function Schedule() {
                               setAppointments(prev => prev.map(a => groupIds.includes(a.id) ? { ...a, waitlist: true } : a));
                               const clientEmail = appt.pets?.clients?.email;
                               if (clientEmail) {
-                                fetch("/.netlify/functions/sendEmail", {
+                                emailFetch({
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({
@@ -4686,7 +4721,7 @@ export default function Schedule() {
                               onConfirm: async () => {
                                 const clientEmail = appt.pets?.clients?.email;
                                 if (clientEmail) {
-                                  await fetch("/.netlify/functions/sendEmail", {
+                                  await emailFetch({
                                     method: "POST",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({
@@ -4956,26 +4991,36 @@ export default function Schedule() {
                     {/* Row 2: Remind */}
                     {planTier !== "free" && (
                       <div>
-                        {appt.pets?.clients?.phone ? (
-                          <button
-                            onClick={() => handleSendReminder(appt)}
-                            disabled={sendingReminder === appt.id}
-                            className={`w-full flex flex-col items-center justify-center gap-1 py-2 rounded-xl border text-xs font-semibold transition disabled:opacity-50
-                              ${appt.pets.clients.sms_opt_in
-                                ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700"
-                                : "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
-                              }`}
-                            title={appt.pets.clients.sms_opt_in ? "Send SMS reminder" : "Client not opted in to SMS"}
-                          >
-                            <span className="text-base">💬</span>
-                            {sendingReminder === appt.id ? "Sending…" : "Remind"}
-                          </button>
-                        ) : (
-                          <div className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl border border-gray-100 text-gray-300 text-xs">
-                            <span className="text-base">💬</span>
-                            No phone
-                          </div>
-                        )}
+                        {(() => {
+                          // Basic reminds by email; Growth/Pro by text.
+                          const c = appt.pets?.clients;
+                          const byEmail = planTier === "basic";
+                          const hasContact = byEmail ? !!c?.email : !!c?.phone;
+                          const ready = byEmail ? !!c?.email : !!c?.sms_opt_in;
+                          if (!hasContact) {
+                            return (
+                              <div className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl border border-gray-100 text-gray-300 text-xs">
+                                <span className="text-base">{byEmail ? "📧" : "💬"}</span>
+                                {byEmail ? "No email" : "No phone"}
+                              </div>
+                            );
+                          }
+                          return (
+                            <button
+                              onClick={() => handleSendReminder(appt)}
+                              disabled={sendingReminder === appt.id}
+                              className={`w-full flex flex-col items-center justify-center gap-1 py-2 rounded-xl border text-xs font-semibold transition disabled:opacity-50
+                                ${ready
+                                  ? "border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700"
+                                  : "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+                                }`}
+                              title={byEmail ? "Send email reminder" : ready ? "Send SMS reminder" : "Client not opted in to SMS"}
+                            >
+                              <span className="text-base">{byEmail ? "📧" : "💬"}</span>
+                              {sendingReminder === appt.id ? "Sending…" : "Remind"}
+                            </button>
+                          );
+                        })()}
                       </div>
                     )}
 
@@ -5211,12 +5256,16 @@ export default function Schedule() {
           onAddTimeBlock={async (date, start, end, note, setSaving) => {
             if (!user) return;
             setSaving(true);
-            const { error } = await supabase.from("vacation_days").insert([{
+            // Bug fix: the note was collected but never saved (reason was
+            // missing from the insert), and the month grid didn't refresh
+            // until you navigated away.
+            const { data: inserted, error } = await supabase.from("vacation_days").insert([{
               groomer_id: user.id,
               date,
               start_time: start || null,
               end_time: end || null,
-            }]);
+              reason: note?.trim() || null,
+            }]).select("id, date, start_time, end_time, reason").single();
             setSaving(false);
             if (error) {
               setConfirmConfig({
@@ -5226,6 +5275,31 @@ export default function Schedule() {
                 onConfirm: () => {},
               });
             } else {
+              setMonthRefreshKey(k => k + 1);
+              // If the block is on the day already loaded, show it right away
+              // in List/Grid view too instead of waiting for a reload.
+              if (inserted && date === selectedDate) {
+                const fullDay = !inserted.start_time || !inserted.end_time;
+                setDayBreaks(prev => [...prev, {
+                  ...inserted,
+                  break_start: inserted.start_time,
+                  break_end: inserted.end_time,
+                  label: inserted.reason,
+                  fullDay,
+                  _source: "vacation_days",
+                }]);
+                setBreakSlots(prev => {
+                  const bs = new Set(prev);
+                  if (fullDay) {
+                    workingRange.forEach(s => bs.add(s));
+                  } else {
+                    const bi = TIME_SLOTS.indexOf(inserted.start_time.slice(0, 5));
+                    const ei = TIME_SLOTS.indexOf(inserted.end_time.slice(0, 5));
+                    if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei).forEach(s => bs.add(s));
+                  }
+                  return [...bs];
+                });
+              }
               setDayActionDate(null);
             }
           }}
@@ -5260,11 +5334,11 @@ export default function Schedule() {
               if (br._source === "working_breaks") {
                 const bi = TIME_SLOTS.indexOf((br.break_start||"").slice(0,5));
                 const ei = TIME_SLOTS.indexOf((br.break_end||"").slice(0,5));
-                if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei+1).forEach(s=>bs.add(s));
+                if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei).forEach(s=>bs.add(s));
               } else if (!br.fullDay && br.break_start) {
                 const bi = TIME_SLOTS.indexOf((br.break_start||"").slice(0,5));
                 const ei = TIME_SLOTS.indexOf((br.break_end||"").slice(0,5));
-                if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei+1).forEach(s=>bs.add(s));
+                if (bi!==-1&&ei!==-1) TIME_SLOTS.slice(bi,ei).forEach(s=>bs.add(s));
               }
             });
             setBreakSlots([...bs]);

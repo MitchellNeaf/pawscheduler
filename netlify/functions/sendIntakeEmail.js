@@ -62,13 +62,13 @@ exports.handler = async (event) => {
   }
 
   const groomerName = groomer.business_name || groomer.full_name || "Your groomer";
-  const firstName   = client.full_name.split(" ")[0];
+  const firstName   = (client.full_name || "").split(" ")[0] || "there";
   const siteUrl     = process.env.URL || "https://app.pawscheduler.app";
   const intakeUrl   = `${siteUrl}/intake/${groomer.slug}?cid=${client.id}`;
 
   const res = await fetch(`${siteUrl}/.netlify/functions/sendEmail`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY },
     body: JSON.stringify({
       to: client.email,
       subject: `Welcome! Please complete your new client intake — ${groomerName}`,

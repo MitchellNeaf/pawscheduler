@@ -45,6 +45,20 @@ exports.handler = async (event) => {
     return { statusCode: 404, body: JSON.stringify({ error: "Groomer not found" }) };
   }
 
+  // ── Only link the signature to a client that belongs to this groomer ──
+  // Without this, anyone could POST a random clientId and mark another
+  // client's waiver as "signed".
+  let safeClientId = null;
+  if (clientId) {
+    const { data: owned } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("id", clientId)
+      .eq("groomer_id", groomer.id)
+      .maybeSingle();
+    safeClientId = owned?.id || null;
+  }
+
   // ── Get IP address ──────────────────────────────────────
   const ip =
     event.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
@@ -56,7 +70,7 @@ exports.handler = async (event) => {
     .from("waiver_signatures")
     .insert({
       groomer_id:  groomer.id,
-      client_id:   clientId || null,
+      client_id:   safeClientId,
       signer_name: signerName.trim(),
       ip_address:  ip,
       groomer_slug: slug,
@@ -69,9 +83,9 @@ exports.handler = async (event) => {
 
   // ── Email groomer notification (fire-and-forget) ────────
   if (groomer.email) {
-    fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
+    fetch(`${process.env.URL || "https://app.pawscheduler.app"}/.netlify/functions/sendEmail`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY },
       body: JSON.stringify({
         to: groomer.email,
         subject: `✍️ ${signerName.trim()} signed your grooming waiver`,

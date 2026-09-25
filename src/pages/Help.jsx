@@ -928,8 +928,8 @@ export default function Help() {
                   <li>Share that number with your clients so they know where to text</li>
                 </ol>
               </div>
-              <Callout type="warn" title="This is a shared number, not a dedicated one.">
-                Every Pro groomer's clients text the same AI bot number — the bot figures out who's texting by matching their phone number against your client list, not by which number they texted. Your regular two-way inbox number (Growth+) is still your own dedicated line; this is separate.
+              <Callout type="info" title="Your bot number is yours alone.">
+                Every Pro groomer gets their own scheduling number — it isn't shared with anyone else. Clients who text it only ever reach your bot and your calendar.
               </Callout>
               <BulletList items={[
                 { title: "What it can do", text: "Book a new appointment, check availability, reschedule, or cancel — all through natural conversation, no menus or keywords required." },

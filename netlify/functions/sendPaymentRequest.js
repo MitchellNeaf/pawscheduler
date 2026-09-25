@@ -101,9 +101,34 @@ exports.handler = async (event) => {
   const siteUrl      = process.env.URL || "https://app.pawscheduler.app";
 
   // ── Get or create payment session ──────────────────────
-  let paymentUrl = appt.payment_url;
+  // Bug fix: the saved link used to be reused forever, but Stripe Checkout
+  // sessions expire after 24 hours — so a second request a day later sent
+  // the client a dead link. It also kept the OLD amount if the groomer
+  // changed the price. Only reuse the saved session if Stripe says it's
+  // still open AND it's for the current amount.
+  let paymentUrl = null;
+  const amountCents = Math.round(appt.amount * 100);
 
-  // Reuse existing session if present and not expired
+  if (appt.payment_url && appt.payment_session_id) {
+    try {
+      const existing = await stripe.checkout.sessions.retrieve(
+        appt.payment_session_id,
+        { stripeAccount: groomer.stripe_account_id }
+      );
+      if (existing?.status === "open" && existing.amount_total === amountCents) {
+        paymentUrl = existing.url || appt.payment_url;
+      } else if (existing?.status === "open") {
+        // Price changed — kill the old link so the client can't pay the old amount
+        await stripe.checkout.sessions.expire(
+          appt.payment_session_id,
+          { stripeAccount: groomer.stripe_account_id }
+        );
+      }
+    } catch (err) {
+      console.warn("sendPaymentRequest: could not check saved session, creating a new one:", err.message);
+    }
+  }
+
   if (!paymentUrl) {
     try {
       const session = await stripe.checkout.sessions.create(
@@ -115,7 +140,7 @@ exports.handler = async (event) => {
             {
               price_data: {
                 currency: "usd",
-                unit_amount: Math.round(appt.amount * 100),
+                unit_amount: amountCents,
                 product_data: {
                   name: `${services} — ${petName}`,
                   description: `${groomerName} · ${appt.date}`,
@@ -160,7 +185,9 @@ exports.handler = async (event) => {
   const results = { smsSent: false, emailSent: false };
 
   // ── Send SMS ────────────────────────────────────────────
-  if (client?.phone && client?.sms_opt_in) {
+  // Only from the groomer's own number — no shared-number fallback. Without
+  // one, the email (and the copyable link) still go out.
+  if (client?.phone && client?.sms_opt_in && groomer.sms_number) {
     const smsText = `Hi ${clientFirst}! Your grooming balance with ${groomerName} is $${appt.amount.toFixed(2)} for ${petName} on ${appt.date}. Pay securely here: ${paymentUrl}`;
 
     const smsRes = await fetch("https://api.telnyx.com/v2/messages", {
@@ -170,7 +197,7 @@ exports.handler = async (event) => {
         Authorization: `Bearer ${process.env.TELNYX_API_KEY}`,
       },
       body: JSON.stringify({
-        from: groomer.sms_number || process.env.TELNYX_PHONE_NUMBER,
+        from: groomer.sms_number,
         to:   client.phone,
         text: smsText,
       }),
@@ -184,7 +211,7 @@ exports.handler = async (event) => {
   if (client?.email) {
     const emailRes = await fetch(`${siteUrl}/.netlify/functions/sendEmail`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY },
       body: JSON.stringify({
         to:       client.email,
         subject:  `Payment request from ${groomerName} — $${appt.amount.toFixed(2)}`,

@@ -91,7 +91,10 @@ exports.handler = async (event) => {
     const { data: groomers, error: gErr } = await supabase
       .from("groomers")
       .select("id, full_name, email, sms_number, time_zone, reminder_message_template, sms_confirmation_template, reminder_rules, subscription_status, plan_tier, business_address, free_reminders_this_month, free_reminders_reset_at")
-      .in("subscription_status", ["active", "trial"])
+      // "free" is included: App.js and stripeWebhook set subscription_status
+      // to "free" once a signup's trial date passes or a paid plan is
+      // cancelled — without it, Free users never got their 25 reminders.
+      .in("subscription_status", ["active", "trial", "free"])
       .or("sms_number.not.is.null,plan_tier.eq.basic,plan_tier.eq.free");
 
     if (gErr) throw gErr;
@@ -168,6 +171,13 @@ exports.handler = async (event) => {
         console.log(`  Found ${(appts || []).length} appointment(s) on ${targetDateStr} with reminder_enabled`);
 
         for (const appt of (appts || [])) {
+          // Re-check the Free cap on every send — checking only once per
+          // groomer let a single run blow past 25 when many were due at once.
+          if (isFree && freeRemindersThisMonth >= FREE_REMINDER_CAP) {
+            console.log(`  Skipping appt ${appt.id} — free plan hit ${FREE_REMINDER_CAP}/mo cap mid-run`);
+            skipped++; continue;
+          }
+
           const client = appt.pets?.clients;
           if (useEmail) {
             if (!client?.email) {
@@ -180,7 +190,10 @@ exports.handler = async (event) => {
           }
 
           // Check time window match
-          const [ah, am] = (appt.time || "00:00").slice(0, 5).split(":").map(Number);
+          // Flexible appointments have no time. They used to be treated as
+          // midnight (reminder fired around midnight) and the text read
+          // "...at ." — now they're matched as 9:00 AM and say "a flexible time".
+          const [ah, am] = (appt.time || "09:00").slice(0, 5).split(":").map(Number);
           const apptMinutes = ah * 60 + am;
           const diff = Math.abs(apptMinutes - targetMinutesInDay);
           if (diff > WINDOW) {
@@ -239,7 +252,7 @@ exports.handler = async (event) => {
             try {
               const res = await fetch(`${process.env.URL || "https://app.pawscheduler.app"}/.netlify/functions/sendEmail`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY },
                 body: JSON.stringify({
                   to: client.email,
                   subject: `Reminder: ${appt.pets?.name || "Your pet"}'s appointment ${fmtDate(appt.date)}`,
@@ -248,7 +261,7 @@ exports.handler = async (event) => {
                     first_name: firstName,
                     pet: appt.pets?.name || "",
                     date: fmtDate(appt.date),
-                    time: fmtTime(appt.time),
+                    time: appt.time ? fmtTime(appt.time) : "a flexible time",
                     services,
                     confirm_link: confirmLink,
                     business_name: groomer.full_name || "",
@@ -287,7 +300,7 @@ exports.handler = async (event) => {
             first_name: firstName,
             pet: appt.pets?.name || "",
             date: fmtDate(appt.date),
-            time: fmtTime(appt.time),
+            time: appt.time ? fmtTime(appt.time) : "a flexible time",
             services,
             confirm_link: confirmLink,
             business_name: groomer.full_name || "",

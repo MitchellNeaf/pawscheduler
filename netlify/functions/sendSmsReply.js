@@ -67,7 +67,11 @@ exports.handler = async (event) => {
     return { statusCode: 403, body: "SMS inbox requires Growth plan or higher" };
   }
 
-  const fromNumber = groomer.sms_number || process.env.TELNYX_PHONE_NUMBER;
+  // No shared-number fallback — replies must come from the groomer's own number
+  if (!groomer.sms_number) {
+    return { statusCode: 422, body: "Your texting number isn't set up yet. Check Profile → Reminders." };
+  }
+  const fromNumber = groomer.sms_number;
 
   // Security: verify toPhone belongs to one of this groomer's clients
   const { data: clientCheck } = await supabase
@@ -75,7 +79,8 @@ exports.handler = async (event) => {
     .select("id")
     .eq("groomer_id", user.id)
     .eq("phone", toPhone)
-    .single();
+    .limit(1)
+    .maybeSingle(); // .single() errored when two clients (e.g. a couple) share one phone
 
   if (!clientCheck) {
     console.error(`Groomer ${user.id} tried to text non-client number ${toPhone}`);

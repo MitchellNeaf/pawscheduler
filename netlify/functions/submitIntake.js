@@ -204,7 +204,7 @@ exports.handler = async (event) => {
   if (groomer.email) {
     fetch(`${siteUrl}/.netlify/functions/sendEmail`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY },
       body: JSON.stringify({
         to: groomer.email,
         subject: `📋 New intake — ${clientData.full_name.trim()}${pet ? ` & ${pet.name}` : ""}`,

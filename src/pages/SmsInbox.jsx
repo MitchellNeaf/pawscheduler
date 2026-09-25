@@ -25,7 +25,9 @@ function formatMessageTime(ts) {
 
 export default function SmsInbox() {
   const [user, setUser] = useState(null);
-  const [planTier, setPlanTier] = useState("free");
+  // null until loaded — defaulting to "free" flashed the upgrade wall at
+  // Growth/Pro users for a moment on every visit.
+  const [planTier, setPlanTier] = useState(null);
   const [smsNumber, setSmsNumber] = useState(null);
   const [conversations, setConversations] = useState([]);
   const [selectedPhone, setSelectedPhone] = useState(null);
@@ -49,7 +51,7 @@ export default function SmsInbox() {
       setUser(u);
       supabase.from("groomers").select("plan_tier, sms_number").eq("id", u.id).single()
         .then(({ data: g }) => {
-          if (g?.plan_tier) setPlanTier(g.plan_tier);
+          setPlanTier(g?.plan_tier || "free");
           if (g?.sms_number) setSmsNumber(g.sms_number);
         });
     });
@@ -172,8 +174,6 @@ export default function SmsInbox() {
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      console.log("Session token:", session?.access_token ? "present" : "MISSING");
-      console.log("Sending to:", selectedPhone, "message:", messageText);
       const res = await fetch("/.netlify/functions/sendSmsReply", {
         method: "POST",
         headers: {
@@ -226,6 +226,14 @@ export default function SmsInbox() {
   });
 
   const totalUnread = conversations.reduce((s, c) => s + Number(c.unread_count || 0), 0);
+
+  if (planTier === null) {
+    return (
+      <main className="min-h-screen bg-[var(--bg)] flex items-center justify-center p-6">
+        <p className="text-sm text-[var(--text-3)]">Loading…</p>
+      </main>
+    );
+  }
 
   // Gate for non-growth users
   if (planTier === "free" || planTier === "basic") {

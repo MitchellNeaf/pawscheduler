@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../supabase";
+import { emailFetch } from "../utils/sendEmail";
 import ConfirmModal from "../components/ConfirmModal";
 
 export default function Signup() {
@@ -61,7 +62,7 @@ export default function Signup() {
       // Fire-and-forget — this is the actual critical path here, not
       // just a nice-to-have, since it's what lets Mitchell manually
       // send out the referral coupon codes.
-      fetch("/.netlify/functions/sendEmail", {
+      emailFetch({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -105,11 +106,11 @@ export default function Signup() {
             <li>🐾 Unlimited clients & pets</li>
             <li>🔔 Automated reminders (email & SMS)</li>
             <li>📱 Designed for phone-first use</li>
-            <li>💬 AI SMS Scheduler included — clients text to book</li>
+            <li>💬 AI SMS booking bot on Pro — clients text to book</li>
           </ul>
 
           <p className="mt-6 text-xs text-gray-500">
-            No contracts. Cancel anytime. AI SMS Scheduler unlocks on paid plans.
+            No contracts. Cancel anytime. AI SMS booking bot is included with Pro.
           </p>
         </div>
 
@@ -125,13 +126,13 @@ export default function Signup() {
           <p className="text-sm text-gray-600 text-center mb-4">
             {pilot
               ? "You’re starting with a pilot account"
-              : "30-day free trial · No credit card required"}
+              : "Free forever plan · No credit card required"}
           </p>
 
           {!pilot && (
             <div className="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 mb-4 text-center">
               <p className="text-xs text-emerald-700 font-medium">
-                💬 AI SMS Scheduler included with paid plans
+                💬 AI SMS booking bot included with Pro
               </p>
             </div>
           )}

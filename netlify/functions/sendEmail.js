@@ -1,7 +1,113 @@
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
 const fetch = require("node-fetch");
 const { createClient } = require("@supabase/supabase-js");
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
+
+/* ── Who may send what ─────────────────────────────────────────
+   This endpoint used to send ANY email to ANY address for anyone who
+   found its URL — a free spam/phishing relay on our domain. Now every
+   request must be one of:
+     1. Internal: another Netlify function, proven by the x-internal-secret
+        header. Trusted as before.
+     2. A logged-in groomer (Supabase access token). May only email
+        themselves, one of their own clients, or the PawScheduler inbox.
+     3. Public (no login) — only these, with the recipient forced
+        server-side so the caller can't choose it:
+          • booking/cancellation alerts → that groomer's own email
+          • referral signup notice     → the PawScheduler inbox          */
+const ADMIN_EMAIL = "pawscheduler@gmail.com";
+const PUBLIC_GROOMER_ALERTS = new Set(["groomer_notification", "groomer_cancellation"]);
+const PUBLIC_ADMIN_TEMPLATES = new Set(["referral_signup_notification"]);
+// Set INTERNAL_API_SECRET in Netlify env vars; the service-role key is a
+// fallback so internal emails keep working until you do.
+const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+
+function safeEqual(a, b) {
+  const x = Buffer.from(String(a || ""));
+  const y = Buffer.from(String(b || ""));
+  return x.length > 0 && x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
+function escapeHtml(v) {
+  return String(v)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+const norm = (e) => String(e || "").trim().toLowerCase();
+
+async function authorize(event, to, template, data) {
+  const headers = event.headers || {};
+
+  // 1. Internal call from another function
+  if (safeEqual(headers["x-internal-secret"], INTERNAL_SECRET)) {
+    return { ok: true, to };
+  }
+
+  // Booking-page alerts: the recipient is always the groomer who owns the
+  // slug, whoever is calling (a client, or a groomer testing a booking page).
+  if (PUBLIC_GROOMER_ALERTS.has(template) && data.groomer_slug) {
+    const { data: groomer } = await supabase
+      .from("groomers")
+      .select("id, email")
+      .eq("slug", String(data.groomer_slug))
+      .maybeSingle();
+    if (!groomer?.email) return { ok: false, status: 404, error: "Groomer not found" };
+    escapeAll(data); // client-typed text (notes, names) must not become HTML
+    delete data.groomer_slug;
+    data.groomer_id = groomer.id;
+    return { ok: true, to: groomer.email };
+  }
+
+  // 2. Logged-in groomer
+  const token = (headers.authorization || "").replace(/^Bearer\s+/i, "").trim();
+  if (token && token !== "undefined") {
+    const { data: auth, error } = await supabase.auth.getUser(token);
+    const user = auth?.user;
+    if (error || !user) return { ok: false, status: 401, error: "Unauthorized" };
+
+    // Branding always comes from the sender's own account
+    if (data.groomer_id) data.groomer_id = user.id;
+
+    const target = norm(to);
+    if (target === norm(user.email) || target === ADMIN_EMAIL) return { ok: true, to };
+
+    const { data: client } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("groomer_id", user.id)
+      .ilike("email", target.replace(/[\\%_]/g, (c) => "\\" + c))
+      .limit(1)
+      .maybeSingle();
+    if (client) return { ok: true, to };
+
+    console.warn(`sendEmail: groomer ${user.id} tried to email a non-client address`);
+    return { ok: false, status: 403, error: "You can only email your own clients." };
+  }
+
+  // 3. Public (no login)
+  if (PUBLIC_ADMIN_TEMPLATES.has(template)) {
+    escapeAll(data);
+    return { ok: true, to: ADMIN_EMAIL };
+  }
+
+  return { ok: false, status: 401, error: "Unauthorized" };
+}
+
+function escapeAll(data) {
+  for (const k of Object.keys(data)) {
+    if (typeof data[k] === "string") data[k] = escapeHtml(data[k]);
+  }
+}
 
 function fillTemplate(template, data) {
   let output = template;
@@ -19,26 +125,32 @@ function fillTemplate(template, data) {
 
 exports.handler = async function(event) {
   try {
-    const body = JSON.parse(event.body || "{}");
-    const { to, subject, template, data } = body;
+    if (event.httpMethod !== "POST") {
+      return { statusCode: 405, body: "Method Not Allowed" };
+    }
 
-    if (!to || !subject || !template || !data) {
+    const body = JSON.parse(event.body || "{}");
+    const { subject, template, data } = body;
+    let { to } = body;
+
+    if (!to || !subject || !template || !data || typeof data !== "object") {
       return {
         statusCode: 400,
         body: JSON.stringify({ error: "Missing required fields" })
       };
     }
 
+    const auth = await authorize(event, to, template, data);
+    if (!auth.ok) {
+      return { statusCode: auth.status, body: JSON.stringify({ error: auth.error }) };
+    }
+    to = auth.to;
+
     // ----------------------------------
     // Load branding IF groomer_id is present
     // (Does NOT require it)
     // ----------------------------------
     if (data.groomer_id) {
-      const supabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-      );
-
       const { data: groomer } = await supabase
         .from("groomers")
         .select("*")
@@ -46,7 +158,9 @@ exports.handler = async function(event) {
         .single();
 
       data.logo_url = groomer?.logo_url || "";
-      data.business_name = groomer?.business_name || "";
+      // Profile saves the business name into full_name; business_name is
+      // never set by the app, so fall back or every email shows a blank name.
+      data.business_name = groomer?.business_name || groomer?.full_name || "";
       data.business_address = groomer?.business_address || "";
       data.business_phone = groomer?.business_phone || "";
       data.groomer_email = groomer?.email || "";

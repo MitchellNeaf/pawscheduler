@@ -108,7 +108,16 @@ exports.handler = async (event) => {
     .single();
 
   const groomerName = groomer?.business_name || groomer?.full_name || "Your groomer";
-  const isBasic = groomer?.plan_tier === "basic";
+  const planTier = groomer?.plan_tier || "free";
+
+  // The manual Remind button is a Basic+ feature (per the pricing page).
+  // The app already hides it on Free; this blocks direct calls too, which
+  // previously fell through to the SMS path on the shared number.
+  if (planTier === "free") {
+    return { statusCode: 403, body: JSON.stringify({ error: "Manual reminders are available on Basic and higher." }) };
+  }
+
+  const isBasic = planTier === "basic";
 
   if (isBasic) {
     // ── Basic: email instead of SMS, no shared-number dependency ──
@@ -118,7 +127,7 @@ exports.handler = async (event) => {
 
     const services = Array.isArray(appt.services) ? appt.services.join(", ") : appt.services || "";
     const dateStr = fmtDate(appt.date);
-    const timeStr = fmtTime(appt.time);
+    const timeStr = appt.time ? fmtTime(appt.time) : "Flexible — your groomer will confirm the time";
 
     const html = `
       <div style="font-family:-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:32px 20px">
@@ -179,13 +188,24 @@ exports.handler = async (event) => {
     return { statusCode: 422, body: JSON.stringify({ error: "Client has not opted in to SMS reminders." }) };
   }
 
-  const fromNumber = groomer?.sms_number || process.env.TELNYX_PHONE_NUMBER;
+  // No shared-number fallback: every Growth/Pro groomer texts from their
+  // own number. If it isn't assigned yet, say so instead of sending from
+  // the shared TELNYX_PHONE_NUMBER (carrier compliance).
+  if (!groomer?.sms_number) {
+    return {
+      statusCode: 422,
+      body: JSON.stringify({ error: "Your texting number isn't set up yet. Check Profile → Reminders." }),
+    };
+  }
+  const fromNumber = groomer.sms_number;
 
   // ── Build message ───────────────────────────────────────────────
   const services = Array.isArray(appt.services) ? appt.services.join(", ") : appt.services || "";
   const message = [
-    `Hi ${client.full_name.split(" ")[0]}! This is a reminder from ${groomerName}.`,
-    `${pet.name}'s grooming appointment is on ${fmtDate(appt.date)} at ${fmtTime(appt.time)}.`,
+    `Hi ${(client.full_name || "").split(" ")[0] || "there"}! This is a reminder from ${groomerName}.`,
+    appt.time
+      ? `${pet.name}'s grooming appointment is on ${fmtDate(appt.date)} at ${fmtTime(appt.time)}.`
+      : `${pet.name}'s grooming appointment is on ${fmtDate(appt.date)} (flexible time — we'll confirm).`,
     services ? `Services: ${services}.` : null,
     `Reply STOP to opt out.`,
   ]

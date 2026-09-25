@@ -105,7 +105,7 @@ exports.handler = async (event) => {
     };
   }
 
-  const message = `Hi ${client.full_name.split(" ")[0]}, please sign your grooming waiver with ${groomerName} here: ${waiverUrl}`;
+  const message = `Hi ${(client.full_name || "").split(" ")[0] || "there"}, please sign your grooming waiver with ${groomerName} here: ${waiverUrl}`;
 
   try {
     const res = await fetch("https://api.telnyx.com/v2/messages", {

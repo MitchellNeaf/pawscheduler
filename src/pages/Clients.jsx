@@ -1025,8 +1025,8 @@ export default function Clients() {
                     {deletingClientId === client.id ? "Deleting…" : "🗑 Delete"}
                   </button>
 
-                  {/* Waiver — growth+ only */}
-                  {groomerSlug && (planTier === "growth" || planTier === "pro") && (
+                  {/* Waiver — every plan, Free included (matches the pricing page) */}
+                  {groomerSlug && (
                     waiverSignedIds.has(client.id) ? (
                       <span className="text-sm px-3 py-1.5 rounded-xl border border-emerald-300 text-emerald-700 bg-emerald-50 font-semibold">
                         ✅ Waiver Signed
@@ -1046,7 +1046,8 @@ export default function Clients() {
                         >
                           {sendingWaiver === client.id ? "Sending…" : "📧 Email Waiver"}
                         </button>
-                        {client.phone && client.sms_opt_in && (
+                        {/* SMS needs a dedicated number, which is Growth+ only */}
+                        {client.phone && client.sms_opt_in && (planTier === "growth" || planTier === "pro") && (
                           <button
                             type="button"
                             disabled={sendingWaiver === `sms-${client.id}`}
@@ -1071,23 +1072,16 @@ export default function Clients() {
                   )}
 
                   {/* Grayed locked buttons for free/basic users */}
-                  {(planTier === "free" || planTier === "basic") && (
+                  {planTier === "free" && (
                     <a href="/upgrade"
                       className="text-sm px-3 py-1.5 rounded-xl border border-[var(--border-med)] text-[var(--text-3)] bg-gray-50 opacity-70 hover:opacity-100 hover:border-emerald-400 hover:text-emerald-600 transition-all"
-                      title="Upgrade to Growth to send intake forms">
+                      title="Upgrade to Basic to send intake forms">
                       🔒 Send Intake
                     </a>
                   )}
-                  {(planTier === "free" || planTier === "basic") && (
-                    <a href="/upgrade"
-                      className="text-sm px-3 py-1.5 rounded-xl border border-[var(--border-med)] text-[var(--text-3)] bg-gray-50 opacity-70 hover:opacity-100 hover:border-emerald-400 hover:text-emerald-600 transition-all"
-                      title="Upgrade to Growth to send waivers">
-                      🔒 Send Waiver
-                    </a>
-                  )}
 
-                  {/* Intake button — growth+ only */}
-                  {groomerSlug && (planTier === "growth" || planTier === "pro") && (
+                  {/* Intake button — Basic and up (sent by email, or copy the link if no email) */}
+                  {groomerSlug && (planTier === "basic" || planTier === "growth" || planTier === "pro") && (
                     intakeSentFor.has(client.id) ? (
                       <span className="text-sm px-3 py-1.5 rounded-xl border border-blue-200 text-blue-700 bg-blue-50 font-semibold">
                         ✓ Intake Sent

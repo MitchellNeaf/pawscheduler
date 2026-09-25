@@ -148,7 +148,9 @@ exports.handler = async (event) => {
     const results = { smsSent: false, emailSent: false };
 
     // ── Send SMS ────────────────────────────────────────────
-    if (client.phone && client.sms_opt_in) {
+    // Only from the groomer's own number — no shared-number fallback
+    // (carrier compliance). Without one, the email still goes out.
+    if (client.phone && client.sms_opt_in && groomer?.sms_number) {
       const smsText = `Hi ${clientFirst}! 🐾 ${petName}'s report card from ${groomerName} is ready: ${viewUrl}`;
 
       const smsRes = await fetch("https://api.telnyx.com/v2/messages", {
@@ -158,7 +160,7 @@ exports.handler = async (event) => {
           Authorization: `Bearer ${process.env.TELNYX_API_KEY}`,
         },
         body: JSON.stringify({
-          from: groomer?.sms_number || process.env.TELNYX_PHONE_NUMBER,
+          from: groomer.sms_number,
           to: client.phone,
           text: smsText,
         }),
@@ -172,7 +174,7 @@ exports.handler = async (event) => {
     if (client.email) {
       const emailRes = await fetch(`${siteUrl}/.netlify/functions/sendEmail`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY },
         body: JSON.stringify({
           to: client.email,
           subject: `${petName}'s report card from ${groomerName} 🐾`,

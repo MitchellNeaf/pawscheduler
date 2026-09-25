@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "../supabase";
+import { emailFetch } from "../utils/sendEmail";
 import Loader from "../components/Loader";
 import ConfirmModal from "../components/ConfirmModal";
 import VacationSection from "../components/VacationSection";
@@ -632,7 +633,7 @@ export default function Profile() {
       }
 
       // Fire-and-forget internal notification — don't block on it
-      fetch("/.netlify/functions/sendEmail", {
+      emailFetch({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -683,7 +684,6 @@ export default function Profile() {
     <main className="max-w-lg mx-auto p-4">
       <h1 className="text-2xl font-bold mb-3">Settings</h1>
 
-      <TrialBanner userId={user?.id} />
       <SubscriptionStatus userId={user?.id} onManageBilling={handleManageBilling} billingLoading={billingLoading} />
 
       {/* TAB BAR */}
@@ -1025,10 +1025,10 @@ export default function Profile() {
           </> ) : (
             <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-6 text-center space-y-3">
               <div className="text-3xl">💬</div>
-              <h3 className="font-bold text-[var(--text-1)]">SMS reminders require Basic or higher</h3>
-              <p className="text-sm text-[var(--text-2)]">Upgrade to send automatic SMS reminders, confirmation requests, and customize your message templates.</p>
+              <h3 className="font-bold text-[var(--text-1)]">Custom reminders require Basic or higher</h3>
+              <p className="text-sm text-[var(--text-2)]">Upgrade for unlimited reminders and confirmation requests, custom reminder timing, and your own message templates.</p>
               <a href="/upgrade" className="inline-block px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
-                Upgrade to Basic — $29.99/mo →
+                Upgrade to Basic — $19.99/mo →
               </a>
             </div>
           )}
@@ -1081,6 +1081,20 @@ export default function Profile() {
       {/* ── BOOKING PAGE TAB ── */}
       {activeTab === "booking" && (
         <div className="space-y-4">
+
+          {planTier === "free" && (
+            <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-5 text-center space-y-2">
+              <div className="text-2xl">📅</div>
+              <h3 className="font-bold text-[var(--text-1)]">Online self-booking requires Basic or higher</h3>
+              <p className="text-sm text-[var(--text-2)]">
+                On the Free plan, your booking page shows clients a "not accepting online bookings" message with Call and Text buttons.
+                Upgrade to let clients book themselves.
+              </p>
+              <a href="/upgrade" className="inline-block px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
+                Upgrade to Basic — $19.99/mo →
+              </a>
+            </div>
+          )}
 
           {/* ── Online Booking Toggle ── */}
           <div className={`rounded-2xl border-2 p-4 transition-colors ${
@@ -1505,9 +1519,9 @@ export default function Profile() {
           </> ) : (
             <div className="rounded-2xl border-2 border-dashed border-[var(--border-med)] p-6 text-center space-y-3">
               <div className="text-3xl">💬</div>
-              <h3 className="font-bold text-[var(--text-1)]">SMS reminders require Basic or higher</h3>
+              <h3 className="font-bold text-[var(--text-1)]">Custom reminders require Basic or higher</h3>
               <a href="/upgrade" className="inline-block px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
-                Upgrade to Basic — $29.99/mo →
+                Upgrade to Basic — $19.99/mo →
               </a>
             </div>
           )}
@@ -1809,7 +1823,7 @@ export default function Profile() {
               <h3 className="font-bold text-[var(--text-1)]">Editable services require Basic or higher</h3>
               <p className="text-sm text-[var(--text-2)]">Upgrade to customize your service names, add new services, and set prices by dog size.</p>
               <a href="/upgrade" className="inline-block px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-sm hover:bg-emerald-700 transition">
-                Upgrade to Basic — $29.99/mo →
+                Upgrade to Basic — $19.99/mo →
               </a>
             </div>
           ) : (
@@ -2567,7 +2581,6 @@ export default function Profile() {
 function SmsBotSection({ userId }) {
   const [botNumber, setBotNumber] = useState("");
   const [enabled, setEnabled] = useState(false);
-  const [subStatus, setSubStatus] = useState(null);
   const [planTier, setPlanTier] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
@@ -2576,13 +2589,12 @@ function SmsBotSection({ userId }) {
     if (!userId) return;
     supabase
       .from("groomers")
-      .select("sms_bot_enabled, sms_bot_number, subscription_status, plan_tier")
+      .select("sms_bot_enabled, sms_bot_number, plan_tier")
       .eq("id", userId)
       .single()
       .then(({ data }) => {
         setEnabled(data?.sms_bot_enabled || false);
         setBotNumber(data?.sms_bot_number || "");
-        setSubStatus(data?.subscription_status || null);
         setPlanTier(data?.plan_tier || null);
         setLoading(false);
       });
@@ -2627,28 +2639,12 @@ function SmsBotSection({ userId }) {
     );
   }
 
-  // STATE 1: Trial — locked, upsell to paid
-  if (subStatus === "trial" || subStatus === null) {
-    return (
-      <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 p-5 text-center">
-        <div className="text-2xl mb-2">💬</div>
-        <div className="font-semibold text-[var(--text-1)] mb-1">AI SMS Scheduler</div>
-        <p className="text-sm text-[var(--text-2)] mb-3">
-          Included with every paid plan. Upgrade to get your dedicated scheduling
-          number — clients text it to book, reschedule, or cancel anytime.
-        </p>
-        <a
-          href="/upgrade"
-          className="inline-flex items-center gap-2 text-sm bg-emerald-600 text-white
-            px-4 py-2 rounded-full font-semibold hover:bg-emerald-700 transition"
-        >
-          Upgrade to unlock →
-        </a>
-      </div>
-    );
-  }
+  // (Removed the old "trial" lock here. PawScheduler is free-forever — there
+  // is no trial — and signups keep subscription_status "trial" only as a
+  // signup-date reference, so it must not gate anything. plan_tier === "pro"
+  // above is the only gate, same as Bot Chats and the Payments tab.)
 
-  // STATE 2: Paid but number not yet assigned
+  // STATE 1: Pro, but number not yet assigned
   if (!botNumber) {
     return (
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20 p-5 text-center">
@@ -2668,7 +2664,7 @@ function SmsBotSection({ userId }) {
     );
   }
 
-  // STATE 3: Active — number assigned
+  // STATE 2: Active — number assigned
   return (
     <div className="space-y-4">
 
@@ -2738,7 +2734,6 @@ function SmsBotSection({ userId }) {
 }
 
 
-/* ---------------- TRIAL BANNER ---------------- */
 /* ---------------- ACCOUNT INFO CARD ---------------- */
 function AccountInfoCard({ userId, planTier, onManageBilling, billingLoading }) {
   const [info, setInfo] = useState(null);
@@ -2747,7 +2742,7 @@ function AccountInfoCard({ userId, planTier, onManageBilling, billingLoading }) 
     if (!userId) return;
     supabase
       .from("groomers")
-      .select("full_name, email, subscription_status, plan_tier, current_period_end, cancel_at_period_end, stripe_customer_id, trial_end_date")
+      .select("full_name, email, subscription_status, plan_tier, current_period_end, cancel_at_period_end, stripe_customer_id")
       .eq("id", userId)
       .single()
       .then(({ data }) => setInfo(data));
@@ -2773,12 +2768,9 @@ function AccountInfoCard({ userId, planTier, onManageBilling, billingLoading }) 
     } else if (daysLeft >= 0) {
       billingNote = `Next bill in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`;
     }
-  } else if (info.subscription_status === "trial" && info.trial_end_date) {
-    const daysLeft = Math.ceil((new Date(info.trial_end_date) - new Date()) / 86400000);
-    if (daysLeft > 0) {
-      billingNote = `Trial ends in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`;
-    }
-  } else if (info.subscription_status === "free") {
+  } else if ((info.plan_tier || "free") === "free") {
+    // Free is forever — trial_end_date is only kept as a signup-date reference
+    // and never drives anything shown here.
     billingNote = "Free plan — no billing";
   }
 
@@ -2830,60 +2822,6 @@ function AccountInfoCard({ userId, planTier, onManageBilling, billingLoading }) 
   );
 }
 
-function TrialBanner({ userId }) {
-  const [daysLeft, setDaysLeft] = useState(null);
-  const [status, setStatus] = useState(null);
-
-  useEffect(() => {
-    const load = async () => {
-      const { data } = await supabase
-        .from("groomers")
-        .select("trial_end_date, subscription_status")
-        .eq("id", userId)
-        .single();
-
-      if (!data) return;
-
-      setStatus(data.subscription_status);
-
-      const now = new Date();
-      const end = new Date(data.trial_end_date);
-      const diff = Math.ceil((end - now) / 86400000);
-
-      setDaysLeft(diff);
-    };
-
-    load();
-  }, [userId]);
-
-  if (!status) return null;
-
-  if (status === "trial" && daysLeft < 0) {
-    return (
-      <div className="bg-red-100 text-red-700 p-3 rounded-md mb-4 font-semibold">
-        🚫 Your trial has ended — please{" "}
-        <a href="/upgrade" className="underline font-bold">
-          upgrade to continue
-        </a>
-        .
-      </div>
-    );
-  }
-
-  if (status === "trial" && daysLeft >= 0) {
-    return (
-      <div className="bg-yellow-100 text-yellow-800 p-3 rounded-md mb-4 font-semibold">
-        ⏳ Your trial ends in <strong>{daysLeft}</strong> days.{" "}
-        <a href="/upgrade" className="underline font-bold">
-          Upgrade now →
-        </a>
-      </div>
-    );
-  }
-
-  return null;
-}
-
 /* ---------------- SUBSCRIPTION STATUS ---------------- */
 function SubscriptionStatus({ userId, onManageBilling, billingLoading }) {
   const [status, setStatus] = useState(null);
@@ -2919,7 +2857,7 @@ function SubscriptionStatus({ userId, onManageBilling, billingLoading }) {
             You're on the Free plan
           </div>
           <p className="text-sm text-[var(--text-2)] mb-3">
-            Upgrade for unlimited appointments, SMS reminders, and more.
+            Upgrade for unlimited appointments, reminders, your self-booking link, and more.
           </p>
           <a href="/upgrade" className="btn-primary w-full mt-1 text-center block">
             See Plans & Upgrade →
@@ -2937,12 +2875,6 @@ function SubscriptionStatus({ userId, onManageBilling, billingLoading }) {
         <button onClick={onManageBilling} disabled={billingLoading} className="btn-primary w-full mt-3 disabled:opacity-50">
           {billingLoading ? "Loading…" : "Manage Billing"}
         </button>
-      )}
-
-      {!isFree && sub === "trial" && (
-        <a href="/upgrade" className="btn-primary w-full mt-3 text-center block">
-          Upgrade Now
-        </a>
       )}
 
       {!isFree && sub === "expired" && (

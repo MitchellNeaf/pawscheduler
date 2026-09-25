@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { emailFetch } from "../utils/sendEmail";
 import ConfirmModal from "../components/ConfirmModal";
 import { useParams } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
@@ -190,6 +191,23 @@ export default function BookPage() {
           setPricing({ ...DEFAULT_PRICING, ...data.service_pricing });
         }
 
+        // Free plan doesn't include online self-booking (see Upgrade page).
+        // Show the same "not accepting online bookings" card with Call/Text
+        // buttons; existing clients can still log in to view/cancel.
+        // Separate query so a problem reading plan_tier can never take the
+        // whole booking page down.
+        anonSupabase
+          .from("groomers")
+          .select("plan_tier")
+          .eq("slug", slug)
+          .single()
+          .then(({ data: tier, error: tierErr }) => {
+            if (tierErr) { console.warn("Could not read plan tier:", tierErr.message); return; }
+            if (mounted && (tier?.plan_tier || "free") === "free") {
+              setGroomer((g) => (g ? { ...g, booking_enabled: false, allow_new_clients: false } : g));
+            }
+          });
+
         // Fetch add-ons separately — column may not exist yet, non-blocking
         anonSupabase
           .from("groomers")
@@ -314,8 +332,12 @@ export default function BookPage() {
     const startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
     const endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
     const clampedStart = startIdx === -1 ? 0 : startIdx;
-    const clampedEnd = endIdx === -1 ? TIME_SLOTS.length - 1 : endIdx;
-    const activeSlots = TIME_SLOTS.slice(clampedStart, clampedEnd + 1);
+    const clampedEnd = endIdx === -1 ? TIME_SLOTS.length : endIdx;
+    // Bug fix: this used to include the closing-time slot itself, so with a
+    // 5:00 close a 30-min booking could start at 4:45 and run until 5:15.
+    // Working time is now "open up to, but not including, close" — every
+    // appointment has to finish by closing time.
+    const activeSlots = TIME_SLOTS.slice(clampedStart, clampedEnd);
     setWorkingRange(activeSlots);
 
     // Breaks
@@ -329,7 +351,10 @@ export default function BookPage() {
     (breaks || []).forEach((b) => {
       const bi = TIME_SLOTS.indexOf(b.break_start.slice(0, 5));
       const ei = TIME_SLOTS.indexOf(b.break_end.slice(0, 5));
-      TIME_SLOTS.slice(bi, ei + 1).forEach((slot) => breakBlocked.add(slot));
+      if (bi === -1 || ei === -1) return;
+      // End-exclusive: a 12:00–1:00 break blocks 12:00–12:45, and 1:00 is
+      // bookable again (same rule as the Schedule page).
+      TIME_SLOTS.slice(bi, ei).forEach((slot) => breakBlocked.add(slot));
     });
 
     // Existing appts
@@ -366,7 +391,8 @@ export default function BookPage() {
       if (vac.type === "partial") {
         const bi = TIME_SLOTS.indexOf(vac.start);
         const ei = TIME_SLOTS.indexOf(vac.end);
-        TIME_SLOTS.slice(bi, ei + 1).forEach((s) => vacationPartial.add(s));
+        if (bi === -1 || ei === -1) return;
+        TIME_SLOTS.slice(bi, ei).forEach((s) => vacationPartial.add(s)); // end-exclusive, same as breaks
       }
     });
 
@@ -594,7 +620,7 @@ export default function BookPage() {
     else {
       // Fire groomer notification email (fire-and-forget)
       if (groomer?.email) {
-        fetch("/.netlify/functions/sendEmail", {
+        emailFetch({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -604,6 +630,7 @@ export default function BookPage() {
               : `New booking — ${pets.find((p) => p.id === selectedPetId)?.name || "a pet"} on ${form.date}`,
             template: "groomer_notification",
             data: {
+              groomer_slug: slug, // server sends it to this groomer's email
               pet_name: pets.find((p) => p.id === selectedPetId)?.name || "—",
               client_name: client?.full_name || "—",
               date: form.date,
@@ -714,7 +741,7 @@ export default function BookPage() {
 
           // Notify the groomer (fire-and-forget)
           if (groomer?.email && appt) {
-            fetch("/.netlify/functions/sendEmail", {
+            emailFetch({
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -722,6 +749,7 @@ export default function BookPage() {
                 subject: `Appointment cancelled — ${appt.pets?.name || "a pet"} on ${appt.date}`,
                 template: "groomer_cancellation",
                 data: {
+                  groomer_slug: slug, // server sends it to this groomer's email
                   pet_name: appt.pets?.name || "—",
                   client_name: client?.full_name || "—",
                   date: appt.date,

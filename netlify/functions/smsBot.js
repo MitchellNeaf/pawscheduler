@@ -72,6 +72,14 @@ function buildTimeSlots(startHour = 6, endHour = 20) {
 /* ─────────────────────────────────────────
    SEND SMS
 ───────────────────────────────────────── */
+/* Groomer notification emails go to the email on the groomer's account.
+   (The model also passes a groomer_email, but a texter could steer that.) */
+async function groomerEmailFor(groomerId) {
+  if (!groomerId) return null;
+  const { data } = await supabase.from("groomers").select("email").eq("id", groomerId).maybeSingle();
+  return data?.email || null;
+}
+
 async function sendSms(to, text) {
   log.info(`Sending SMS to ${maskPhone(to)}: ${text}`);
   const res = await fetch("https://api.telnyx.com/v2/messages", {
@@ -221,7 +229,9 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
   if (startIdx < 0 || endIdx < 0 || endIdx < startIdx) {
     return { available: false, date, reason: "Working hours not configured correctly.", unavailable_type: "config_error" };
   }
-  const workingSlots = SLOTS.slice(startIdx, endIdx + 1);
+  // End-exclusive, same as the booking page: every appointment must finish
+  // by closing time (the window check below needs all its slots in here).
+  const workingSlots = SLOTS.slice(startIdx, endIdx);
 
   const { data: breaks, error: breaksErr } = await supabase
     .from("working_breaks").select("break_start, break_end")
@@ -583,11 +593,13 @@ async function executeTool(name, input) {
 
         if (error) return { success: false, error: error.message };
 
-        if (groomer_email) {
+        // Recipient comes from the database, never from the AI's tool input
+        const notifyEmail = await groomerEmailFor(groomer_id);
+        if (notifyEmail) {
           fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
+            method: "POST", headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY },
             body: JSON.stringify({
-              to: groomer_email,
+              to: notifyEmail,
               subject: `New booking (SMS) — ${pet_name || "a pet"} on ${date}`,
               template: "groomer_notification",
               data: { pet_name: pet_name || "—", client_name: client_name || "—", date, time, duration_min,
@@ -629,12 +641,14 @@ async function executeTool(name, input) {
         const { data: inserted, error: insertErr } = await supabase.from("appointments").insert(rows).select("id");
         if (insertErr) return { success: false, error: insertErr.message };
 
-        if (groomer_email) {
+        // Recipient comes from the database, never from the AI's tool input
+        const notifyEmail = await groomerEmailFor(groomer_id);
+        if (notifyEmail) {
           const names = pet_names || orderedPets.map((p) => p.name);
           fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
+            method: "POST", headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY },
             body: JSON.stringify({
-              to: groomer_email,
+              to: notifyEmail,
               subject: `New multi-pet booking (SMS) — ${names.join(", ")} on ${date}`,
               template: "groomer_notification",
               data: { pet_name: names.join(", "), client_name: client_name || "—", date, time, duration_min,
@@ -734,11 +748,13 @@ async function executeTool(name, input) {
           return { success: false, error: `Could not update appointment: ${updateErr.message}` };
         }
 
-        if (groomer_email) {
+        // Recipient comes from the database, never from the AI's tool input
+        const notifyEmail = await groomerEmailFor(groomer_id);
+        if (notifyEmail) {
           fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
+            method: "POST", headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY },
             body: JSON.stringify({
-              to: groomer_email,
+              to: notifyEmail,
               subject: `Appointment rescheduled (SMS) — ${pet_name || "a pet"} to ${new_date}`,
               template: "groomer_notification",
               data: { pet_name: pet_name || "—", client_name: client_name || "—",
@@ -824,11 +840,13 @@ async function executeTool(name, input) {
           .from("appointments").delete().eq("id", appointment_id).eq("groomer_id", groomer_id);
         if (error) return { success: false, error: error.message };
 
-        if (groomer_email) {
+        // Recipient comes from the database, never from the AI's tool input
+        const notifyEmail = await groomerEmailFor(groomer_id);
+        if (notifyEmail) {
           fetch(`${process.env.URL}/.netlify/functions/sendEmail`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
+            method: "POST", headers: { "Content-Type": "application/json", "x-internal-secret": process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY },
             body: JSON.stringify({
-              to: groomer_email,
+              to: notifyEmail,
               subject: `Appointment cancelled (SMS) — ${pet_name || "a pet"} on ${date}`,
               template: "groomer_cancellation",
               data: { pet_name: pet_name || "—", client_name: client_name || "—",

@@ -43,6 +43,48 @@ const toMinutes = (t) => {
   return h * 60 + m;
 };
 
+const fromMinutes = (mins) =>
+  `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+
+/* Builds the same kind of time list the Schedule page uses: 15-minute
+   slots inside the groomer's working hours for that date, skipping breaks
+   and time blocks, and only offering start times where an appointment of
+   this length still ends by closing time. Returns null if closed that day. */
+async function loadTimeSlots({ groomerId, date, durationMin }) {
+  if (!groomerId || !date) return null;
+  const [y, m, d] = String(date).split("-").map(Number);
+  const weekday = new Date(y, m - 1, d).getDay();
+
+  const [{ data: hours }, { data: breaks }, { data: blocks }] = await Promise.all([
+    supabase.from("working_hours").select("start_time, end_time")
+      .eq("groomer_id", groomerId).eq("weekday", weekday).maybeSingle(),
+    supabase.from("working_breaks").select("break_start, break_end")
+      .eq("groomer_id", groomerId).eq("weekday", weekday),
+    supabase.from("vacation_days").select("start_time, end_time")
+      .eq("groomer_id", groomerId).eq("date", date),
+  ]);
+
+  if (!hours) return null;
+  if ((blocks || []).some((b) => !b.start_time || !b.end_time)) return null; // full day off
+
+  const blocked = [
+    ...(breaks || []).map((b) => [toMinutes(b.break_start), toMinutes(b.break_end)]),
+    ...(blocks || []).map((b) => [toMinutes(b.start_time), toMinutes(b.end_time)]),
+  ];
+
+  const open = toMinutes(hours.start_time);
+  const close = toMinutes(hours.end_time);
+  const len = durationMin || 60;
+  const slots = [];
+  for (let t = open; t + len <= close; t += 15) {
+    const overlaps = blocked.some(([bs, be]) => t < be && t + len > bs);
+    if (!overlaps) slots.push(fromMinutes(t));
+  }
+  return slots;
+}
+
+const FREE_MONTHLY_LIMIT = 50; // keep in sync with FREE_LIMIT in Schedule.jsx
+
 async function isWithinWorkingHours({ groomerId, date, time, durationMin }) {
   // Bug fix: `new Date("YYYY-MM-DD")` parses as midnight UTC, which in any
   // US timezone is the PREVIOUS evening — so getDay() returned the wrong
@@ -73,7 +115,8 @@ async function isWithinWorkingHours({ groomerId, date, time, durationMin }) {
 // Edit allowed only for future appointments
 function isFutureAppointment(appt) {
   const date = appt?.date;
-  const time = String(appt?.time || "00:00").slice(0, 5);
+  // A flexible (no-time) appointment counts as future for the whole day
+  const time = appt?.is_flexible || !appt?.time ? "23:59" : String(appt.time).slice(0, 5);
   if (!date) return false;
   const ms = new Date(`${date}T${time}`).getTime();
   return Number.isFinite(ms) && ms > Date.now();
@@ -91,8 +134,23 @@ function NewAppointmentModal({
   editing, // appointment object or null
   initialOtherService,
   pricing,
+  groomerId,
 }) {
   const [otherService, setOtherService] = useState("");
+  const [timeSlots, setTimeSlots] = useState([]); // [] = loading/none, null = closed
+  const [slotsLoading, setSlotsLoading] = useState(true);
+
+  // Reload the time list whenever the date or duration changes
+  useEffect(() => {
+    if (!open || !groomerId || !form.date) return;
+    let cancelled = false;
+    setSlotsLoading(true);
+    loadTimeSlots({ groomerId, date: form.date, durationMin: form.duration_min })
+      .then((slots) => { if (!cancelled) setTimeSlots(slots); })
+      .catch(() => { if (!cancelled) setTimeSlots([]); })
+      .finally(() => { if (!cancelled) setSlotsLoading(false); });
+    return () => { cancelled = true; };
+  }, [open, groomerId, form.date, form.duration_min]);
 
   // When modal opens (or edit target changes), seed Other service input
   useEffect(() => {
@@ -186,13 +244,39 @@ function NewAppointmentModal({
 
             <label className="flex flex-col gap-1">
               <span className="font-medium text-gray-700">Time</span>
-              <input
-                type="time"
-                step={900}
+              {/* Same dropdown as the Schedule page — only real open times,
+                  instead of the fiddly hour/minute time picker. */}
+              <select
                 value={form.time}
                 onChange={handleChange("time")}
+                disabled={slotsLoading || timeSlots === null}
                 className="border rounded px-2 py-1"
-              />
+              >
+                {slotsLoading ? (
+                  <option value="">Loading…</option>
+                ) : timeSlots === null ? (
+                  <option value="">Closed this day</option>
+                ) : (
+                  <>
+                    <option value="">
+                      {timeSlots.length ? "Select a time" : "No open times"}
+                    </option>
+                    {/* Keep an existing appointment's time selectable even if
+                        it no longer fits the current hours */}
+                    {form.time && !timeSlots.includes(form.time) && (
+                      <option value={form.time}>{fmtTime(form.time)}</option>
+                    )}
+                    {timeSlots.map((slot) => (
+                      <option key={slot} value={slot}>{fmtTime(slot)}</option>
+                    ))}
+                  </>
+                )}
+              </select>
+              {!slotsLoading && timeSlots === null && (
+                <span className="text-[11px] text-amber-600">
+                  You're not working this day — pick another date or update your hours in Profile.
+                </span>
+              )}
             </label>
           </div>
 
@@ -373,7 +457,7 @@ export default function PetAppointments() {
             .select(
               `
               id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-              services, notes, confirmed, no_show, paid, amount, reminder_enabled,
+              services, notes, confirmed, no_show, paid, amount, reminder_enabled, is_flexible,
               pets ( id, name, tags, client_id, clients ( id, full_name, phone, email ) )
             `
             )
@@ -502,6 +586,43 @@ export default function PetAppointments() {
       return;
     }
 
+    // Free plan: 50 appointments per month, same rule as the Schedule page —
+    // counted in the month the new appointment falls in, sample data excluded.
+    if (!editingAppt) {
+      const { data: g } = await supabase
+        .from("groomers")
+        .select("plan_tier")
+        .eq("id", user.id)
+        .single();
+
+      if ((g?.plan_tier || "free") === "free") {
+        const [y, m] = newForm.date.split("-").map(Number);
+        const monthStart = `${y}-${String(m).padStart(2, "0")}-01`;
+        const lastDay = new Date(y, m, 0).getDate();
+        const monthEnd = `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+        const { count } = await supabase
+          .from("appointments")
+          .select("id", { count: "exact", head: true })
+          .eq("groomer_id", user.id)
+          .gte("date", monthStart)
+          .lte("date", monthEnd)
+          .or("source.is.null,source.neq.sample");
+
+        if ((count ?? 0) >= FREE_MONTHLY_LIMIT) {
+          setConfirmConfig({
+            title: "Monthly limit reached",
+            message: `You've reached the ${FREE_MONTHLY_LIMIT} appointment limit for the free plan in that month. Upgrade to Basic or higher for unlimited appointments.`,
+            confirmLabel: "Upgrade",
+            cancelLabel: "Not now",
+            danger: false,
+            onConfirm: () => { window.location.href = "/upgrade"; },
+          });
+          return;
+        }
+      }
+    }
+
     const baseServices = newForm.services.filter((s) => s !== "Other");
     const finalServices = otherService
       ? [...baseServices, otherService]
@@ -510,6 +631,13 @@ export default function PetAppointments() {
     setSavingNew(true);
 
     const isEdit = Boolean(editingAppt?.id);
+
+    // If an edit moves the appointment to a new date/time, clear the reminder
+    // stamp so sendSmsReminders sends fresh reminders for the new slot.
+    const rescheduled = isEdit && (
+      newForm.date !== editingAppt.date ||
+      newForm.time !== (editingAppt.time ? editingAppt.time.slice(0, 5) : "")
+    );
 
     const query = isEdit
       ? supabase
@@ -522,6 +650,10 @@ export default function PetAppointments() {
             notes: newForm.notes,
             amount: newForm.amount ? Number(newForm.amount) : null,
             reminder_enabled: newForm.reminder_enabled,
+            // This page always saves a real time, so a flexible appointment
+            // edited here becomes a normal fixed-time one.
+            is_flexible: false,
+            ...(rescheduled ? { sms_reminder_sent_at: null } : {}),
           })
           .eq("id", editingAppt.id)
           .eq("groomer_id", user.id)
@@ -543,7 +675,7 @@ export default function PetAppointments() {
       .select(
         `
         id, pet_id, groomer_id, date, time, duration_min, slot_weight,
-        services, notes, confirmed, no_show, paid, amount, reminder_enabled,
+        services, notes, confirmed, no_show, paid, amount, reminder_enabled, is_flexible,
         pets ( id, name, tags, client_id, clients ( id, full_name, phone, email ) )
       `
       )
@@ -633,7 +765,7 @@ export default function PetAppointments() {
 
     setNewForm({
       date: appt.date,
-      time: (appt.time || "00:00").slice(0, 5),
+      time: appt.time && !appt.is_flexible ? appt.time.slice(0, 5) : "",
       duration_min: appt.duration_min || 60,
       services: other ? [...known, "Other"] : known,
       notes: appt.notes || "",
@@ -744,7 +876,7 @@ export default function PetAppointments() {
                   <div>
                     <div className="text-sm text-gray-500">{appt.date}</div>
                     <div className="text-lg font-semibold text-gray-900">
-                      {start} – {end}
+                      {appt.is_flexible || !appt.time ? "🔄 Flexible time" : `${start} – ${end}`}
                     </div>
                     <div className="text-sm text-gray-600">
                       {appt.duration_min} min
@@ -834,6 +966,7 @@ export default function PetAppointments() {
         editing={editingAppt}
         initialOtherService={editOtherService}
         pricing={pricing}
+        groomerId={user?.id}
       />
 
       <ConfirmModal

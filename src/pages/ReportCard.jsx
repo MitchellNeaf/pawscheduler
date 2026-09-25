@@ -9,6 +9,22 @@ const anonSupabase = createClient(
   process.env.REACT_APP_SUPABASE_ANON_KEY
 );
 
+/* brand_color stores a theme KEY ("forest", "ocean", …), not a color —
+   these match the accent colors of the booking page themes in Book.jsx.
+   Passing the raw key into a CSS gradient produced invalid CSS, so the
+   header lost its background and showed white text on nothing. */
+const THEME_ACCENTS = {
+  forest:   "#059669",
+  ocean:    "#0369a1",
+  lavender: "#6d28d9",
+  rose:     "#be185d",
+  sunrise:  "#ea580c",
+  slate:    "#334155",
+  blush:    "#db2777",
+  mint:     "#16a34a",
+};
+const DEFAULT_ACCENT = "#c17d8f";
+
 /* Mood tag → emoji + label lookup, matches the picker groomers use */
 const MOOD_TAGS = {
   happy:     { emoji: "😁", label: "Happy" },
@@ -81,8 +97,12 @@ export default function ReportCard() {
 
   const groomer = card.groomers;
   const petName = card.pets?.name || "Your pet";
+  // Same fallback as the report card text/email (sendReportCard.js):
+  // Profile saves the business name into full_name, business_name is rarely set.
   const groomerName = groomer?.business_name || groomer?.full_name || "Your groomer";
-  const brand = groomer?.brand_color || "#c17d8f";
+  const brandKey = groomer?.brand_color;
+  const brand = THEME_ACCENTS[brandKey]
+    || (/^#[0-9a-f]{6}$/i.test(brandKey || "") ? brandKey : DEFAULT_ACCENT);
   const tags = Array.isArray(card.mood_tags) ? card.mood_tags : [];
 
   return (
@@ -91,7 +111,7 @@ export default function ReportCard() {
 
         {/* Header card */}
         <div style={{
-          background: `linear-gradient(135deg, ${brand}, #9c5f70)`,
+          background: `linear-gradient(135deg, ${brand}, ${brand}cc)`,
           borderRadius: 24, padding: "32px 24px", textAlign: "center",
           color: "white", marginBottom: 20, boxShadow: "0 20px 50px rgba(156,95,112,.25)",
         }}>
