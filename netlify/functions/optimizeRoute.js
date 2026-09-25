@@ -3,9 +3,22 @@
  *
  * Given a date and a starting point, figures out a good order to visit
  * that day's appointments in, using Google's Distance Matrix API for
- * real drive times and a nearest-neighbor heuristic to sequence stops.
- * Returns an ordered list — does NOT draw a route line (that would be
- * the Directions API, a separate cost, deliberately not used here).
+ * real drive times. Returns an ordered list — does NOT draw a route line
+ * (that would be the Directions API, a separate cost, deliberately not
+ * used here).
+ *
+ * How the order is chosen:
+ *   • Timed appointments are fixed anchors, visited in time order — the
+ *     route never puts a 2:00 stop before a 10:00 one.
+ *   • Flexible appointments are slotted in wherever they add the least
+ *     driving (before the first timed stop, between two, or at the end),
+ *     preferring spots that don't make any timed stop late.
+ *   • If the whole day is flexible, it's plain nearest-neighbor by
+ *     distance (same as before).
+ *   • Every stop gets an estimated arrival time; timed stops you'd reach
+ *     late are flagged.
+ *   • No-shows, waitlisted, tentative and not-yet-approved booking
+ *     requests are left out.
  *
  * Usage is capped: Growth gets a limited number of free calls per
  * month (resets monthly), Pro is unlimited. This protects real,
@@ -27,6 +40,145 @@ const supabase = createClient(
 
 // Free route optimizations per month on Growth before it's blocked. Pro is unlimited.
 const GROWTH_MONTHLY_LIMIT = 15;
+
+// Arriving up to this many minutes after a timed appointment isn't flagged
+const LATE_GRACE_MIN = 5;
+// Google allows at most 25 origins, 25 destinations and 100 elements per
+// request — 10×10 blocks stay inside all three limits.
+const MATRIX_BLOCK = 10;
+// Sources that mean "a client asked, the groomer hasn't approved yet"
+const REQUEST_SOURCES = ["booking_page", "new_client_booking"];
+
+const toMin = (t) => {
+  if (!t) return null;
+  const [h, m] = String(t).slice(0, 5).split(":").map(Number);
+  return h * 60 + m;
+};
+const fromMin = (mins) => {
+  const m = Math.max(0, Math.round(mins));
+  return `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+};
+
+/* Fetch the full point×point matrix in blocks Google will accept.
+   Billing is per element, so this costs the same as one big request. */
+async function fetchMatrix(points, apiKey) {
+  const n = points.length;
+  const elements = Array.from({ length: n }, () => new Array(n).fill(null));
+  const coords = points.map((p) => `${p.lat},${p.lng}`);
+  const blocks = [];
+  for (let oi = 0; oi < n; oi += MATRIX_BLOCK) {
+    for (let di = 0; di < n; di += MATRIX_BLOCK) blocks.push([oi, di]);
+  }
+  await Promise.all(blocks.map(async ([oi, di]) => {
+    const origins = coords.slice(oi, oi + MATRIX_BLOCK).join("|");
+    const dests = coords.slice(di, di + MATRIX_BLOCK).join("|");
+    const res = await fetch(
+      `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origins)}&destinations=${encodeURIComponent(dests)}&key=${apiKey}`
+    );
+    const json = await res.json();
+    if (json.status !== "OK") {
+      const err = new Error(`Distance calculation failed (${json.status}).`);
+      err.status = json.status;
+      throw err;
+    }
+    json.rows.forEach((row, r) => {
+      row.elements.forEach((el, c) => { elements[oi + r][di + c] = el; });
+    });
+  }));
+  return elements;
+}
+
+/* Walk a route (list of point indexes, starting with the origin 0) and
+   work out arrival/start times. stops[i-1] describes point i. */
+function simulate(route, stops, elements, dayStartMin) {
+  let clock = dayStartMin;
+  let totalLate = 0;
+  let lateStops = 0;
+  const legs = [];
+  for (let k = 1; k < route.length; k++) {
+    const leg = elements[route[k - 1]][route[k]];
+    const driveMin = leg?.status === "OK" ? leg.duration.value / 60 : 0;
+    const stop = stops[route[k] - 1];
+    const arrive = clock + driveMin;
+    let start = arrive;
+    let late = 0;
+    let wait = 0;
+    if (stop.timeMin != null) {
+      if (arrive < stop.timeMin) { wait = stop.timeMin - arrive; start = stop.timeMin; }
+      else late = arrive - stop.timeMin;
+      if (late > LATE_GRACE_MIN) { totalLate += late; lateStops++; }
+    }
+    legs.push({ arrive, start, late, wait });
+    clock = start + stop.durationMin;
+  }
+  return { legs, totalLate, lateStops };
+}
+
+/* Drive seconds for a route — the insertion cost */
+function routeDriveSeconds(route, elements) {
+  let total = 0;
+  for (let k = 1; k < route.length; k++) {
+    const el = elements[route[k - 1]][route[k]];
+    total += el?.status === "OK" ? el.duration.value : 1e7; // unreachable = huge
+  }
+  return total;
+}
+
+/* Nearest-neighbor by distance from the origin — used when every stop is
+   flexible (identical to the original behavior). */
+function nearestNeighbor(n, elements) {
+  const visited = new Set([0]);
+  const order = [0];
+  let current = 0;
+  while (visited.size < n) {
+    let nearest = null;
+    let nearestDist = Infinity;
+    for (let j = 0; j < n; j++) {
+      if (visited.has(j)) continue;
+      const el = elements[current][j];
+      if (el?.status !== "OK") continue;
+      if (el.distance.value < nearestDist) { nearestDist = el.distance.value; nearest = j; }
+    }
+    if (nearest === null) break; // no reachable unvisited point — stop here
+    visited.add(nearest);
+    order.push(nearest);
+    current = nearest;
+  }
+  return order;
+}
+
+/* Timed stops in time order, then flexible stops inserted one at a time
+   at their cheapest spot. "Cheapest" = fewest late timed stops, then
+   least total lateness, then least added driving. */
+function planRoute(stops, elements, dayStartMin) {
+  const idx = stops.map((_, i) => i + 1); // point indexes
+  const timed = idx.filter((p) => stops[p - 1].timeMin != null)
+    .sort((a, b) => stops[a - 1].timeMin - stops[b - 1].timeMin);
+  const flexible = idx.filter((p) => stops[p - 1].timeMin == null);
+
+  if (timed.length === 0) return nearestNeighbor(stops.length + 1, elements);
+
+  let route = [0, ...timed];
+  const remaining = new Set(flexible);
+  while (remaining.size) {
+    let best = null;
+    for (const p of remaining) {
+      for (let pos = 1; pos <= route.length; pos++) {
+        const candidate = [...route.slice(0, pos), p, ...route.slice(pos)];
+        const sim = simulate(candidate, stops, elements, dayStartMin);
+        const score = [sim.lateStops, Math.round(sim.totalLate), routeDriveSeconds(candidate, elements)];
+        if (!best || score[0] < best.score[0] ||
+            (score[0] === best.score[0] && (score[1] < best.score[1] ||
+            (score[1] === best.score[1] && score[2] < best.score[2])))) {
+          best = { score, candidate, p };
+        }
+      }
+    }
+    route = best.candidate;
+    remaining.delete(best.p);
+  }
+  return route;
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
@@ -61,7 +213,7 @@ exports.handler = async (event) => {
     // ── Load groomer, check tier + usage cap ──────────────────
     const { data: groomer, error: groomerErr } = await supabase
       .from("groomers")
-      .select("id, plan_tier, route_optimizations_this_month, route_optimizations_reset_at")
+      .select("id, plan_tier, time_zone, route_optimizations_this_month, route_optimizations_reset_at")
       .eq("id", user.id)
       .single();
 
@@ -106,10 +258,11 @@ exports.handler = async (event) => {
     }
 
     // ── Load that day's appointments with geocoded client locations ──
-    const { data: appts, error: apptsErr } = await supabase
+    const { data: allAppts, error: apptsErr } = await supabase
       .from("appointments")
       .select(`
-        id, time, appointment_group_id,
+        id, time, duration_min, is_flexible, is_tentative, no_show, waitlist,
+        confirmed, source, appointment_group_id,
         pets ( name, clients ( id, full_name, lat, lng ) )
       `)
       .eq("groomer_id", user.id)
@@ -120,13 +273,35 @@ exports.handler = async (event) => {
       return { statusCode: 500, body: JSON.stringify({ error: apptsErr.message }) };
     }
 
-    if (!appts?.length) {
-      return { statusCode: 422, body: JSON.stringify({ error: "No appointments on this date." }) };
+    // Leave out appointments the groomer isn't actually driving to
+    const excluded = [];
+    const appts = (allAppts || []).filter((a) => {
+      const name = a.pets?.clients?.full_name || a.pets?.name || "Unknown";
+      let reason = null;
+      if (a.no_show === true) reason = "no-show";
+      else if (a.waitlist === true) reason = "waitlisted";
+      else if (a.is_tentative === true) reason = "tentative";
+      else if (a.confirmed !== true && REQUEST_SOURCES.includes(a.source)) reason = "request not approved yet";
+      if (reason) excluded.push({ name, reason });
+      return !reason;
+    });
+
+    if (!appts.length) {
+      return {
+        statusCode: 422,
+        body: JSON.stringify({
+          error: excluded.length
+            ? "No appointments to route on this date (the rest are no-shows, waitlisted, tentative or unapproved requests)."
+            : "No appointments on this date.",
+          excluded,
+        }),
+      };
     }
 
     // Dedupe to one stop per client (multi-pet appointments for the same
     // client share one location; a client with two separate appointments
-    // the same day also only needs to be visited once).
+    // the same day also only needs to be visited once). A stop is timed if
+    // any of its appointments has a set time — the earliest one wins.
     const stopsByClient = new Map();
     const skipped = [];
 
@@ -139,6 +314,8 @@ exports.handler = async (event) => {
         }
         continue;
       }
+      const timeMin = appt.is_flexible ? null : toMin(appt.time);
+      const dur = appt.duration_min || 60;
       if (!stopsByClient.has(client.id)) {
         stopsByClient.set(client.id, {
           clientId: client.id,
@@ -146,10 +323,17 @@ exports.handler = async (event) => {
           petNames: [appt.pets.name],
           lat: client.lat,
           lng: client.lng,
-          earliestTime: appt.time,
+          timeMin,
+          durationMin: dur,
+          groups: new Set(appt.appointment_group_id ? [appt.appointment_group_id] : []),
         });
       } else {
-        stopsByClient.get(client.id).petNames.push(appt.pets.name);
+        const stop = stopsByClient.get(client.id);
+        stop.petNames.push(appt.pets.name);
+        if (timeMin != null && (stop.timeMin == null || timeMin < stop.timeMin)) stop.timeMin = timeMin;
+        // Multi-pet groups are one combined block (durations add up); a
+        // separate appointment for the same client adds its time too.
+        stop.durationMin += dur;
       }
     }
 
@@ -161,48 +345,53 @@ exports.handler = async (event) => {
         body: JSON.stringify({
           error: "None of today's clients have a location set yet. Add one from their client page first.",
           skipped,
+          excluded,
         }),
       };
     }
 
-    // ── Build the distance matrix: origin + every stop, against each other ──
+    // ── When does the day start? Working-hours start for that weekday
+    // (8:00 if none), pulled earlier if the first timed stop needs it, or
+    // "now" if routing today and the day is already underway. ──
+    const [y, m, d] = String(date).split("-").map(Number);
+    const weekday = new Date(y, m - 1, d).getDay();
+    const { data: hours } = await supabase
+      .from("working_hours")
+      .select("start_time")
+      .eq("groomer_id", user.id)
+      .eq("weekday", weekday)
+      .maybeSingle();
+    let dayStartMin = toMin(hours?.start_time) ?? 8 * 60;
+
+    const tz = groomer.time_zone || "America/New_York";
+    const todayStr = now.toLocaleDateString("en-CA", { timeZone: tz });
+    const nowMin = toMin(now.toLocaleTimeString("en-US", { timeZone: tz, hour12: false, hour: "2-digit", minute: "2-digit" }));
+    const startsNow = date === todayStr && nowMin > dayStartMin;
+    if (startsNow) dayStartMin = nowMin;
+
+    // ── Distance matrix: origin + every stop, against each other ──
     const points = [origin, ...stops.map((s) => ({ lat: s.lat, lng: s.lng }))];
-    const pointsParam = points.map((p) => `${p.lat},${p.lng}`).join("|");
-
-    const matrixRes = await fetch(
-      `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(pointsParam)}&destinations=${encodeURIComponent(pointsParam)}&key=${process.env.GOOGLE_MAPS_API_KEY}`
-    );
-    const matrixJson = await matrixRes.json();
-
-    if (matrixJson.status !== "OK") {
-      return { statusCode: 502, body: JSON.stringify({ error: `Distance calculation failed (${matrixJson.status}).` }) };
+    let elements;
+    try {
+      elements = await fetchMatrix(points, process.env.GOOGLE_MAPS_API_KEY);
+    } catch (err) {
+      return { statusCode: 502, body: JSON.stringify({ error: err.message }) };
     }
 
-    // rows[i].elements[j] = distance/duration from point i to point j
-    const elements = matrixJson.rows.map((row) => row.elements);
-
-    // ── Nearest-neighbor ordering, starting from the origin (index 0) ──
-    const visited = new Set([0]);
-    const order = [0];
-    let current = 0;
-
-    while (visited.size < points.length) {
-      let nearest = null;
-      let nearestDist = Infinity;
-      for (let j = 0; j < points.length; j++) {
-        if (visited.has(j)) continue;
-        const el = elements[current][j];
-        if (el?.status !== "OK") continue;
-        if (el.distance.value < nearestDist) {
-          nearestDist = el.distance.value;
-          nearest = j;
-        }
+    // Planned day: don't assume a start so late that the first timed stop
+    // is missed just because of the drive there.
+    if (!startsNow) {
+      const firstTimed = stops.reduce((mn, s, i) =>
+        s.timeMin != null && (mn == null || s.timeMin < stops[mn].timeMin) ? i : mn, null);
+      if (firstTimed != null) {
+        const leg = elements[0][firstTimed + 1];
+        const driveMin = leg?.status === "OK" ? leg.duration.value / 60 : 0;
+        dayStartMin = Math.min(dayStartMin, stops[firstTimed].timeMin - driveMin);
       }
-      if (nearest === null) break; // no reachable unvisited point — stop here
-      visited.add(nearest);
-      order.push(nearest);
-      current = nearest;
     }
+
+    const order = planRoute(stops, elements, dayStartMin);
+    const sim = simulate(order, stops, elements, dayStartMin);
 
     // Build the final ordered stop list (skip index 0, that's the origin)
     let totalDistanceMeters = 0;
@@ -217,6 +406,7 @@ exports.handler = async (event) => {
       totalDurationSeconds += leg?.duration?.value || 0;
 
       const stop = stops[toIdx - 1]; // -1 because points[0] is the origin
+      const timing = sim.legs[i - 1];
       orderedStops.push({
         clientName: stop.clientName,
         petNames: stop.petNames,
@@ -224,8 +414,18 @@ exports.handler = async (event) => {
         lng: stop.lng,
         legDistanceMiles: leg?.distance ? (leg.distance.value / 1609.34).toFixed(1) : null,
         legDurationMinutes: leg?.duration ? Math.round(leg.duration.value / 60) : null,
+        time: stop.timeMin != null ? fromMin(stop.timeMin) : null, // null = flexible
+        durationMin: stop.durationMin,
+        eta: fromMin(timing.arrive),
+        lateMinutes: timing.late > LATE_GRACE_MIN ? Math.round(timing.late) : 0,
       });
     }
+
+    // Unreachable stops (no drivable route) — say so instead of dropping silently
+    const routed = new Set(order);
+    stops.forEach((s, i) => {
+      if (!routed.has(i + 1)) skipped.push({ id: s.clientId, name: `${s.clientName} (no drivable route found)` });
+    });
 
     const totalDistanceMiles = (totalDistanceMeters / 1609.34).toFixed(1);
     const totalDurationMinutes = Math.round(totalDurationSeconds / 60);
@@ -265,6 +465,8 @@ exports.handler = async (event) => {
         totalDurationMinutes,
         currentStopIndex: 0,
         skipped,
+        excluded,
+        lateStops: sim.lateStops,
         usage: {
           used: usageCount + 1,
           limit: groomer.plan_tier === "growth" ? GROWTH_MONTHLY_LIMIT : null,
@@ -276,3 +478,6 @@ exports.handler = async (event) => {
     return { statusCode: 500, body: JSON.stringify({ error: err.message || "Something went wrong." }) };
   }
 };
+
+// Exposed for tests only
+exports._internal = { planRoute, simulate, nearestNeighbor, fetchMatrix, toMin, fromMin };

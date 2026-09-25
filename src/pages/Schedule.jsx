@@ -2452,6 +2452,15 @@ function MapView({ userId, setViewMode, selectedDate }) {
                   {routeResult.totalDistanceMiles} mi total · ~{routeResult.totalDurationMinutes} min driving
                 </div>
 
+                {/* Timed appointments are kept in time order; flexible ones fill the gaps */}
+                {routeResult.stops.some((s) => s.lateMinutes > 0) && (
+                  <p className="text-xs font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    ⚠️ This day is tight — you may run late for {routeResult.stops.filter((s) => s.lateMinutes > 0).length === 1
+                      ? "1 timed appointment"
+                      : `${routeResult.stops.filter((s) => s.lateMinutes > 0).length} timed appointments`}. Consider moving a flexible stop to another day or giving the client a heads-up.
+                  </p>
+                )}
+
                 {routeResult.stops.map((stop, idx) => {
                   const isDone = idx < currentStopIndex;
                   const isCurrent = idx === currentStopIndex;
@@ -2474,6 +2483,22 @@ function MapView({ userId, setViewMode, selectedDate }) {
                           {stop.clientName}
                           {stop.petNames?.length > 0 && <span className="text-[var(--text-3)] font-normal"> · {stop.petNames.join(", ")}</span>}
                         </div>
+                        {/* Appointment time + estimated arrival (older saved routes won't have these) */}
+                        {"time" in stop && (
+                          <div className="text-xs text-[var(--text-2)]">
+                            {stop.time ? (
+                              <span className="font-semibold">🕐 {fmt12Hour(stop.time)}</span>
+                            ) : (
+                              <span className="font-semibold">🔄 Flexible</span>
+                            )}
+                            {stop.eta && <span> · arrive ~{fmt12Hour(stop.eta)}</span>}
+                          </div>
+                        )}
+                        {stop.lateMinutes > 0 && !isDone && (
+                          <div className="text-xs font-semibold text-amber-700">
+                            ⚠️ may arrive ~{stop.lateMinutes} min late
+                          </div>
+                        )}
                         {stop.legDurationMinutes != null && (
                           <div className="text-xs text-[var(--text-3)]">
                             {stop.legDistanceMiles} mi · {stop.legDurationMinutes} min from previous stop
@@ -2523,6 +2548,12 @@ function MapView({ userId, setViewMode, selectedDate }) {
                 {routeResult.skipped?.length > 0 && (
                   <p className="text-xs text-amber-700 px-1">
                     Skipped (no location set): {routeResult.skipped.map((s) => s.name).join(", ")}
+                  </p>
+                )}
+
+                {routeResult.excluded?.length > 0 && (
+                  <p className="text-xs text-[var(--text-3)] px-1">
+                    Not in route: {routeResult.excluded.map((s) => `${s.name} (${s.reason})`).join(", ")}
                   </p>
                 )}
               </div>
