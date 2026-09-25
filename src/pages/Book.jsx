@@ -1263,6 +1263,15 @@ export default function BookPage() {
                 .react-datepicker__portal .react-datepicker-time__header {
                   font-size: 1.15rem;
                 }
+                /* Partial-vacation day: diagonal split (line from top-right
+                   to bottom-left), red on top, white on bottom — distinct
+                   from a full day off, which stays solid red. */
+                .react-datepicker__day.vacation-partial-diagonal {
+                  background: linear-gradient(135deg, #f87171 50%, #ffffff 50%) !important;
+                  color: #111827 !important;
+                  font-weight: 700;
+                  border-radius: 0.3rem;
+                }
               `}</style>
               <DatePicker
                 selected={form.date ? parseDBDate(form.date) : null}
@@ -1288,11 +1297,12 @@ export default function BookPage() {
                   // one array, so a partial block (e.g. off 9am-1pm) painted
                   // the whole day solid red just like a true day off, even
                   // though most of the day was still bookable. Now styled
-                  // distinctly — solid red only for a real full day off,
-                  // a lighter amber for a partial block that's still
-                  // partly bookable.
+                  // distinctly — solid red only for a real full day off;
+                  // a partial block gets a diagonal red/white split instead
+                  // of a solid fill, so it reads as "part of this day" at a
+                  // glance rather than "day off."
                   if (fullVacationDates.includes(f)) return "bg-red-300 text-white";
-                  if (partialVacationDates.includes(f)) return "bg-amber-200 text-amber-900";
+                  if (partialVacationDates.includes(f)) return "vacation-partial-diagonal";
                   if (!workingWeekdays.includes(clean.getUTCDay())) return "bg-gray-200 text-gray-400";
                   return "";
                 }}
@@ -1305,7 +1315,7 @@ export default function BookPage() {
                     Day off
                   </span>
                   <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{ width: 10, height: 10, borderRadius: 3, background: "#fde68a", display: "inline-block" }} />
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: "linear-gradient(135deg, #f87171 50%, #ffffff 50%)", display: "inline-block", border: "1px solid #e5e7eb" }} />
                     Partially unavailable
                   </span>
                 </div>
@@ -1326,7 +1336,14 @@ export default function BookPage() {
                 </option>
                 {!isFullVacation && workingRange
                   .filter((slot, idx) => {
-                    const blocks = Math.ceil(Number(form.duration_min || 0) / 15);
+                    // Bug fix: before a service is picked, form.duration_min
+                    // is "" — Number("" ) is 0, so `blocks` came out to 0,
+                    // making windowSlots an EMPTY array. Both checks below
+                    // trivially pass against an empty array, so every slot
+                    // (including ones blocked by a partial vacation) showed
+                    // as available until a service was selected. Floor
+                    // blocks at 1 so the slot itself always gets checked.
+                    const blocks = Math.max(1, Math.ceil(Number(form.duration_min || 0) / 15));
                     const windowSlots = workingRange.slice(idx, idx + blocks);
                     if (windowSlots.length < blocks) return false;
                     if (windowSlots.some((s) => unavailable.includes(s))) return false;
