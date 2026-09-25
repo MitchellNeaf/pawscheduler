@@ -44,14 +44,19 @@ const toMinutes = (t) => {
 };
 
 async function isWithinWorkingHours({ groomerId, date, time, durationMin }) {
-  const weekday = new Date(date).getDay();
+  // Bug fix: `new Date("YYYY-MM-DD")` parses as midnight UTC, which in any
+  // US timezone is the PREVIOUS evening — so getDay() returned the wrong
+  // weekday and every booking was checked against the prior day's hours.
+  // Parse the parts as a local date instead.
+  const [y, m, d] = String(date).split("-").map(Number);
+  const weekday = new Date(y, m - 1, d).getDay();
 
   const { data: hours, error } = await supabase
     .from("working_hours")
     .select("start_time, end_time")
     .eq("groomer_id", groomerId)
     .eq("weekday", weekday)
-    .single();
+    .maybeSingle();
 
   // No row = closed day (or not configured)
   if (error || !hours) return false;
@@ -107,7 +112,10 @@ function NewAppointmentModal({
     );
   }
 
-  const slotWeight = pet?.slot_weight || 1;
+  // Bug fix: pricing tier is size_category (1=S, 2=M, 3=L, 4=XL), NOT
+  // slot_weight (booking capacity). Passing slot_weight priced Medium as
+  // Small, Large as Medium, and XL as Large.
+  const sizeCategory = pet?.size_category || 1;
 
   const handleChange = (field) => (e) => {
     const raw = e.target.value;
@@ -138,7 +146,7 @@ function NewAppointmentModal({
       const newServices = exists
         ? prev.services.filter((s) => s !== svc)
         : [...prev.services, svc];
-      const autoAmount = calcAmount(newServices, slotWeight, pricing);
+      const autoAmount = calcAmount(newServices, sizeCategory, pricing);
       return {
         ...prev,
         services: newServices,
@@ -353,7 +361,7 @@ export default function PetAppointments() {
             .from("pets")
             .select(
               `
-              id, name, breed, tags, notes, slot_weight, client_id,
+              id, name, breed, tags, notes, slot_weight, size_category, client_id,
               clients ( id, full_name, phone, email )
             `
             )
@@ -375,7 +383,7 @@ export default function PetAppointments() {
             .order("time", { ascending: false }),
           supabase
             .from("groomers")
-            .select("service_pricing")
+            .select("service_pricing, custom_services")
             .eq("id", user.id)
             .maybeSingle(),
         ]);
@@ -383,7 +391,14 @@ export default function PetAppointments() {
       if (petErr) console.error(petErr);
       if (apptErr) console.error(apptErr);
 
-      if (groomerData?.service_pricing) {
+      // Prefer the groomer's edited services (custom_services) — same as the
+      // public booking page — and fall back to legacy service_pricing.
+      if (groomerData?.custom_services?.length > 0) {
+        const pricingObj = Object.fromEntries(
+          groomerData.custom_services.map((s) => [s.name, s.pricing])
+        );
+        setPricing({ ...DEFAULT_PRICING, ...pricingObj });
+      } else if (groomerData?.service_pricing) {
         setPricing({ ...DEFAULT_PRICING, ...groomerData.service_pricing });
       }
 
@@ -433,7 +448,6 @@ export default function PetAppointments() {
           .eq("groomer_id", user.id);
 
         if (error) {
-          // Surface error in a non-blocking way — set a brief inline error state
           console.error("Delete error:", error.message);
           return;
         }
@@ -520,6 +534,7 @@ export default function PetAppointments() {
           services: finalServices,
           notes: newForm.notes,
           slot_weight: pet.slot_weight || 1,
+          size_category: pet.size_category || 1,
           amount: newForm.amount ? Number(newForm.amount) : null,
           reminder_enabled: newForm.reminder_enabled,
         });
