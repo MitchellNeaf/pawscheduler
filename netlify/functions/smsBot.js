@@ -29,6 +29,40 @@ const supabase = createClient(
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
+/* ── Which Claude model runs the bot ──────────────────────────
+   Default: Claude Sonnet 5 ($2/$10 per M tokens vs Sonnet 4.5's $3/$15).
+   UNDO SWITCH: set SMS_BOT_MODEL=claude-sonnet-4-5 in Netlify's environment
+   variables and redeploy to go back to the old model exactly as it was.
+
+   Sonnet 5 "thinks" before answering by default. Low effort keeps that
+   thinking short (cheap, fast replies) while staying good at multi-step
+   booking. Thinking is deliberately NOT switched off: with thinking off,
+   Sonnet 5 is less inclined to call tools, which this bot depends on.
+   If replies ever seem careless, change "low" to "medium".              */
+const BOT_MODEL = process.env.SMS_BOT_MODEL || "claude-sonnet-5";
+const MODEL_SETTINGS = BOT_MODEL === "claude-sonnet-4-5"
+  ? { max_tokens: 1024 } // original settings
+  : {
+      max_tokens: 4096, // room for thinking + the reply (only tokens actually used are billed)
+      thinking: { type: "adaptive" },
+      output_config: { effort: "low" },
+    };
+
+/* Prompt caching for the conversation so far: mark the last message so the
+   next loop iteration (and the client's next text within 5 minutes)
+   re-reads it at ~10% of the price. Works on a copy — the stored history
+   never accumulates cache markers (the API allows at most 4). */
+function withCachedHistory(messages) {
+  if (!messages.length) return messages;
+  const last = messages[messages.length - 1];
+  const blocks = typeof last.content === "string"
+    ? [{ type: "text", text: last.content }]
+    : last.content.map((b) => ({ ...b }));
+  if (!blocks.length) return messages;
+  blocks[blocks.length - 1] = { ...blocks[blocks.length - 1], cache_control: { type: "ephemeral" } };
+  return [...messages.slice(0, -1), { ...last, content: blocks }];
+}
+
 // Extended to 24 hours — clients often reply hours later
 const CONVERSATION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const BOT_NUMBER = process.env.TELNYX_BOT_PHONE_NUMBER;
@@ -106,6 +140,56 @@ function fmt12(t) {
   const [h, m] = t.slice(0, 5).split(":").map(Number);
   const ampm = h >= 12 ? "PM" : "AM";
   return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+/* ── Time zones ─────────────────────────────────────────────
+   Netlify runs in UTC, but appointments are stored in the groomer's local
+   time. Everything "today"/"now"-related must use the groomer's zone, or
+   evenings in the US look like tomorrow and 24-hour cutoffs are off by
+   several hours. */
+const DEFAULT_TZ = "America/New_York";
+
+function safeTz(tz) {
+  try { new Intl.DateTimeFormat("en-US", { timeZone: tz }); return tz; }
+  catch { return DEFAULT_TZ; }
+}
+
+function wallClock(ms, tz) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: safeTz(tz), year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23", weekday: "long",
+    }).formatToParts(new Date(ms)).map((p) => [p.type, p.value])
+  );
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    minutes: Number(parts.hour) * 60 + Number(parts.minute),
+    dayName: parts.weekday,
+    utcEquivalentMs: Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute),
+  };
+}
+
+// Today's date / time of day / weekday name in the groomer's zone
+function localNow(tz) {
+  return wallClock(Date.now(), tz);
+}
+
+// "2026-03-10" + "14:00" in the groomer's zone → real moment (ms since epoch)
+function zonedToUtcMs(dateStr, timeStr, tz) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const [h, mi] = (timeStr || "00:00").slice(0, 5).split(":").map(Number);
+  const target = Date.UTC(y, m - 1, d, h, mi);
+  let utc = target;
+  for (let i = 0; i < 2; i++) { // second pass settles daylight-saving edges
+    utc = target - (wallClock(utc, tz).utcEquivalentMs - utc);
+  }
+  return utc;
+}
+
+async function groomerTimeZone(groomerId) {
+  if (!groomerId) return DEFAULT_TZ;
+  const { data } = await supabase.from("groomers").select("time_zone").eq("id", groomerId).maybeSingle();
+  return safeTz(data?.time_zone || DEFAULT_TZ);
 }
 
 function addDays(dateStr, daysToAdd) {
@@ -197,8 +281,14 @@ const DEFAULT_PRICING = {
 ───────────────────────────────────────── */
 async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot_weight = 1, exclude_appointment_id = null }) {
   const { data: groomer, error: groomerErr } = await supabase
-    .from("groomers").select("max_parallel, max_appts_per_day").eq("id", groomer_id).single();
+    .from("groomers").select("max_parallel, max_appts_per_day, time_zone").eq("id", groomer_id).single();
   if (groomerErr) return { available: false, date, reason: `Could not load groomer: ${groomerErr.message}` };
+
+  // Never offer a day or time that has already passed (in the groomer's zone)
+  const now = localNow(groomer?.time_zone || DEFAULT_TZ);
+  if (date < now.date) {
+    return { available: false, date, reason: "That date has already passed.", unavailable_type: "other" };
+  }
   const maxParallel    = groomer?.max_parallel || 1;
   const maxApptsPerDay = groomer?.max_appts_per_day || null; // null = no limit
 
@@ -297,7 +387,9 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     available.push(slot);
   });
 
-  const filtered = available.filter((s) => s.endsWith(":00") || s.endsWith(":30"));
+  const filtered = available
+    .filter((s) => s.endsWith(":00") || s.endsWith(":30"))
+    .filter((s) => date !== now.date || (() => { const [h, m] = s.split(":").map(Number); return h * 60 + m > now.minutes; })());
 
   // Debug logging — helps diagnose slot issues
   log.info(`getAvailability: date=${date} dur=${duration_min} weight=${pet_slot_weight} working=${workingSlots[0]}–${workingSlots[workingSlots.length-1]} breaks=${breakSet.size} open=${filtered.join(",")}`);
@@ -682,9 +774,10 @@ async function executeTool(name, input) {
         }
 
         // 24hr cutoff on the EXISTING appointment
-        const [ey, emo, ed] = existing.date.split("-").map(Number);
-        const [eh, em] = existing.time.slice(0, 5).split(":").map(Number);
-        if (new Date(ey, emo - 1, ed, eh, em).getTime() - Date.now() < 24 * 60 * 60 * 1000) {
+        // (appointment times are the groomer's local time, not the server's UTC;
+        // a flexible appointment with no time counts from the start of its day)
+        const tz = await groomerTimeZone(groomer_id);
+        if (zonedToUtcMs(existing.date, existing.time, tz) - Date.now() < 24 * 60 * 60 * 1000) {
           return { success: false, within_cutoff: true,
                    message: "This appointment is within 24 hours and cannot be changed online. Please call your groomer directly." };
         }
@@ -797,7 +890,7 @@ async function executeTool(name, input) {
           .from("pets").select("id, name").eq("client_id", client_id).eq("groomer_id", groomer_id);
         if (!pets?.length) return { appointments: [] };
 
-        const today = new Date().toISOString().slice(0, 10);
+        const today = localNow(await groomerTimeZone(groomer_id)).date; // groomer's today, not UTC's
         const { data: appts } = await supabase
           .from("appointments")
           .select("id, date, time, duration_min, services, reminder_enabled, pets(name)")
@@ -827,9 +920,8 @@ async function executeTool(name, input) {
         const { appointment_id, groomer_id, groomer_email, pet_name, client_name, date, time, services } = input;
 
         if (date && time) {
-          const [y, mo, d] = date.split("-").map(Number);
-          const [h, m] = (time || "00:00").slice(0, 5).split(":").map(Number);
-          const apptMs = new Date(y, mo - 1, d, h, m).getTime();
+          const tz = await groomerTimeZone(groomer_id);
+          const apptMs = zonedToUtcMs(date, time, tz); // groomer's local time → real moment
           if (apptMs - Date.now() < 24 * 60 * 60 * 1000) {
             return { success: false, within_cutoff: true,
                      message: "This appointment is within 24 hours and cannot be cancelled online. Please call or text your groomer directly." };
@@ -999,17 +1091,28 @@ async function isOptedOut(phone) {
    caching (cache_control: ephemeral) to
    reduce input token cost by ~90%.
 ───────────────────────────────────────── */
+/* The instructions are split in two so caching works:
+   • STATIC_INSTRUCTIONS never change — together with the tool list they're
+     cached once and shared by every client and every day.
+   • buildSystemPrompt() is the small part that changes (date, phone, which
+     client) and comes after, so it doesn't break the cache. */
 function buildSystemPrompt(fromPhone, cachedContext) {
-  const today = new Date().toISOString().slice(0, 10);
-  const dayName = new Date().toLocaleDateString("en-US", { weekday: "long" });
+  // The groomer's local date (Eastern until the client is identified).
+  // Was UTC, which made US evenings read as "tomorrow".
+  const now = localNow(cachedContext?.groomer_time_zone || DEFAULT_TZ);
+  const today = now.date;
+  const dayName = now.dayName;
 
   const clientInfo = cachedContext
     ? `Client already identified: ${JSON.stringify(cachedContext)}. Do NOT call lookup_client — you already have the client info above.`
     : `FIRST: Call lookup_client with phone="${fromPhone}" immediately. Never ask for their name.`;
 
-  return `SMS scheduling assistant for a dog grooming business. Today is ${dayName}, ${today}. Client phone: ${fromPhone}
+  return `Today is ${dayName}, ${today}. Client phone: ${fromPhone}
 
-${clientInfo}
+${clientInfo}`;
+}
+
+const STATIC_INSTRUCTIONS = `SMS scheduling assistant for a dog grooming business. The current date, the client's phone number and who the client is are given at the end of these instructions.
 
 TASKS: Book appointments, view upcoming appointments, reschedule appointments, cancel appointments (24hr policy), toggle reminders.
 
@@ -1057,7 +1160,6 @@ CANCELLATION: Always call get_upcoming_appointments first to get real appointmen
 EARLIEST AVAILABLE: If the client says "earliest", "soonest", "first available", or similar — skip get_available_slots and go straight to get_next_available_days starting from today. Offer the first 1-2 results.
 
 STYLE: Short SMS replies, max 3 sentences, friendly. If client not found, tell them to contact their groomer.`;
-}
 
 /* ─────────────────────────────────────────
    MAIN HANDLER
@@ -1130,25 +1232,27 @@ exports.handler = async (event) => {
 
       // Use Anthropic prompt caching on the system prompt to reduce input token cost
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-5",
-        max_tokens: 1024,
+        model: BOT_MODEL,
+        ...MODEL_SETTINGS,
         system: [
-          {
-            type: "text",
-            text: buildSystemPrompt(fromPhone, newClientContext),
-            cache_control: { type: "ephemeral" },
-          },
+          // Fixed part — cached together with the tool list (identical for everyone)
+          { type: "text", text: STATIC_INSTRUCTIONS, cache_control: { type: "ephemeral" } },
+          // Per-text part — date, phone, client
+          { type: "text", text: buildSystemPrompt(fromPhone, newClientContext) },
         ],
         tools,
-        messages: currentMessages,
-        // betas: ["prompt-caching-2024-07-31"], // enable only if on an Anthropic plan that supports prompt caching
+        messages: withCachedHistory(currentMessages),
       });
+
+      const u = response.usage || {};
+      log.info(`tokens: in=${u.input_tokens} cache_read=${u.cache_read_input_tokens || 0} cache_write=${u.cache_creation_input_tokens || 0} out=${u.output_tokens}`);
 
       log.info(`Claude iteration ${iterations}, stop_reason: ${response.stop_reason}`);
 
       if (response.stop_reason === "end_turn") {
-        const tb = response.content.find((b) => b.type === "text");
-        finalResponse = tb?.text || "Sorry, something went wrong. Please try again.";
+        // Only the text blocks go to the client (never the thinking blocks)
+        const text = response.content.filter((b) => b.type === "text").map((b) => b.text.trim()).filter(Boolean).join(" ");
+        finalResponse = text || "Sorry, something went wrong. Please try again.";
         currentMessages.push({ role: "assistant", content: response.content });
         break;
       }
