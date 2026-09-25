@@ -155,8 +155,13 @@ export default function BookPage() {
   const [workingRange, setWorkingRange] = useState([]);
   const [vacationBlocks, setVacationBlocks] = useState([]);
 
-
-  const [vacationDates, setVacationDates] = useState([]);
+  // Bug fix: previously a single `vacationDates` array held every date with
+  // ANY vacation_days row, full-day or partial, so the calendar painted a
+  // partial-day block (e.g. "off 9am-1pm") solid red exactly like a full
+  // day off — even though most of the day was still bookable. Split into
+  // two sets so the calendar can tell them apart and style them differently.
+  const [fullVacationDates, setFullVacationDates] = useState([]);
+  const [partialVacationDates, setPartialVacationDates] = useState([]);
   const [workingWeekdays, setWorkingWeekdays] = useState([]);
 
   /* --------------------------------------------
@@ -209,6 +214,9 @@ export default function BookPage() {
 
   /* --------------------------------------------
      LOAD VACATION DATES
+     Fetches start_time/end_time too (not just date) so the calendar can
+     tell a full day off apart from a partial block — see fullVacationDates/
+     partialVacationDates above.
   -------------------------------------------- */
   useEffect(() => {
     if (!groomerId) return;
@@ -216,10 +224,19 @@ export default function BookPage() {
     (async () => {
       const { data } = await anonSupabase
         .from("vacation_days")
-        .select("date")
+        .select("date, start_time, end_time")
         .eq("groomer_id", groomerId);
 
-      if (data) setVacationDates(data.map((v) => v.date));
+      if (data) {
+        const full = [];
+        const partial = [];
+        data.forEach((v) => {
+          if (!v.start_time && !v.end_time) full.push(v.date);
+          else partial.push(v.date);
+        });
+        setFullVacationDates(full);
+        setPartialVacationDates(partial);
+      }
     })();
   }, [groomerId]);
 
@@ -1267,12 +1284,32 @@ export default function BookPage() {
                 dayClassName={(d) => {
                   const clean = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
                   const f = formatDate(clean);
-                  if (vacationDates.includes(f)) return "bg-red-300 text-white";
+                  // Bug fix: full-day and partial vacation dates used to share
+                  // one array, so a partial block (e.g. off 9am-1pm) painted
+                  // the whole day solid red just like a true day off, even
+                  // though most of the day was still bookable. Now styled
+                  // distinctly — solid red only for a real full day off,
+                  // a lighter amber for a partial block that's still
+                  // partly bookable.
+                  if (fullVacationDates.includes(f)) return "bg-red-300 text-white";
+                  if (partialVacationDates.includes(f)) return "bg-amber-200 text-amber-900";
                   if (!workingWeekdays.includes(clean.getUTCDay())) return "bg-gray-200 text-gray-400";
                   return "";
                 }}
                 minDate={new Date()}
               />
+              {partialVacationDates.length > 0 && (
+                <div style={{ display: "flex", gap: 12, marginTop: 8, fontSize: "0.72rem", color: "#6b7280" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: "#fca5a5", display: "inline-block" }} />
+                    Day off
+                  </span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: "#fde68a", display: "inline-block" }} />
+                    Partially unavailable
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* TIME SELECT */}
