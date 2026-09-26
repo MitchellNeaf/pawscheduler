@@ -108,3 +108,55 @@ export function getServiceNames(customServices, servicePricing) {
 export function buildPricingFromServices(services) {
   return Object.fromEntries(services.map(s => [s.name, s.pricing]));
 }
+// ─── Daycare ─────────────────────────────────────────────────────────────────
+/* A service marked isDaycare in the groomer's custom_services is a daycare
+   stay with one flat daily price (stored in `pricing` for every size, so
+   calcAmount already charges it correctly). A daycare booking has a
+   drop-off time (`time`) and a pick-up time (`time` + `duration_min`).
+   Daycare dogs never count against grooming capacity — they're capped
+   separately by the groomer's max_daycare_parallel (dogs at the same time). */
+export const DAYCARE_DEFAULT_LIMIT = 10;
+
+export function getDaycareNames(customServices) {
+  return new Set(
+    (Array.isArray(customServices) ? customServices : [])
+      .filter((s) => s && typeof s === "object" && s.isDaycare)
+      .map((s) => s.name)
+  );
+}
+
+export function isDaycareAppointment(appt, daycareNames) {
+  if (!appt || !daycareNames || daycareNames.size === 0) return false;
+  const list = Array.isArray(appt.services)
+    ? appt.services
+    : String(appt.services || "").split(",").map((s) => s.trim());
+  return list.some((name) => daycareNames.has(name));
+}
+
+export const clockToMin = (t) => {
+  if (!t) return null;
+  const [h, m] = String(t).slice(0, 5).split(":").map(Number);
+  return h * 60 + m;
+};
+
+export const minToClock = (mins) =>
+  `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}`;
+
+/* Most daycare dogs present at any one moment between startMin and endMin
+   (minutes since midnight), checked every 15 minutes. `appts` need services,
+   time, duration_min, no_show and waitlist. A daycare booking with no time
+   (made before drop-off/pick-up times existed) counts for the whole day. */
+export function maxDaycareOverlap(appts, daycareNames, startMin, endMin, excludeId = null) {
+  const stays = (appts || [])
+    .filter((a) => a.id !== excludeId && a.no_show !== true && a.waitlist !== true && isDaycareAppointment(a, daycareNames))
+    .map((a) => {
+      const s = clockToMin(a.time);
+      return s == null ? [0, 24 * 60] : [s, s + (a.duration_min || 60)];
+    });
+  let most = 0;
+  for (let t = startMin; t < endMin; t += 15) {
+    const here = stays.filter(([s, e]) => s <= t && t < e).length;
+    if (here > most) most = here;
+  }
+  return most;
+}

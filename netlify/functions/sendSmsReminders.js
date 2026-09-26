@@ -90,7 +90,7 @@ exports.handler = async (event) => {
     // now route through email instead of the shared SMS number.
     const { data: groomers, error: gErr } = await supabase
       .from("groomers")
-      .select("id, full_name, email, sms_number, time_zone, reminder_message_template, sms_confirmation_template, reminder_rules, subscription_status, plan_tier, business_address, free_reminders_this_month, free_reminders_reset_at")
+      .select("id, full_name, email, sms_number, time_zone, reminder_message_template, sms_confirmation_template, reminder_rules, subscription_status, plan_tier, business_address, free_reminders_this_month, free_reminders_reset_at, custom_services")
       // "free" is included: App.js and stripeWebhook set subscription_status
       // to "free" once a signup's trial date passes or a paid plan is
       // cancelled — without it, Free users never got their 25 reminders.
@@ -144,6 +144,17 @@ exports.handler = async (event) => {
         : [48];
 
       const tz = groomer.time_zone || "America/New_York";
+      // Daycare services — reminders call the time a daycare drop-off
+      const daycareNames = new Set(
+        (Array.isArray(groomer.custom_services) ? groomer.custom_services : [])
+          .filter((s) => s && s.isDaycare).map((s) => s.name)
+      );
+      const timeText = (appt) => {
+        const list = Array.isArray(appt.services) ? appt.services : String(appt.services || "").split(",").map((x) => x.trim());
+        const daycare = list.some((n) => daycareNames.has(n));
+        if (appt.time) return daycare ? `${fmtTime(appt.time)} (daycare drop-off)` : fmtTime(appt.time);
+        return daycare ? "daycare" : "a flexible time";
+      };
       console.log(`Processing groomer ${groomer.id} (${groomer.full_name}) — rules: ${JSON.stringify(rules)}, tz: ${tz}`);
 
       for (const hoursAhead of rules) {
@@ -261,7 +272,7 @@ exports.handler = async (event) => {
                     first_name: firstName,
                     pet: appt.pets?.name || "",
                     date: fmtDate(appt.date),
-                    time: appt.time ? fmtTime(appt.time) : "a flexible time",
+                    time: timeText(appt),
                     services,
                     confirm_link: confirmLink,
                     business_name: groomer.full_name || "",
@@ -300,7 +311,7 @@ exports.handler = async (event) => {
             first_name: firstName,
             pet: appt.pets?.name || "",
             date: fmtDate(appt.date),
-            time: appt.time ? fmtTime(appt.time) : "a flexible time",
+            time: timeText(appt),
             services,
             confirm_link: confirmLink,
             business_name: groomer.full_name || "",

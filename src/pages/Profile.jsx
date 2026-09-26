@@ -68,6 +68,7 @@ export default function Profile() {
   const [logoUrl, setLogoUrl] = useState(null);
   const [user, setUser] = useState(null);
   const [maxParallel, setMaxParallel] = useState(1);
+  const [maxDaycareParallel, setMaxDaycareParallel] = useState(10);
   const [maxApptsPerDay, setMaxApptsPerDay] = useState(null); // null = no limit
 
   // ✅ Timezone
@@ -150,6 +151,7 @@ export default function Profile() {
         setSlug(data.slug || "");
         setLogoUrl(data.logo_url || null);
         setMaxParallel(data.max_parallel ?? 1);
+        setMaxDaycareParallel(data.max_daycare_parallel ?? 10);
         setMaxApptsPerDay(data.max_appts_per_day ?? null);
 
         setCustomAddons(data.custom_addons || []);
@@ -336,6 +338,8 @@ export default function Profile() {
         slug: cleanSlug,
         max_parallel: maxParallel,
         max_appts_per_day: maxApptsPerDay || null,
+        // Only sent when a daycare service exists (needs the max_daycare_parallel column)
+        ...((customServices || []).some((svc) => svc.isDaycare) ? { max_daycare_parallel: maxDaycareParallel } : {}),
         time_zone: timeZone,
         booking_requires_approval: bookingRequiresApproval,
         allow_new_clients: allowNewClients,
@@ -1550,6 +1554,22 @@ export default function Profile() {
                 <span className="text-sm text-[var(--text-3)]">pets simultaneously (up to 30)</span>
               </div>
             </div>
+            {(customServices || []).some((svc) => svc.isDaycare) && (
+              <div>
+                <label className="block text-sm font-medium mb-1">Max Daycare Dogs at Same Time</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min="1"
+                    max="200"
+                    value={maxDaycareParallel}
+                    onChange={(e) => setMaxDaycareParallel(Math.max(1, Math.min(200, Number(e.target.value) || 1)))}
+                    className="border border-[var(--border-med)] rounded p-2 w-28 bg-[var(--surface)] text-[var(--text-1)] text-center"
+                  />
+                  <span className="text-sm text-[var(--text-3)]">daycare dogs at once (separate from grooming)</span>
+                </div>
+              </div>
+            )}
             <div>
               <label className="block text-sm font-medium mb-1">Max Appointments Per Day</label>
               <div className="flex items-center gap-3">
@@ -1908,7 +1928,48 @@ export default function Profile() {
                   >✕</button>
                 </div>
 
-                {/* Price inputs */}
+                {/* Daycare toggle — a full-day service with one flat daily price */}
+                <label className="flex items-center gap-2 text-sm text-[var(--text-2)]">
+                  <input
+                    type="checkbox"
+                    checked={!!svc.isDaycare}
+                    onChange={e => {
+                      const updated = [...customServices];
+                      const on = e.target.checked;
+                      const daily = updated[i].dailyPrice ?? updated[i].pricing?.[1] ?? 0;
+                      updated[i] = on
+                        // pricing is kept flat (same for every size) so every
+                        // existing price calculation charges the daily rate
+                        ? { ...updated[i], isDaycare: true, dailyPrice: daily, pricing: { 1: daily, 2: daily, 3: daily, 4: daily } }
+                        : { ...updated[i], isDaycare: false };
+                      setCustomServices(updated);
+                    }}
+                  />
+                  🐕 This is a daycare service (drop-off & pick-up times, flat daily price)
+                </label>
+
+                {svc.isDaycare ? (
+                  <div className="max-w-[10rem]">
+                    <label className="block text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide mb-1">Price per day</label>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-[var(--text-3)]">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        value={svc.dailyPrice === 0 ? "" : (svc.dailyPrice ?? "")}
+                        onChange={e => {
+                          const updated = [...customServices];
+                          const daily = e.target.value === "" ? 0 : Number(e.target.value) || 0;
+                          updated[i] = { ...updated[i], dailyPrice: daily, pricing: { 1: daily, 2: daily, 3: daily, 4: daily } };
+                          setCustomServices(updated);
+                        }}
+                        onFocus={e => e.target.select()}
+                        placeholder="0"
+                        className="w-full border border-[var(--border-med)] rounded-xl pl-6 pr-2 py-2 text-sm bg-[var(--bg)] text-[var(--text-1)]"
+                      />
+                    </div>
+                  </div>
+                ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {[
                     { size: 1, label: "Small" },
@@ -1943,6 +2004,7 @@ export default function Profile() {
                     </div>
                   ))}
                 </div>
+                )}
 
                 {/* Description */}
                 <input
@@ -1957,8 +2019,8 @@ export default function Profile() {
                   className="w-full border border-[var(--border-med)] rounded-xl px-3 py-2 text-xs bg-[var(--bg)] text-[var(--text-2)]"
                 />
 
-                {/* Duration */}
-                <div className="flex flex-col gap-1">
+                {/* Duration (not used for daycare — drop-off/pick-up set the length) */}
+                {!svc.isDaycare && <div className="flex flex-col gap-1">
                   <label className="text-xs font-semibold text-[var(--text-3)] uppercase tracking-wide">
                     ⏱ Duration
                   </label>
@@ -1979,7 +2041,7 @@ export default function Profile() {
                     ))}
                   </select>
                   <p className="text-[11px] text-[var(--text-3)]">Auto-fills appointment duration when this service is selected.</p>
-                </div>
+                </div>}
               </div>
             ))}
           </div>

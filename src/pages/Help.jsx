@@ -24,6 +24,7 @@ const SECTIONS = [
   { id: "recurring",     label: "Recurring Appointments",   icon: "🔁" },
   { id: "calendar-views",label: "Calendar Views",           icon: "📅" },
   { id: "multipet",      label: "Multi-Pet Bookings",       icon: "🐕‍🦺" },
+  { id: "daycare",       label: "Daycare",                  icon: "🐕", badge: "New" },
   { id: "sms-inbox",     label: "SMS Inbox (Two-Way)",      icon: "💬" },
   { id: "ai-bot",        label: "AI Booking Bot",           icon: "🤖", badge: "Pro" },
   { id: "reminders",     label: "SMS Reminders",            icon: "📱" },
@@ -205,7 +206,7 @@ export default function Help() {
                 { title: "Time zone", text: "Set this first — incorrect timezone means appointment times will be off in reminders and the nightly reminder function.", tone: "warn" },
                 { title: "Booking slug", text: 'Your public booking URL. Example: slug "sally" → app.pawscheduler.app/book/sally. Keep it short and easy to remember.' },
                 { title: "Booking approval toggle", text: "Turn this on to require you to manually approve every booking before it's confirmed. Off by default." },
-                { title: "Max dogs at once", text: "Found at the top of the Schedule tab. Controls how many dogs can be booked at the same time slot." },
+                { title: "Max dogs at once", text: "Found at the top of the Schedule tab. Controls how many dogs can be booked at the same time slot. If you offer daycare, a separate Max Daycare Dogs at Same Time limit appears right below it — see Daycare." },
               ]} />
               <div className="rounded-xl border bg-gray-50 p-4">
                 <p className="font-semibold text-gray-900 mb-2">Profile tabs</p>
@@ -343,6 +344,7 @@ export default function Help() {
                 { title: "Clients are notified automatically", text: "Whichever action you take, the client gets an automatic email letting them know — approved, waitlisted, or declined. Nothing further to do on your end." },
                 { title: "When this shows up", text: "Requests need your approval when Require Booking Approval is turned on (Profile → Booking Page), or automatically for any brand-new client's first booking — see New Client Self-Booking below." },
                 { title: "New client requests are flagged", text: "A request from someone who's never booked with you before shows a red 🆕 New Client tag and a warning in the review popup, so you know to look it over carefully.", tone: "tip" },
+                { title: "Daycare requests show both times", text: "A daycare request shows the drop-off and pick-up times (and how long the stay is) in the banner and the review popup, so you can decide at a glance. The approval email tells the client both times too." },
               ]} />
             </div>
           </Section>
@@ -882,6 +884,33 @@ export default function Help() {
               </div>
               <Callout type="tip" title="Check-in, check-out, and payment apply to the whole group at once.">
                 Tapping Check In, Check Out, or a quick-pay button on a multi-pet card applies it to every pet in that booking — you don't need to repeat it per pet, and every pet's amount rolls into Revenue once paid.
+              </Callout>
+            </div>
+          </Section>
+
+          {/* ── DAYCARE ── */}
+          <Section id="daycare" title="🐕 Daycare" subtitle="Offer daycare alongside grooming — clients pick a drop-off and pick-up time, and daycare dogs have their own capacity limit.">
+            <div className="space-y-4 text-sm text-gray-700">
+              <div className="rounded-xl border bg-gray-50 p-4">
+                <p className="font-semibold text-gray-900 mb-2">Setting it up</p>
+                <ol className="list-decimal ml-5 space-y-1.5">
+                  <li>Go to <strong>Profile → Services tab</strong></li>
+                  <li>On the service you want (or a new one, e.g. "Doggy Daycare"), check <strong>🐕 This is a daycare service</strong></li>
+                  <li>Enter your <strong>Price per day</strong> — the same flat price for every dog size — and tap Save Services & Pricing</li>
+                  <li>Go to <strong>Profile → Schedule tab</strong> and set <strong>Max Daycare Dogs at Same Time</strong> (defaults to 10), then Save Limits</li>
+                </ol>
+              </div>
+              <BulletList items={[
+                { title: "Clients book drop-off and pick-up", text: "On your booking page, picking a daycare service replaces the time picker with Drop-off and Pick-up menus. Drop-off times only show when there's room, and pick-up times only go as late as the dog can stay without going over your limit (up to closing time)." },
+                { title: "Separate from grooming", text: "Daycare dogs never take up grooming slots — not on your booking page, the Schedule grid, recurring bookings, or the AI booking bot. Your grooming capacity stays exactly as you set it." },
+                { title: "\"At the same time\" means at the same moment", text: "With a limit of 2, a dog from 8–12 and another from 1–5 only ever use one spot. Breaks don't block daycare, but time blocks and closed days do." },
+                { title: "Booking it yourself", text: "On the Schedule, pick the pet and select the daycare service — the time field switches to Drop-off and Pick-up. If you'd go over your limit you'll be asked \"Book anyway?\", so you can still squeeze someone in. Editing a stay's date or times checks the limit the same way." },
+                { title: "How it shows up", text: "Daycare cards show a 🐕 Daycare badge with \"Drop-off 8:00 AM → Pick-up 5:00 PM\" and the stay length. In Grid view, daycare dogs are listed in a strip above the grid instead of in the grooming columns." },
+                { title: "Reminders and emails", text: "Reminders go out based on the drop-off time and say it's a daycare drop-off. Confirmation and approval emails list both times." },
+                { title: "Route planning", text: "Daycare dogs come to you, so Optimize Route leaves them out and lists them under \"Not in route (daycare)\"." },
+              ]} />
+              <Callout type="info" title="A few things daycare doesn't do yet.">
+                The AI booking bot can't book or change daycare (it will tell the client to contact you — cancelling by text still works), recurring daycare isn't supported yet (book each day on its own), and pricing is one flat daily rate. Daycare is recognized by the service name, so if you rename a daycare service later, older bookings under the old name won't show as daycare.
               </Callout>
             </div>
           </Section>

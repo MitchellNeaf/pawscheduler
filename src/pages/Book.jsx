@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { emailFetch } from "../utils/sendEmail";
+import { getDaycareNames, isDaycareAppointment, maxDaycareOverlap, clockToMin, minToClock, DAYCARE_DEFAULT_LIMIT } from "../utils/grooming";
 import ConfirmModal from "../components/ConfirmModal";
 import { useParams } from "react-router-dom";
 import { createClient } from "@supabase/supabase-js";
@@ -75,6 +76,25 @@ const calcAmount = (services, sizeCategory, pricing, addonOptions = []) => {
       const row = p[svc];
       return sum + (row ? (row[sz] ?? row[1] ?? 0) : 0);
     }, 0);
+};
+
+// Today's date in the visitor's own time zone, as YYYY-MM-DD
+const formatLocalDate = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// True if `slot` ("HH:MM") on `date` has already started (only ever true for today)
+const isPastSlot = (date, slot) => {
+  const now = new Date();
+  if (date !== formatLocalDate(now)) return false;
+  const [h, m] = slot.slice(0, 5).split(":").map(Number);
+  return h * 60 + m <= now.getHours() * 60 + now.getMinutes();
+};
+
+// "14:00" → "2:00 PM" (module-level so event handlers can use it too)
+const fmtClock = (t) => {
+  if (!t) return "";
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h >= 12 ? "PM" : "AM"}`;
 };
 
 // Sum flat prices for selected add-ons
@@ -155,6 +175,11 @@ export default function BookPage() {
   const [unavailable, setUnavailable] = useState([]);
   const [workingRange, setWorkingRange] = useState([]);
   const [vacationBlocks, setVacationBlocks] = useState([]);
+  // Daycare: dogs-at-once limit (separate query so the page never depends on
+  // the new column), the chosen day's appointments, and closing time (latest pick-up)
+  const [maxDaycare, setMaxDaycare] = useState(DAYCARE_DEFAULT_LIMIT);
+  const [dayAppts, setDayAppts] = useState([]);
+  const [closeTime, setCloseTime] = useState(null);
 
   // Bug fix: previously a single `vacationDates` array held every date with
   // ANY vacation_days row, full-day or partial, so the calendar painted a
@@ -206,6 +231,16 @@ export default function BookPage() {
             if (mounted && (tier?.plan_tier || "free") === "free") {
               setGroomer((g) => (g ? { ...g, booking_enabled: false, allow_new_clients: false } : g));
             }
+          });
+
+        // Daycare limit — separate query, falls back to the default if unreadable
+        anonSupabase
+          .from("groomers")
+          .select("max_daycare_parallel")
+          .eq("slug", slug)
+          .single()
+          .then(({ data: dc, error: dcErr }) => {
+            if (!dcErr && mounted && dc?.max_daycare_parallel) setMaxDaycare(dc.max_daycare_parallel);
           });
 
         // Fetch add-ons separately — column may not exist yet, non-blocking
@@ -312,6 +347,8 @@ export default function BookPage() {
     if (vacationInfo.some((v) => v.type === "full")) {
       setWorkingRange([]);
       setUnavailable([...TIME_SLOTS]);
+      setDayAppts([]);
+      setCloseTime(null);
       return;
     }
 
@@ -326,8 +363,11 @@ export default function BookPage() {
     if (!hours) {
       setWorkingRange([]);
       setUnavailable([...TIME_SLOTS]);
+      setDayAppts([]);
+      setCloseTime(null);
       return;
     }
+    setCloseTime(hours.end_time.slice(0, 5));
 
     const startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
     const endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
@@ -360,13 +400,17 @@ export default function BookPage() {
     // Existing appts
     const { data: appts } = await anonSupabase
       .from("appointments")
-      .select("time, duration_min, slot_weight")
+      .select("id, time, duration_min, slot_weight, services, no_show, waitlist")
       .eq("date", form.date)
       .eq("groomer_id", groomerId);
+    setDayAppts(appts || []);
 
+    // Daycare dogs have their own limit — they never take grooming capacity
+    const dcNames = getDaycareNames(serviceOptions);
     const loadForSlot = (slot) => {
       let total = 0;
       (appts || []).forEach((a) => {
+        if (isDaycareAppointment(a, dcNames)) return;
         const start = a.time?.slice(0, 5);
         const idx = TIME_SLOTS.indexOf(start);
         if (idx < 0) return;
@@ -403,7 +447,7 @@ export default function BookPage() {
     ]);
 
     setUnavailable([...allUnavailable]);
-  }, [form.date, groomerId, maxParallel]);
+  }, [form.date, groomerId, maxParallel, serviceOptions]);
 
   useEffect(() => {
     fetchTakenTimes();
@@ -440,16 +484,30 @@ export default function BookPage() {
   }, [form.services]);
 
   /* --------------------------------------------
-     AUTO-SELECT EARLIEST TIME
+     DAYCARE — drop-off + pick-up time, own capacity
+  -------------------------------------------- */
+  const daycareNames = getDaycareNames(serviceOptions);
+  const isDaycareBooking = form.services.some((n) => daycareNames.has(n));
+
+  // Switching between a grooming service and a daycare service: a time picked
+  // for one isn't valid for the other (breaks, grooming vs daycare capacity)
+  useEffect(() => {
+    setForm((p) => (p.time || p.pickup ? { ...p, time: "", pickup: "" } : p));
+  }, [isDaycareBooking]);
+
+  /* --------------------------------------------
+     AUTO-SELECT EARLIEST TIME (grooming only)
   -------------------------------------------- */
   useEffect(() => {
+    if (isDaycareBooking) return;
     if (!form.date || !workingRange.length || !form.duration_min) return;
     if (form.time) return;
 
     const blocks = Math.ceil(Number(form.duration_min) / 15);
 
-    const earliest = workingRange.find((slot, idx) => {
-      const windowSlots = workingRange.slice(idx, idx + blocks);
+    // (past slots are always a leading run of the day, so `list` stays contiguous)
+    const earliest = workingRange.filter((slot) => !isPastSlot(form.date, slot)).find((slot, idx, list) => {
+      const windowSlots = list.slice(idx, idx + blocks);
       if (windowSlots.length < blocks) return false;
       if (windowSlots.some((s) => unavailable.includes(s))) return false;
       return true;
@@ -458,7 +516,7 @@ export default function BookPage() {
     if (earliest) {
       setForm((prev) => ({ ...prev, time: earliest }));
     }
-  }, [form.date, form.duration_min, workingRange, unavailable, form.time]);
+  }, [form.date, form.duration_min, workingRange, unavailable, form.time, isDaycareBooking]);
 
   /* --------------------------------------------
      LOGIN
@@ -497,7 +555,7 @@ export default function BookPage() {
     }
 
     // Load upcoming appointments for this client
-    const today = new Date().toISOString().slice(0, 10);
+    const today = formatLocalDate(new Date()); // local date, not UTC (evenings in the US read as tomorrow)
     const petIds = (petList || []).map((p) => p.id);
 
     let appts = [];
@@ -543,7 +601,7 @@ export default function BookPage() {
     }
 
     if (name === "date") {
-      setForm((p) => ({ ...p, date: value, time: "" }));
+      setForm((p) => ({ ...p, date: value, time: "", pickup: "" }));
       return;
     }
 
@@ -581,17 +639,55 @@ export default function BookPage() {
       return;
     }
 
+    // Daycare: needs a drop-off and pick-up, and re-checks the daycare limit
+    // right before booking (someone may have taken the spot since page load)
+    let daycareMinutes = 0;
+    if (isDaycareBooking) {
+      const dropMin = clockToMin(form.time);
+      const pickMin = clockToMin(form.pickup);
+      if (dropMin == null || pickMin == null || pickMin <= dropMin) {
+        setConfirmConfig({
+          title: "Pick drop-off and pick-up times",
+          message: "Please choose a drop-off time and a later pick-up time.",
+          confirmLabel: "OK",
+          onConfirm: () => {},
+        });
+        setSubmitting(false);
+        return;
+      }
+      daycareMinutes = pickMin - dropMin;
+      const { data: fresh } = await anonSupabase
+        .from("appointments")
+        .select("id, time, duration_min, services, no_show, waitlist")
+        .eq("date", form.date)
+        .eq("groomer_id", groomerId);
+      if (maxDaycareOverlap(fresh, daycareNames, dropMin, pickMin) >= maxDaycare) {
+        setDayAppts(fresh || []);
+        setConfirmConfig({
+          title: "Daycare is full then",
+          message: "Sorry — daycare just filled up for part of that time. Please pick different times or another day.",
+          confirmLabel: "OK",
+          onConfirm: () => {},
+        });
+        setSubmitting(false);
+        return;
+      }
+    }
+
     const slotWeight = selectedPetWeight ?? 1;
     const sizeCategory = selectedPetSizeCategory ?? 1;
     const autoAmount = calcAmount(form.services, sizeCategory, pricing, addonOptions) + calcAddons(form.services, addonOptions);
+    const timeLabel = isDaycareBooking
+      ? `${fmtClock(form.time)} drop-off, ${fmtClock(form.pickup)} pick-up (daycare)`
+      : form.time;
 
     const { data: inserted, error } = await anonSupabase.from("appointments").insert([
       {
         groomer_id: groomerId,
         pet_id: selectedPetId,
         date: form.date,
-        time: form.time,
-        duration_min: Number(form.duration_min),
+        time: form.time, // daycare: drop-off time
+        duration_min: isDaycareBooking ? daycareMinutes : Number(form.duration_min), // daycare: until pick-up
         services: form.services,
         // Bug fix: this used to be `groomer?.booking_requires_approval ? false : false`
         // — both branches were false, so every booking silently required
@@ -634,8 +730,8 @@ export default function BookPage() {
               pet_name: pets.find((p) => p.id === selectedPetId)?.name || "—",
               client_name: client?.full_name || "—",
               date: form.date,
-              time: form.time,
-              duration_min: form.duration_min,
+              time: timeLabel,
+              duration_min: isDaycareBooking ? daycareMinutes : form.duration_min,
               services: form.services.join(", "),
               amount: autoAmount > 0 ? `$${autoAmount.toFixed(2)}` : "—",
               notes: isNewClientFirstBooking
@@ -659,7 +755,7 @@ export default function BookPage() {
           petName: pets.find((p) => p.id === selectedPetId)?.name || "a pet",
           clientName: client?.full_name || "a client",
           date: form.date,
-          time: form.time,
+          time: timeLabel,
           requiresApproval: groomer?.booking_requires_approval || false,
           isNewClient: isNewClientFirstBooking,
         }),
@@ -687,8 +783,9 @@ export default function BookPage() {
         pet: bookedPet?.name || "",
         date: form.date,
         time: form.time,
+        pickup: isDaycareBooking ? form.pickup : null,
         services: form.services,
-        duration: form.duration_min,
+        duration: isDaycareBooking ? daycareMinutes : form.duration_min,
         amount: autoAmount,
       });
 
@@ -697,7 +794,7 @@ export default function BookPage() {
         id: inserted?.[0]?.id || Date.now(),
         date: form.date,
         time: form.time,
-        duration_min: Number(form.duration_min),
+        duration_min: isDaycareBooking ? daycareMinutes : Number(form.duration_min),
         services: form.services,
         pets: { name: bookedPet?.name || "" },
       }].sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : (a.time || "") < (b.time || "") ? -1 : 1));
@@ -872,10 +969,14 @@ export default function BookPage() {
                     {desc && <div style={{ fontSize: "0.76rem", color: "#6b7280", marginTop: 2 }}>{desc}</div>}
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
+                    {typeof svc === "object" && svc.isDaycare ? (
+                      <div style={{ fontSize: "0.75rem", color: "#374151" }}><strong style={{ color: theme.accent }}>${svc.dailyPrice ?? p[1] ?? 0}</strong> / day</div>
+                    ) : <>
                     {p[1] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>S <strong style={{ color: theme.accent }}>${p[1]}</strong></div>}
                     {p[2] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>M <strong style={{ color: theme.accent }}>${p[2]}</strong></div>}
                     {p[3] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>L <strong style={{ color: theme.accent }}>${p[3]}</strong></div>}
                     {p[4] != null && <div style={{ fontSize: "0.75rem", color: "#374151" }}>XL <strong style={{ color: theme.accent }}>${p[4]}</strong></div>}
+                    </>}
                   </div>
                 </div>
               );
@@ -1111,7 +1212,9 @@ export default function BookPage() {
                   <div style={{ marginBottom: 6 }}>Your request is pending approval. You'll hear back soon.</div>
                 )}
                 <div><strong>Pet:</strong> {submitted.pet}</div>
-                <div><strong>Date:</strong> {submitted.date} at {fmtTime(submitted.time)}</div>
+                <div><strong>Date:</strong> {submitted.date} {submitted.pickup
+                  ? `· 🐕 Drop-off ${fmtTime(submitted.time)}, pick-up ${fmtTime(submitted.pickup)}`
+                  : `at ${fmtTime(submitted.time)}`}</div>
                 <div><strong>Services:</strong> {submitted.services.join(", ")}</div>
                 {submitted.amount > 0 && (
                   <div><strong>Estimated total:</strong> ${submitted.amount.toFixed(2)}</div>
@@ -1261,7 +1364,7 @@ export default function BookPage() {
                 background: "#ecfdf5", border: "1px solid #6ee7b7",
                 display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: "0.85rem", color: "#065f46" }}>
-                  ⏱ {form.duration_min} min &nbsp;·&nbsp; Estimated total
+                  {isDaycareBooking ? "🐕 Daycare" : `⏱ ${form.duration_min} min`} &nbsp;·&nbsp; Estimated total
                 </span>
                 <span style={{ fontWeight: 800, color: "#065f46", fontSize: "1rem" }}>
                   ${(calcAmount(form.services, selectedPetSizeCategory, pricing, addonOptions) + calcAddons(form.services, addonOptions)).toFixed(2)}
@@ -1306,7 +1409,7 @@ export default function BookPage() {
                 onChange={(d) => {
                   const clean = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
                   const value = formatDate(clean);
-                  setForm((p) => ({ ...p, date: value, time: "" }));
+                  setForm((p) => ({ ...p, date: value, time: "", pickup: "" }));
                 }}
                 dateFormat="MMM d, yyyy"
                 className="border rounded px-2 py-1 w-full"
@@ -1350,7 +1453,51 @@ export default function BookPage() {
               )}
             </div>
 
-            {/* TIME SELECT */}
+            {/* TIME SELECT — daycare gets drop-off + pick-up instead */}
+            {isDaycareBooking ? (() => {
+              const partial = vacationBlocks.filter((v) => v.type === "partial")
+                .map((v) => [clockToMin(v.start), clockToMin(v.end)]);
+              // A 15-minute step is open if the groomer isn't away and daycare isn't full then
+              const stepOpen = (t) => !partial.some(([a, b]) => t >= a && t < b)
+                && maxDaycareOverlap(dayAppts, daycareNames, t, t + 15) < maxDaycare;
+              const dropOptions = isFullVacation ? [] : workingRange.filter((slot) => !isPastSlot(form.date, slot) && stepOpen(clockToMin(slot)));
+              const pickOptions = [];
+              const drop = clockToMin(form.time);
+              if (drop != null && closeTime) {
+                for (let t = drop + 15; t <= clockToMin(closeTime); t += 15) {
+                  if (!stepOpen(t - 15)) break; // stay must be open the whole time
+                  pickOptions.push(minToClock(t));
+                }
+              }
+              const selectStyle = { width: "100%" };
+              return (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Drop-off</label>
+                    <select value={form.time}
+                      onChange={(e) => setForm((p) => ({ ...p, time: e.target.value, pickup: "" }))}
+                      disabled={!form.date || !dropOptions.length}
+                      className="border rounded px-2 py-1" style={selectStyle}>
+                      <option value="">
+                        {!form.date ? "Pick a date first"
+                          : isFullVacation || !workingRange.length ? "Not available this day"
+                          : dropOptions.length ? "Select drop-off" : "Daycare is full"}
+                      </option>
+                      {dropOptions.map((slot) => <option key={slot} value={slot}>{fmtTime(slot)}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#374151", display: "block", marginBottom: 4 }}>Pick-up</label>
+                    <select name="pickup" value={form.pickup || ""} onChange={handleChange}
+                      disabled={!form.time || !pickOptions.length}
+                      className="border rounded px-2 py-1" style={selectStyle}>
+                      <option value="">{form.time ? "Select pick-up" : "Choose drop-off first"}</option>
+                      {pickOptions.map((slot) => <option key={slot} value={slot}>{fmtTime(slot)}</option>)}
+                    </select>
+                  </div>
+                </div>
+              );
+            })() : (
             <div>
               <label style={{ fontSize: "0.82rem", fontWeight: 600, color: "#374151",
                 display: "block", marginBottom: 4 }}>Time</label>
@@ -1364,6 +1511,7 @@ export default function BookPage() {
                 </option>
                 {!isFullVacation && workingRange
                   .filter((slot, idx) => {
+                    if (isPastSlot(form.date, slot)) return false; // already passed today
                     // Bug fix: before a service is picked, form.duration_min
                     // is "" — Number("" ) is 0, so `blocks` came out to 0,
                     // making windowSlots an EMPTY array. Both checks below
@@ -1382,6 +1530,7 @@ export default function BookPage() {
                   ))}
               </select>
             </div>
+            )}
 
             {/* NOTES */}
             <div>
@@ -1392,14 +1541,19 @@ export default function BookPage() {
                 className="border rounded px-2 py-1 w-full" rows={2} />
             </div>
 
-            <button type="submit" disabled={submitting || !form.date || !form.time}
+            {(() => {
+              const cantBook = submitting || !form.date || !form.time || (isDaycareBooking && !form.pickup);
+              return (
+            <button type="submit" disabled={cantBook}
               style={{ padding: "12px", borderRadius: 10,
-                background: submitting || !form.date || !form.time ? "#d1fae5" : "#10b981",
+                background: cantBook ? "#d1fae5" : "#10b981",
                 color: "white", fontWeight: 700, border: "none",
-                cursor: submitting || !form.date || !form.time ? "not-allowed" : "pointer",
+                cursor: cantBook ? "not-allowed" : "pointer",
                 fontSize: "0.95rem" }}>
               {submitting ? "Booking…" : "Confirm Appointment"}
             </button>
+              );
+            })()}
           </form>
         </div>
       )}
@@ -1460,9 +1614,11 @@ export default function BookPage() {
                         {appt.pets?.name}
                       </div>
                       <div style={{ fontSize: "0.83rem", color: "#6b7280", marginTop: 2 }}>
-                        {appt.date} &nbsp;·&nbsp; {fmtTime(appt.time)}
+                        {appt.date} &nbsp;·&nbsp; {isDaycareAppointment(appt, daycareNames) && appt.time
+                          ? `🐕 Daycare ${fmtTime(appt.time)} – ${fmtTime(minToClock(clockToMin(appt.time) + (appt.duration_min || 0)))}`
+                          : appt.time ? fmtTime(appt.time) : "Flexible time"}
                       </div>
-                      {appt.duration_min && (
+                      {appt.duration_min && appt.time && !isDaycareAppointment(appt, daycareNames) && (
                         <div style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
                           {appt.duration_min} min
                         </div>

@@ -120,6 +120,9 @@ function fillTemplate(template, data) {
     const regex = new RegExp(`{{${key}}}`, "g");
     output = output.replace(regex, data[key] ?? "");
   }
+  // Safety net: never send a client a raw placeholder like {{groomer_name}}
+  // when a caller didn't provide that value — leave it blank instead
+  output = output.replace(/{{\s*[#/]?\w*\s*}}/g, "");
   return output;
 }
 
@@ -164,6 +167,12 @@ exports.handler = async function(event) {
       data.business_address = groomer?.business_address || "";
       data.business_phone = groomer?.business_phone || "";
       data.groomer_email = groomer?.email || "";
+      // Client-facing templates (booking approved/waitlisted/declined, intake,
+      // waiver, payment, report card) say {{groomer_name}} — callers often
+      // don't send it, so fill it from the groomer's account. Same for the
+      // optional "call us" phone line.
+      if (!data.groomer_name) data.groomer_name = data.business_name;
+      if (!data.groomer_phone) data.groomer_phone = data.business_phone;
     }
 
     // ----------------------------------

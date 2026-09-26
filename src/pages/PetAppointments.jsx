@@ -5,7 +5,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import Loader from "../components/Loader";
 import ConfirmModal from "../components/ConfirmModal";
 import { sendEmail } from "../utils/sendEmail";
-import { SERVICE_OPTIONS, DEFAULT_PRICING, calcAmount } from "../utils/grooming";
+import { SERVICE_OPTIONS, DEFAULT_PRICING, calcAmount, getDaycareNames, isDaycareAppointment } from "../utils/grooming";
 
 const toYMD = (d) => {
   const year = d.getFullYear();
@@ -423,6 +423,7 @@ export default function PetAppointments() {
 
   // Service pricing
   const [pricing, setPricing] = useState(DEFAULT_PRICING);
+  const [daycareNames, setDaycareNames] = useState(new Set());
 
   // Auth user
   useEffect(() => {
@@ -477,6 +478,7 @@ export default function PetAppointments() {
 
       // Prefer the groomer's edited services (custom_services) — same as the
       // public booking page — and fall back to legacy service_pricing.
+      setDaycareNames(getDaycareNames(groomerData?.custom_services));
       if (groomerData?.custom_services?.length > 0) {
         const pricingObj = Object.fromEntries(
           groomerData.custom_services.map((s) => [s.name, s.pricing])
@@ -742,6 +744,18 @@ export default function PetAppointments() {
   };
 
   const openEditModal = (appt) => {
+    // This page only edits one appointment time — daycare has drop-off AND
+    // pick-up times, so it's edited from the Schedule page.
+    if (isDaycareAppointment(appt, daycareNames)) {
+      setConfirmConfig({
+        title: "Edit daycare from the Schedule",
+        message: "Daycare bookings have drop-off and pick-up times and are edited from the Schedule page. Open that day on the Schedule to change it.",
+        confirmLabel: "OK",
+        danger: false,
+        onConfirm: () => {},
+      });
+      return;
+    }
     // Map old service names → new standardized names
     const LEGACY_MAP = {
       "Bath Only":      "Bath",
@@ -876,10 +890,13 @@ export default function PetAppointments() {
                   <div>
                     <div className="text-sm text-gray-500">{appt.date}</div>
                     <div className="text-lg font-semibold text-gray-900">
-                      {appt.is_flexible || !appt.time ? "🔄 Flexible time" : `${start} – ${end}`}
+                      {isDaycareAppointment(appt, daycareNames) && appt.time ? `🐕 Daycare ${start} – ${end}`
+                        : appt.is_flexible || !appt.time ? "🔄 Flexible time" : `${start} – ${end}`}
                     </div>
                     <div className="text-sm text-gray-600">
-                      {appt.duration_min} min
+                      {isDaycareAppointment(appt, daycareNames)
+                        ? `${Math.round(((appt.duration_min || 0) / 60) * 10) / 10} hr stay`
+                        : `${appt.duration_min} min`}
                     </div>
                   </div>
 

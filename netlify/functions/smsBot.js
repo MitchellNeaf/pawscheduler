@@ -281,7 +281,7 @@ const DEFAULT_PRICING = {
 ───────────────────────────────────────── */
 async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot_weight = 1, exclude_appointment_id = null }) {
   const { data: groomer, error: groomerErr } = await supabase
-    .from("groomers").select("max_parallel, max_appts_per_day, time_zone").eq("id", groomer_id).single();
+    .from("groomers").select("max_parallel, max_appts_per_day, time_zone, custom_services").eq("id", groomer_id).single();
   if (groomerErr) return { available: false, date, reason: `Could not load groomer: ${groomerErr.message}` };
 
   // Never offer a day or time that has already passed (in the groomer's zone)
@@ -341,10 +341,16 @@ async function getAvailabilityForDate({ date, duration_min, groomer_id, pet_slot
     if (vi !== -1 && vj !== -1 && vj > vi) SLOTS.slice(vi, vj).forEach((s) => breakSet.add(s));
   });
 
-  const { data: appts, error: apptErr } = await supabase
-    .from("appointments").select("id, time, duration_min, slot_weight, no_show")
+  const { data: allAppts, error: apptErr } = await supabase
+    .from("appointments").select("id, time, duration_min, slot_weight, no_show, services")
     .eq("groomer_id", groomer_id).eq("date", date);
   if (apptErr) return { available: false, date, reason: `Could not load appointments: ${apptErr.message}` };
+  // Daycare dogs have their own limit — they never take grooming capacity
+  const daycareNames = new Set(
+    (Array.isArray(groomer?.custom_services) ? groomer.custom_services : []).filter((s) => s && s.isDaycare).map((s) => s.name)
+  );
+  const appts = (allAppts || []).filter((a) =>
+    !(Array.isArray(a.services) ? a.services : String(a.services || "").split(",").map((x) => x.trim())).some((n) => daycareNames.has(n)));
 
   // Check daily appointment cap (excludes no-shows and the appt being rescheduled)
   if (maxApptsPerDay) {
@@ -773,6 +779,15 @@ async function executeTool(name, input) {
           return { success: false, error: "Could not find that appointment." };
         }
 
+        // Daycare stays have drop-off/pick-up times and their own capacity,
+        // which this grooming reschedule flow doesn't handle — send to the groomer
+        const { data: gSvc } = await supabase.from("groomers").select("custom_services").eq("id", groomer_id).maybeSingle();
+        const dcNames = new Set((Array.isArray(gSvc?.custom_services) ? gSvc.custom_services : []).filter((s) => s && s.isDaycare).map((s) => s.name));
+        const existingServices = Array.isArray(existing.services) ? existing.services : String(existing.services || "").split(",").map((x) => x.trim());
+        if (existingServices.some((n) => dcNames.has(n))) {
+          return { success: false, message: "Daycare bookings can't be changed by text. Please contact your groomer directly to change drop-off or pick-up." };
+        }
+
         // 24hr cutoff on the EXISTING appointment
         // (appointment times are the groomer's local time, not the server's UTC;
         // a flexible appointment with no time counts from the start of its day)
@@ -906,10 +921,11 @@ async function executeTool(name, input) {
             id: a.id,
             pet_name: a.pets?.name || "—",
             date: a.date,
-            time12: fmt12(a.time),
+            // No time = flexible or daycare (all day) — never format a missing time
+            time12: a.time ? fmt12(a.time) : "no set time (flexible)",
             time24: (a.time || "").slice(0, 5),
             duration_min: a.duration_min,
-            end12: fmt12(addMinutesToTime((a.time || "").slice(0, 5), a.duration_min || 15)),
+            end12: a.time ? fmt12(addMinutesToTime(a.time.slice(0, 5), a.duration_min || 15)) : "",
             services: Array.isArray(a.services) ? a.services.join(", ") : a.services,
             reminder_enabled: a.reminder_enabled,
           })),

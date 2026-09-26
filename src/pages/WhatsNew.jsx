@@ -6,6 +6,29 @@
 
 const RELEASES = [
   {
+    date: "2026-09-26",
+    title: "Daycare with drop-off & pick-up times",
+    items: [
+      "New: mark any service as daycare (Profile → Services) with one flat price per day, and set how many daycare dogs you take at the same time (Profile → Schedule).",
+      "Clients choose a drop-off and pick-up time on your booking page — only times with room are shown, so you're never overbooked.",
+      "Daycare dogs have their own limit and never take up your grooming slots.",
+      "Daycare requests show both drop-off and pick-up times when you review them, and clients see both in their emails.",
+      "Daycare shows with a 🐕 badge on your Schedule, and route planning leaves daycare dogs out since they come to you.",
+    ],
+  },
+  {
+    date: "2026-09-25",
+    title: "Scheduling fixes & smarter routes",
+    items: [
+      "Optimize Route now keeps timed appointments in time order and fits flexible ones in around them — with arrival estimates and a heads-up if a stop might run late.",
+      "Days with 10 or more stops can now be route-optimized.",
+      "Changing the date while booking or editing an appointment now shows that day's own hours and breaks.",
+      "Your booking page no longer offers times that have already passed today.",
+      "The AI booking bot now uses your time zone, so evening texts like \"book me tomorrow\" land on the right day.",
+      "Cancellation emails from your booking page and the AI bot now reach you reliably.",
+    ],
+  },
+  {
     date: "2026-09-23",
     title: "Smarter route planning + flexible appointments",
     items: [

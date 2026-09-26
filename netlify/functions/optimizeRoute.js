@@ -213,7 +213,7 @@ exports.handler = async (event) => {
     // ── Load groomer, check tier + usage cap ──────────────────
     const { data: groomer, error: groomerErr } = await supabase
       .from("groomers")
-      .select("id, plan_tier, time_zone, route_optimizations_this_month, route_optimizations_reset_at")
+      .select("id, plan_tier, time_zone, custom_services, route_optimizations_this_month, route_optimizations_reset_at")
       .eq("id", user.id)
       .single();
 
@@ -262,7 +262,7 @@ exports.handler = async (event) => {
       .from("appointments")
       .select(`
         id, time, duration_min, is_flexible, is_tentative, no_show, waitlist,
-        confirmed, source, appointment_group_id,
+        confirmed, source, appointment_group_id, services,
         pets ( name, clients ( id, full_name, lat, lng ) )
       `)
       .eq("groomer_id", user.id)
@@ -273,7 +273,14 @@ exports.handler = async (event) => {
       return { statusCode: 500, body: JSON.stringify({ error: apptsErr.message }) };
     }
 
-    // Leave out appointments the groomer isn't actually driving to
+    // Leave out appointments the groomer isn't actually driving to.
+    // Daycare dogs come to the groomer, so they're never route stops.
+    const daycareNames = new Set(
+      (Array.isArray(groomer.custom_services) ? groomer.custom_services : [])
+        .filter((s) => s && s.isDaycare).map((s) => s.name)
+    );
+    const isDaycare = (a) => (Array.isArray(a.services) ? a.services : String(a.services || "").split(",").map((x) => x.trim()))
+      .some((n) => daycareNames.has(n));
     const excluded = [];
     const appts = (allAppts || []).filter((a) => {
       const name = a.pets?.clients?.full_name || a.pets?.name || "Unknown";
@@ -282,6 +289,7 @@ exports.handler = async (event) => {
       else if (a.waitlist === true) reason = "waitlisted";
       else if (a.is_tentative === true) reason = "tentative";
       else if (a.confirmed !== true && REQUEST_SOURCES.includes(a.source)) reason = "request not approved yet";
+      else if (isDaycare(a)) reason = "daycare";
       if (reason) excluded.push({ name, reason });
       return !reason;
     });

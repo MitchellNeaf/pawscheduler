@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "../supabase";
 import { emailFetch } from "../utils/sendEmail";
+import { getDaycareNames, isDaycareAppointment, maxDaycareOverlap, clockToMin, minToClock, DAYCARE_DEFAULT_LIMIT } from "../utils/grooming";
 import { Link } from "react-router-dom";
 import Loader from "../components/Loader";
 import OnboardingTour from "../components/OnboardingTour";
@@ -194,6 +195,95 @@ function matchesSearch(appt, query) {
   );
 }
 
+/* Working hours for any date — used when a new/edit appointment window is
+   switched to a different date than the one on screen. Same rules as the
+   main day load: range includes the closing slot; breaks and time blocks
+   are end-exclusive; a full-day block marks every slot unavailable. */
+async function loadHoursForDate(groomerId, date) {
+  const [y, m, d] = date.split("-").map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  const [{ data: hours }, { data: breaks }, { data: vacDays }] = await Promise.all([
+    supabase.from("working_hours").select("*").eq("groomer_id", groomerId).eq("weekday", weekday).maybeSingle(),
+    supabase.from("working_breaks").select("*").eq("groomer_id", groomerId).eq("weekday", weekday),
+    supabase.from("vacation_days").select("start_time, end_time").eq("groomer_id", groomerId).eq("date", date),
+  ]);
+  if (!hours) return { range: [], breaks: [], closed: true };
+  let startIdx = TIME_SLOTS.indexOf(hours.start_time.slice(0, 5));
+  let endIdx = TIME_SLOTS.indexOf(hours.end_time.slice(0, 5));
+  if (startIdx === -1) startIdx = 0;
+  if (endIdx === -1) endIdx = TIME_SLOTS.length - 1;
+  const range = TIME_SLOTS.slice(startIdx, endIdx + 1);
+  const breakSet = new Set();
+  (breaks || []).forEach((b) => {
+    const bi = TIME_SLOTS.indexOf(b.break_start.slice(0, 5));
+    const ei = TIME_SLOTS.indexOf(b.break_end.slice(0, 5));
+    if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei).forEach((s) => breakSet.add(s));
+  });
+  (vacDays || []).forEach((v) => {
+    if (!v.start_time || !v.end_time) { range.forEach((s) => breakSet.add(s)); return; }
+    const bi = TIME_SLOTS.indexOf(v.start_time.slice(0, 5));
+    const ei = TIME_SLOTS.indexOf(v.end_time.slice(0, 5));
+    if (bi !== -1 && ei !== -1) TIME_SLOTS.slice(bi, ei).forEach((s) => breakSet.add(s));
+  });
+  return { range, breaks: [...breakSet] };
+}
+
+/* Drop-off + pick-up selects for daycare (both appointment modals).
+   workingRange here includes the closing-time slot, so it's the last pick-up. */
+function DaycareTimes({ form, setForm, workingRange }) {
+  const hasRange = workingRange && workingRange.length > 1;
+  const drop = clockToMin(form.time);
+  const dropOptions = hasRange ? workingRange.slice(0, -1) : [];
+  const pickOptions = hasRange && drop != null ? workingRange.filter((s) => clockToMin(s) > drop) : [];
+  const label = (slot) => fmt12Hour(slot);
+  return (
+    <div className="grid grid-cols-2 gap-3 text-sm">
+      <label className="flex flex-col gap-1">
+        <span className="font-medium text-gray-700">🐕 Drop-off</span>
+        {hasRange ? (
+          <select value={form.time || ""} className="border rounded px-2 py-1"
+            onChange={(e) => setForm((p) => ({ ...p, time: e.target.value,
+              pickupTime: clockToMin(p.pickupTime) > clockToMin(e.target.value) ? p.pickupTime : "" }))}>
+            <option value="">Select drop-off</option>
+            {dropOptions.map((slot) => <option key={slot} value={slot}>{label(slot)}</option>)}
+          </select>
+        ) : (
+          <input type="time" step={900} value={form.time || ""} className="border rounded px-2 py-1"
+            onChange={(e) => setForm((p) => ({ ...p, time: e.target.value }))} />
+        )}
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="font-medium text-gray-700">Pick-up</span>
+        {hasRange ? (
+          <select value={form.pickupTime || ""} disabled={drop == null} className="border rounded px-2 py-1"
+            onChange={(e) => setForm((p) => ({ ...p, pickupTime: e.target.value }))}>
+            <option value="">{drop == null ? "Choose drop-off first" : "Select pick-up"}</option>
+            {pickOptions.map((slot) => <option key={slot} value={slot}>{label(slot)}</option>)}
+          </select>
+        ) : (
+          <input type="time" step={900} value={form.pickupTime || ""} className="border rounded px-2 py-1"
+            onChange={(e) => setForm((p) => ({ ...p, pickupTime: e.target.value }))} />
+        )}
+      </label>
+    </div>
+  );
+}
+
+/* Daycare drop-off / pick-up for an appointment (null if not a timed daycare booking) */
+function daycareTimes(appt, daycareNames) {
+  if (!appt?.time || !isDaycareAppointment(appt, daycareNames)) return null;
+  const drop = appt.time.slice(0, 5);
+  const pick = minToClock(clockToMin(drop) + (appt.duration_min || 0));
+  return { drop: fmt12Hour(drop), pick: fmt12Hour(pick), hours: Math.round(((appt.duration_min || 0) / 60) * 10) / 10 };
+}
+
+/* Time text for client emails about a request: "8:00 AM drop-off, 5:00 PM
+   pick-up (daycare)" for daycare, the plain start time otherwise */
+function requestEmailTime(appt, daycareNames) {
+  const dc = daycareTimes(appt, daycareNames);
+  return dc ? `${dc.drop} drop-off, ${dc.pick} pick-up (daycare)` : appt?.time?.slice(0, 5);
+}
+
 function getEndTime(start, durationMin) {
   if (!start) return "—";
   const [h, m] = start.split(":").map(Number);
@@ -231,7 +321,7 @@ function buildConfirmUrl(appointmentId) {
 }
 
 /** Fire-and-forget sendEmail confirmation */
-async function sendConfirmationEmail({ appointment, groomerId }) {
+async function sendConfirmationEmail({ appointment, groomerId, isDaycare = false }) {
   try {
     const pet = appointment.pets;
     const client = pet?.clients;
@@ -252,7 +342,9 @@ async function sendConfirmationEmail({ appointment, groomerId }) {
           groomer_id: groomerId,
           pet_name: pet.name,
           date: appointment.date,
-          time: appointment.time ? appointment.time.slice(0, 5) : "Flexible — we'll confirm the time",
+          time: isDaycare && appointment.time
+            ? `${fmt12Hour(appointment.time)} drop-off, ${fmt12Hour(minToClock(clockToMin(appointment.time) + (appointment.duration_min || 0)))} pick-up (daycare)`
+            : appointment.time ? appointment.time.slice(0, 5) : "Flexible — we'll confirm the time",
           duration_min: appointment.duration_min || 30,
           services: servicesHtml,
           price:
@@ -395,6 +487,10 @@ function MultiPetAppointmentModal({
   // have an appointment today, so this fetches fresh for whichever
   // clients are actually selected into this new booking.
   const [noShowLookup, setNoShowLookup] = useState({});
+  // Any daycare service picked for any pet → drop-off/pick-up instead of a time slot
+  const modalDaycareNames = getDaycareNames(serviceOptions);
+  const newHasDaycare = (newPets || []).some(({ form: f }) =>
+    (f?.services || []).some((n) => modalDaycareNames.has(n)));
 
   useEffect(() => {
     const clientIds = [...new Set(
@@ -503,7 +599,7 @@ function MultiPetAppointmentModal({
 
         <div className="p-4 space-y-4 overflow-y-auto flex-1">
 
-          {/* Shared: Date + Time */}
+          {/* Shared: Date + Time (daycare: date here, drop-off/pick-up below) */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             <label className="flex flex-col gap-1">
               <span className="font-medium text-gray-700">Date</span>
@@ -511,7 +607,7 @@ function MultiPetAppointmentModal({
                 onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))}
                 className="border rounded px-2 py-1" />
             </label>
-            <label className="flex flex-col gap-1">
+            {!newHasDaycare && <label className="flex flex-col gap-1">
               <span className="font-medium text-gray-700">Time</span>
               {form.isFlexible ? (
                 <div className="border rounded px-2 py-1 text-gray-400 bg-gray-50 text-xs flex items-center">
@@ -533,11 +629,13 @@ function MultiPetAppointmentModal({
                   onChange={(e) => setForm((p) => ({ ...p, time: e.target.value }))}
                   className="border rounded px-2 py-1" />
               )}
-            </label>
+            </label>}
           </div>
 
+          {newHasDaycare && <DaycareTimes form={form} setForm={setForm} workingRange={workingRange} />}
+
           {/* Flexible timing toggle — no committed time, shown as a badge on Schedule instead */}
-          <label className="flex items-center gap-2 text-xs text-gray-600 -mt-1">
+          {!newHasDaycare && <label className="flex items-center gap-2 text-xs text-gray-600 -mt-1">
             <input
               type="checkbox"
               checked={!!form.isFlexible}
@@ -549,7 +647,7 @@ function MultiPetAppointmentModal({
               }))}
             />
             🔄 Flexible timing — no exact time, I'll fit it in during the day
-          </label>
+          </label>}
 
           {/* Per-pet sections */}
           {newPets.map(({ pet, form: petForm }, idx) => {
@@ -824,6 +922,7 @@ function AppointmentModal({
   if (isEdit && !appt) return null;
   if (!isEdit && !pet) return null;
 
+  const editHasDaycare = (form?.services || []).some((n) => getDaycareNames(serviceOptions).has(n));
   const subject     = isEdit ? appt : pet;
   const petName     = isEdit ? appt.pets?.name        : pet.name;
   const clientName  = isEdit ? appt.pets?.clients?.full_name : pet.clients?.full_name;
@@ -974,14 +1073,14 @@ function AppointmentModal({
             <div className="p-2 bg-green-100 text-green-700 text-xs rounded">🟢 Rabies up to date (expires {rabies.date_expires})</div>
           )}
 
-          {/* Date + Time */}
+          {/* Date + Time (daycare: drop-off/pick-up below) */}
           <div className="grid grid-cols-2 gap-3 text-sm">
             <label className="flex flex-col gap-1">
               <span className="font-medium text-gray-700">Date</span>
               <input type="date" value={form.date} onChange={handleChange("date")}
                 className="border rounded px-2 py-1" />
             </label>
-            <label className="flex flex-col gap-1">
+            {!editHasDaycare && <label className="flex flex-col gap-1">
               <span className="font-medium text-gray-700">Time</span>
               {form.isFlexible ? (
                 <div className="border rounded px-2 py-1 text-gray-400 bg-gray-50 text-xs flex items-center">
@@ -1017,10 +1116,12 @@ function AppointmentModal({
                   </span>
                 </>
               )}
-            </label>
+            </label>}
           </div>
 
-          <label className="flex items-center gap-2 text-xs text-gray-600">
+          {editHasDaycare && <DaycareTimes form={form} setForm={setForm} workingRange={workingRange} />}
+
+          {!editHasDaycare && <label className="flex items-center gap-2 text-xs text-gray-600">
             <input
               type="checkbox"
               checked={!!form.isFlexible}
@@ -1031,7 +1132,7 @@ function AppointmentModal({
               }))}
             />
             🔄 Flexible timing — no exact time, I'll fit it in during the day
-          </label>
+          </label>}
 
           {/* Duration */}
           <label className="flex flex-col gap-1 text-sm">
@@ -2586,8 +2687,9 @@ function MapView({ userId, setViewMode, selectedDate }) {
 // directly, without navigating away to find the appointment on its
 // date. Reuses the exact same approve/waitlist/decline logic and
 // client-notification emails already built into the List view cards.
-function ReviewRequestModal({ request, onClose, onActionComplete, loading, setLoading }) {
+function ReviewRequestModal({ request, onClose, onActionComplete, loading, setLoading, daycareNames }) {
   if (!request) return null;
+  const dc = daycareTimes(request, daycareNames);
 
   const client = request.pets?.clients;
   const isNewClient = request.source === "new_client_booking";
@@ -2610,7 +2712,7 @@ function ReviewRequestModal({ request, onClose, onActionComplete, loading, setLo
                 client_name: client.full_name || "there",
                 pet_name: request.pets?.name || "your pet",
                 date: fmtEmailDate(request.date),
-                time: request.time?.slice(0, 5),
+                time: requestEmailTime(request, daycareNames),
                 services: (request.services || []).join(", "),
                 groomer_phone: "",
               },
@@ -2632,7 +2734,7 @@ function ReviewRequestModal({ request, onClose, onActionComplete, loading, setLo
                 client_name: client.full_name || "there",
                 pet_name: request.pets?.name || "your pet",
                 date: fmtEmailDate(request.date),
-                time: request.time?.slice(0, 5),
+                time: requestEmailTime(request, daycareNames),
                 groomer_phone: "",
               },
             }),
@@ -2652,7 +2754,7 @@ function ReviewRequestModal({ request, onClose, onActionComplete, loading, setLo
                 client_name: client.full_name || "there",
                 pet_name: request.pets?.name || "your pet",
                 date: fmtEmailDate(request.date),
-                time: request.time?.slice(0, 5),
+                time: requestEmailTime(request, daycareNames),
                 groomer_phone: "",
               },
             }),
@@ -2714,8 +2816,20 @@ function ReviewRequestModal({ request, onClose, onActionComplete, loading, setLo
             <div className="text-sm font-semibold text-gray-900">{request.pets?.name || "—"}</div>
           </div>
           <div>
-            <div className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">Requested Time</div>
-            <div className="text-sm font-semibold text-gray-900">{dateStr} at {fmt12Hour(request.time)}</div>
+            <div className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">
+              {dc ? "🐕 Daycare" : "Requested Time"}
+            </div>
+            {dc ? (
+              <>
+                <div className="text-sm font-semibold text-gray-900">{dateStr}</div>
+                <div className="text-sm text-gray-900">
+                  Drop-off <strong>{dc.drop}</strong> → Pick-up <strong>{dc.pick}</strong>
+                  <span className="text-gray-500"> ({dc.hours} hr)</span>
+                </div>
+              </>
+            ) : (
+              <div className="text-sm font-semibold text-gray-900">{dateStr} at {fmt12Hour(request.time)}</div>
+            )}
           </div>
           {request.services?.length > 0 && (
             <div>
@@ -2820,6 +2934,10 @@ export default function Schedule() {
     payment_method: "",
     tip: "",
   });
+
+  // Working hours for dates other than the one on screen, keyed by date —
+  // filled in when a new/edit window is switched to a different date
+  const [otherDayHours, setOtherDayHours] = useState({});
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [rebookModalOpen, setRebookModalOpen] = useState(false);
@@ -3317,12 +3435,14 @@ export default function Schedule() {
     const durMin = form.duration_min || 30;
     const endMin = startMin + durMin;
     const { data: existingAppts } = await supabase
-      .from("appointments").select("date, time, duration_min, slot_weight")
+      .from("appointments").select("date, time, duration_min, slot_weight, services")
       .eq("groomer_id", user.id).in("date", dates).or("no_show.is.null,no_show.eq.false");
+    const recurringDaycareNames = getDaycareNames(serviceOptions);
     const created = [];
     const skipped = [];
     for (const date of dates) {
-      const sameDay = (existingAppts || []).filter(a => a.date === date);
+      // Daycare dogs don't take grooming capacity
+      const sameDay = (existingAppts || []).filter(a => a.date === date && !isDaycareAppointment(a, recurringDaycareNames));
       let overlapWeight = 0;
       for (const a of sameDay) {
         const [ah, am] = (a.time || "00:00").slice(0, 5).split(":").map(Number);
@@ -3355,8 +3475,21 @@ export default function Schedule() {
   };
 
   /* Save new appointment(s) — supports multiple pets with shared group_id */
-  const handleSaveNew = async () => {
+  const handleSaveNew = async (opts) => {
     if (!user || !newPets.length) return;
+    const daycareNames = getDaycareNames(serviceOptions);
+    const hasDaycare = newPets.some(({ form: f }) => (f.services || []).some((n) => daycareNames.has(n)));
+    const dropMin = clockToMin(newForm.time);
+    const pickMin = clockToMin(newForm.pickupTime);
+    if (hasDaycare && (!newForm.date || dropMin == null || pickMin == null || pickMin <= dropMin)) {
+      setConfirmConfig({
+        title: "Missing info",
+        message: "Daycare needs a date, a drop-off time and a later pick-up time.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+      return;
+    }
     if (!newForm.date || (!newForm.time && !newForm.isFlexible)) {
       setConfirmConfig({
         title: "Missing info",
@@ -3408,6 +3541,40 @@ export default function Schedule() {
       }
     }
 
+    // ── Daycare: capped by the separate "dogs at the same time" limit ──
+    if (hasDaycare) {
+      if (newForm.recurring) {
+        setSavingNew(false);
+        setConfirmConfig({
+          title: "Recurring daycare isn't supported yet",
+          message: "Please book each daycare day on its own for now (uncheck Recurring).",
+          confirmLabel: "OK",
+          onConfirm: () => {},
+        });
+        return;
+      }
+      if (opts?.skipDaycareCheck !== true) {
+        const [{ data: g }, { data: sameDay }] = await Promise.all([
+          supabase.from("groomers").select("max_daycare_parallel").eq("id", user.id).maybeSingle(),
+          supabase.from("appointments").select("id, time, duration_min, services, no_show, waitlist")
+            .eq("groomer_id", user.id).eq("date", newForm.date),
+        ]);
+        const limit = g?.max_daycare_parallel || DAYCARE_DEFAULT_LIMIT;
+        const busiest = maxDaycareOverlap(sameDay, daycareNames, dropMin, pickMin);
+        if (busiest + newPets.length > limit) {
+          setSavingNew(false);
+          setConfirmConfig({
+            title: "Daycare is full then",
+            message: `Up to ${busiest} of ${limit} daycare spots are already taken during ${fmt12Hour(newForm.time)}–${fmt12Hour(newForm.pickupTime)}. Book anyway?`,
+            confirmLabel: "Book anyway",
+            cancelLabel: "Cancel",
+            onConfirm: () => handleSaveNew({ skipDaycareCheck: true }),
+          });
+          return;
+        }
+      }
+    }
+
     // Generate a shared group_id for multi-pet appointments
     // Route to recurring handler if checkbox is checked
     if (newForm.recurring && newForm.recurringEnd && newPets.length === 1) {
@@ -3426,9 +3593,10 @@ export default function Schedule() {
       groomer_id:           user.id,
       pet_id:               pet.id,
       date:                 newForm.date,
-      time:                 newForm.isFlexible ? null : newForm.time,
-      is_flexible:          !!newForm.isFlexible,
-      duration_min:         form.duration_min || 30,
+      // Daycare: time = drop-off, duration runs until pick-up
+      time:                 newForm.isFlexible && !hasDaycare ? null : newForm.time,
+      is_flexible:          !!newForm.isFlexible && !hasDaycare,
+      duration_min:         hasDaycare ? pickMin - dropMin : (form.duration_min || 30),
       services:             form.services,
       notes:                newForm.notes,
       slot_weight:          pet.slot_weight || 1,
@@ -3467,7 +3635,7 @@ export default function Schedule() {
     // Fire confirmation email for first pet if reminder enabled
     // Tentative bookings promise "no reminders or confirmations" — honor that.
     if (planTier !== "free" && newForm.reminder_enabled && !newForm.is_tentative && savedAppts?.[0]) {
-      sendConfirmationEmail({ appointment: savedAppts[0], groomerId: user.id });
+      sendConfirmationEmail({ appointment: savedAppts[0], groomerId: user.id, isDaycare: hasDaycare });
     }
 
     // Attach shot records to each saved appointment
@@ -3514,6 +3682,7 @@ export default function Schedule() {
     setEditForm({
       date: appt.date,
       time: (appt.time || "").slice(0, 5),
+      pickupTime: appt.time ? minToClock(clockToMin(appt.time) + (appt.duration_min || 30)) : "",
       isFlexible: !!appt.is_flexible,
       duration_min: appt.duration_min || 30,
       services: servicesArray,
@@ -3530,8 +3699,20 @@ export default function Schedule() {
   };
 
   /* Save Edit */
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = async (opts) => {
     if (!user || !editAppt) return;
+    const editIsDaycare = (editForm.services || []).some((n) => getDaycareNames(serviceOptions).has(n));
+    const editDrop = clockToMin(editForm.time);
+    const editPick = clockToMin(editForm.pickupTime);
+    if (editIsDaycare && (!editForm.date || editDrop == null || editPick == null || editPick <= editDrop)) {
+      setConfirmConfig({
+        title: "Missing info",
+        message: "Daycare needs a date, a drop-off time and a later pick-up time.",
+        confirmLabel: "OK",
+        onConfirm: () => {},
+      });
+      return;
+    }
     if (!editForm.date || (!editForm.time && !editForm.isFlexible)) {
       setConfirmConfig({
         title: "Missing info",
@@ -3542,6 +3723,34 @@ export default function Schedule() {
       return;
     }
 
+    // Daycare: moving the date or drop-off/pick-up must respect the daycare limit too
+    const daycareMoved = editIsDaycare && (
+      editForm.date !== editAppt.date ||
+      editForm.time !== (editAppt.time || "").slice(0, 5) ||
+      (editPick - editDrop) !== (editAppt.duration_min || 0)
+    );
+    if (daycareMoved && opts?.skipDaycareCheck !== true) {
+      const [{ data: g }, { data: sameDay }] = await Promise.all([
+        supabase.from("groomers").select("max_daycare_parallel").eq("id", user.id).maybeSingle(),
+        supabase.from("appointments").select("id, time, duration_min, services, no_show, waitlist, appointment_group_id")
+          .eq("groomer_id", user.id).eq("date", editForm.date),
+      ]);
+      const limit = g?.max_daycare_parallel || DAYCARE_DEFAULT_LIMIT;
+      // Don't count this dog against itself
+      const others = (sameDay || []).filter((a) => a.id !== editAppt.id);
+      const busiest = maxDaycareOverlap(others, getDaycareNames(serviceOptions), editDrop, editPick);
+      if (busiest + 1 > limit) {
+        setConfirmConfig({
+          title: "Daycare is full then",
+          message: `Up to ${busiest} of ${limit} daycare spots are already taken during ${fmt12Hour(editForm.time)}–${fmt12Hour(editForm.pickupTime)}. Save anyway?`,
+          confirmLabel: "Save anyway",
+          cancelLabel: "Cancel",
+          onConfirm: () => handleSaveEdit({ skipDaycareCheck: true }),
+        });
+        return;
+      }
+    }
+
     setSavingEdit(true);
 
     // Bug fix: every save (even just recording payment or a tip after the
@@ -3549,12 +3758,13 @@ export default function Schedule() {
     // email AND reset reminder_sent, which could re-trigger reminders. Now
     // both only happen when the date/time actually changed, or when the
     // groomer just turned reminders on for this appointment.
-    const newTime = editForm.isFlexible ? null : editForm.time;
+    const newTime = editForm.isFlexible && !editIsDaycare ? null : editForm.time;
     const oldTime = editAppt.time ? editAppt.time.slice(0, 5) : null;
     const scheduleChanged =
       editForm.date !== editAppt.date ||
       (newTime || null) !== (oldTime || null) ||
-      !!editForm.isFlexible !== !!editAppt.is_flexible;
+      (!!editForm.isFlexible && !editIsDaycare) !== !!editAppt.is_flexible ||
+      (editIsDaycare && (editPick - editDrop) !== (editAppt.duration_min || 0));
     const remindersJustEnabled = !!editForm.reminder_enabled && !editAppt.reminder_enabled;
     // Unchecking "Tentative" is the moment the date becomes real, so that
     // counts as news too. While still tentative, never send a confirmation.
@@ -3563,8 +3773,8 @@ export default function Schedule() {
     const updatePayload = {
       date: editForm.date,
       time: newTime,
-      is_flexible: !!editForm.isFlexible,
-      duration_min: editForm.duration_min || 30,
+      is_flexible: !!editForm.isFlexible && !editIsDaycare,
+      duration_min: editIsDaycare ? editPick - editDrop : (editForm.duration_min || 30),
       services: editForm.services,
       notes: editForm.notes,
       amount: editForm.amount ?? null,
@@ -3615,7 +3825,7 @@ export default function Schedule() {
       !editForm.is_tentative &&
       (scheduleChanged || remindersJustEnabled || tentativeJustCleared)
     ) {
-      sendConfirmationEmail({ appointment: { ...data, pets: editAppt.pets }, groomerId: user.id });
+      sendConfirmationEmail({ appointment: { ...data, pets: editAppt.pets }, groomerId: user.id, isDaycare: editIsDaycare });
     }
 
     // Bug fix: merge the saved appointment fields onto the existing card
@@ -3771,6 +3981,61 @@ export default function Schedule() {
     }
   };
 
+  // ── New/edit windows follow their own date's hours, not the day on screen ──
+  const hoursForDate = (date) => {
+    if (!date || date === selectedDate) return { range: workingRange, breaks: breakSlots };
+    return otherDayHours[date] || { range: [], breaks: [], loading: true };
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    const wanted = [
+      newModalOpen ? newForm.date : null,
+      editModalOpen ? editForm?.date : null,
+    ].filter((d) => d && d !== selectedDate && !otherDayHours[d]);
+    [...new Set(wanted)].forEach((date) => {
+      loadHoursForDate(user.id, date)
+        .then((h) => setOtherDayHours((prev) => ({ ...prev, [date]: h })))
+        .catch(() => setOtherDayHours((prev) => ({ ...prev, [date]: { range: [], breaks: [] } })));
+    });
+  }, [user, newModalOpen, editModalOpen, newForm.date, editForm?.date, selectedDate, otherDayHours]);
+
+  // If the picked time doesn't exist on the newly chosen date, clear it so
+  // it can't be saved by accident (daycare ignores breaks, grooming doesn't).
+  // Only after the date was changed — an existing booking made outside normal
+  // hours on purpose keeps its time.
+  const dcNamesForForms = getDaycareNames(serviceOptions);
+  const newIsDaycareForm = newPets.some(({ form: f }) => (f.services || []).some((n) => dcNamesForForms.has(n)));
+  const editIsDaycareForm = (editForm?.services || []).some((n) => dcNamesForForms.has(n));
+  const newFormDate = newForm.date;
+  const newFormTime = newForm.time;
+  const newFormPickup = newForm.pickupTime;
+  useEffect(() => {
+    if (!newModalOpen || !newFormTime || !newFormDate || newFormDate === selectedDate) return;
+    const h = otherDayHours[newFormDate];
+    if (!h || !h.range.length) return;
+    if (!h.range.includes(newFormTime) || (!newIsDaycareForm && h.breaks.includes(newFormTime))) {
+      setNewForm((p) => ({ ...p, time: "", pickupTime: "" }));
+    } else if (newFormPickup && !h.range.includes(newFormPickup)) {
+      setNewForm((p) => ({ ...p, pickupTime: "" }));
+    }
+  }, [newModalOpen, newFormDate, newFormTime, newFormPickup, selectedDate, otherDayHours, newIsDaycareForm]);
+
+  const editFormDate = editForm?.date;
+  const editFormTime = editForm?.time;
+  const editFormPickup = editForm?.pickupTime;
+  const editApptDate = editAppt?.date;
+  useEffect(() => {
+    if (!editModalOpen || !editFormTime || !editFormDate || editFormDate === editApptDate) return;
+    const h = editFormDate === selectedDate ? { range: workingRange, breaks: breakSlots } : otherDayHours[editFormDate];
+    if (!h || !h.range.length) return;
+    if (!h.range.includes(editFormTime) || (!editIsDaycareForm && h.breaks.includes(editFormTime))) {
+      setEditForm((p) => ({ ...p, time: "", pickupTime: "" }));
+    } else if (editFormPickup && !h.range.includes(editFormPickup)) {
+      setEditForm((p) => ({ ...p, pickupTime: "" }));
+    }
+  }, [editModalOpen, editFormDate, editFormTime, editFormPickup, editApptDate, selectedDate, workingRange, breakSlots, otherDayHours, editIsDaycareForm]);
+
   if (loading) {
     return (
       <main className="px-4 py-6 space-y-6 max-w-5xl mx-auto">
@@ -3855,8 +4120,10 @@ export default function Schedule() {
     const [sh, sm] = slot.split(":").map(Number);
     const slotMinutes = sh * 60 + sm;
 
+    const dcNames = getDaycareNames(serviceOptions);
     return appointments.filter((appt) => {
       if (!appt.time) return false;
+      if (isDaycareAppointment(appt, dcNames)) return false; // daycare has its own limit
       const startStr = appt.time.slice(0, 5);
       const [ah, am] = startStr.split(":").map(Number);
       const startMin = ah * 60 + am;
@@ -4009,7 +4276,10 @@ export default function Schedule() {
                     <span className="text-xs font-medium flex items-center gap-1.5">
                       {req.waitlist && <span className="text-blue-600">⏸</span>}
                       {isNewClient && <span className="text-red-600">🆕</span>}
-                      {req.pets?.name} ({req.pets?.clients?.full_name}) — {dateStr} at {fmt12Hour(req.time)}
+                      {req.pets?.name} ({req.pets?.clients?.full_name}) — {dateStr} {(() => {
+                        const dc = daycareTimes(req, getDaycareNames(serviceOptions));
+                        return dc ? `· 🐕 ${dc.drop} → ${dc.pick}` : `at ${fmt12Hour(req.time)}`;
+                      })()}
                       {req.waitlist && <span className="text-blue-600 font-semibold">· Waitlist</span>}
                       {isNewClient && <span className="text-red-600 font-semibold">· New Client</span>}
                     </span>
@@ -4245,6 +4515,18 @@ export default function Schedule() {
       {viewMode === "grid" && workingRange.length > 0 && (
         <div className="card mb-6" style={{position:"relative", zIndex:1}}>
           <div className="card-body">
+            {(() => {
+              const dcNames = getDaycareNames(serviceOptions);
+              const daycare = appointments.filter((a) => a.time && isDaycareAppointment(a, dcNames));
+              if (!daycare.length) return null;
+              return (
+                <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                  <span className="font-bold">🐕 Daycare ({daycare.length}):</span>{" "}
+                  {daycare.map((a) => `${a.pets?.name || "Pet"} ${fmt12Hour(a.time)}–${getEndTime(a.time.slice(0, 5), a.duration_min || 0)}`).join(" · ")}
+                  <span className="text-amber-700"> — not counted in grooming slots below</span>
+                </div>
+              );
+            })()}
             <div className="overflow-x-auto">
               <div
                 className="grid border rounded text-xs"
@@ -4612,12 +4894,14 @@ export default function Schedule() {
             const appt = group[0]; // primary appointment for shared fields
             const isMulti = group.length > 1;
             const isFlexible = !!appt.is_flexible;
+            const isDaycare = isDaycareAppointment(appt, getDaycareNames(serviceOptions));
             // Every pet in the group shares the same start time — the combined block
             // is that shared start plus the SUM of every pet's duration (e.g. two 1hr
             // dogs starting at 11:00 = one 11:00–1:00 block), not each pet's individual time.
             const start = (group[0].time || "00:00").slice(0, 5);
             const startDisplay = fmt12Hour(start);
-            const totalDurationMin = group.reduce((s, a) => s + (a.duration_min || 15), 0);
+            // Daycare dogs in a group all share drop-off/pick-up, so don't add them up
+            const totalDurationMin = isDaycare ? (appt.duration_min || 0) : group.reduce((s, a) => s + (a.duration_min || 15), 0);
             const end = getEndTime(start, totalDurationMin);
             const size = sizeBadge(appt.size_category || appt.pets?.size_category || 1);
             const displayName = groupPetNames(group);
@@ -4694,7 +4978,7 @@ export default function Schedule() {
                                     client_name: appt.pets?.clients?.full_name || "there",
                                     pet_name: appt.pets?.name || "your pet",
                                     date: fmtEmailDate(appt.date),
-                                    time: appt.time?.slice(0,5),
+                                    time: requestEmailTime(appt, getDaycareNames(serviceOptions)),
                                     services: (appt.services || []).join(", "),
                                     groomer_phone: "",
                                   }
@@ -4728,7 +5012,7 @@ export default function Schedule() {
                                       client_name: appt.pets?.clients?.full_name || "there",
                                       pet_name: appt.pets?.name || "your pet",
                                       date: fmtEmailDate(appt.date),
-                                      time: appt.time?.slice(0,5),
+                                      time: requestEmailTime(appt, getDaycareNames(serviceOptions)),
                                       groomer_phone: "",
                                     }
                                   })
@@ -4764,7 +5048,7 @@ export default function Schedule() {
                                         client_name: appt.pets?.clients?.full_name || "there",
                                         pet_name: appt.pets?.name || "your pet",
                                         date: fmtEmailDate(appt.date),
-                                        time: appt.time?.slice(0,5),
+                                        time: requestEmailTime(appt, getDaycareNames(serviceOptions)),
                                         groomer_phone: "",
                                       }
                                     })
@@ -4814,10 +5098,17 @@ export default function Schedule() {
                         })()}
                       </div>
                       <div className="text-lg font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+                        {isDaycare && (
+                          <span className="inline-flex items-center gap-1 text-sm font-bold text-amber-800 bg-amber-100 px-2.5 py-1 rounded-full">
+                            🐕 Daycare
+                          </span>
+                        )}
                         {isFlexible ? (
                           <span className="inline-flex items-center gap-1 text-sm font-bold text-violet-700 bg-violet-100 px-2.5 py-1 rounded-full">
                             🔄 Flexible
                           </span>
+                        ) : isDaycare ? (
+                          <span className="text-base">Drop-off {startDisplay} → Pick-up {end}</span>
                         ) : (
                           <>{startDisplay} – {end}</>
                         )}
@@ -4829,7 +5120,7 @@ export default function Schedule() {
                     </div>
 
                     <div className="text-sm text-gray-500 text-right">
-                      {isMulti ? group.reduce((s, a) => s + (a.duration_min || 0), 0) : appt.duration_min} min
+                      {isDaycare ? `${Math.round(((appt.duration_min || 0) / 60) * 10) / 10} hr stay` : <>{isMulti ? group.reduce((s, a) => s + (a.duration_min || 0), 0) : appt.duration_min} min</>}
                       {totalAmount > 0 && (
                         <div className="font-semibold text-gray-800">
                           ${totalAmount.toFixed(2)}
@@ -5399,6 +5690,7 @@ export default function Schedule() {
 
       <ReviewRequestModal
         request={reviewRequest}
+        daycareNames={getDaycareNames(serviceOptions)}
         loading={reviewActionLoading}
         setLoading={setReviewActionLoading}
         onClose={() => setReviewRequest(null)}
@@ -5479,8 +5771,8 @@ export default function Schedule() {
         saving={savingNew}
         onAddPet={() => { setNewModalOpen(false); setPetModalOpen(true); }}
         pricing={pricing}
-        workingRange={workingRange}
-        breakSlots={breakSlots}
+        workingRange={hoursForDate(newForm.date).range}
+        breakSlots={hoursForDate(newForm.date).breaks}
         planTier={planTier}
         serviceOptions={serviceOptions}
         addonOptions={addonOptions}
@@ -5513,8 +5805,8 @@ export default function Schedule() {
         }}
         saving={savingEdit}
         pricing={pricing}
-        workingRange={workingRange}
-        breakSlots={breakSlots}
+        workingRange={hoursForDate(editForm?.date).range}
+        breakSlots={hoursForDate(editForm?.date).breaks}
         noShowCounts={noShowCounts}
       />
 
